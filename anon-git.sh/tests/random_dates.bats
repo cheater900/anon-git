@@ -229,31 +229,29 @@ order_within_bucket() {
 # random-* trio -- only kept calendar fields are asserted unchanged (never
 # asserting a change happened, since randomness could reproduce the original).
 random_partial() {
-    # $1: --random-time | --random-day | --random-month
-    local target old_year old_month
+    # $1: --random-time | --random-day | --random-month, $2: strftime format
+    # of the kept fields
+    local target old
     pick_random_index
     target="HEAD~${PICKED_INDEX}"
-    old_year=$(commit_date "$target" '%Y')
-    old_month=$(commit_date "$target" '%m')
+    old=$(commit_date "$target" "$2")
     run ./anon-git.sh --no-confirm --no-backup --current-branch "$1" "$target"
     assert_success
-    assert_equal "$(commit_date "$target" '%Y')" "$old_year"
-    if [[ "$1" != '--random-time' ]]; then
-        return
-    fi
-    assert_equal "$(commit_date "$target" '%m')" "$old_month"
+    assert_equal "$(commit_date "$target" "$2")" "$old"
+    assert_equal "$(commit_date "$target" '%z')" '+0000'
+    assert_equal "$(git show -s --format='%cd' "$target")" "$(git show -s --format='%ad' "$target")"
 }
 
-@test "--random-time keeps year, month" {
-    random_partial --random-time
+@test "--random-time keeps year, month, day" {
+    random_partial --random-time '%Y-%m-%d'
 }
 
-@test "--random-day keeps year" {
-    random_partial --random-day
+@test "--random-day keeps year, month" {
+    random_partial --random-day '%Y-%m'
 }
 
 @test "--random-month keeps year" {
-    random_partial --random-month
+    random_partial --random-month '%Y'
 }
 
 # INTEGRATION TEST: mirrors "multiple commits per run" (core.bats) -- only

@@ -4,6 +4,7 @@ Derived from git history, newest first.
 
 ## 2026-11-04
 
+- test(sh): assert each --random-* flag keeps its full calendar unit
 - test(sh): cover --print-completion, reach require_target in no-target test
 - test(sh): check rejection messages, non-commit objects, invalid bool envvar
 - test(sh): assert zeroed --keep-* fields, dry-run preview, new-branch author, no-backup warning
