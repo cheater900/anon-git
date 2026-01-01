@@ -2,6 +2,7 @@ SCRIPT := "anon-git.sh"
 TEST_SCRIPT := "tests/test_anon_git.sh"
 TEST_LIB_FILES := "tests/lib/common.sh tests/cases/core.sh tests/cases/validation.sh tests/cases/config_priority.sh tests/cases/install.sh tests/cases/flags.sh tests/cases/help.sh tests/cases/regression.sh tests/cases/random_dates.sh"
 TEST_COMPLETION_SCRIPT := "tests/test_anon_git_completion.sh"
+TEST_MANUAL_SCRIPT := "tests/test_manually.sh"
 README := "README.md"
 
 default:
@@ -24,16 +25,16 @@ test-completion:
 
 # Check shell syntax and run shellcheck
 lint:
-    bash -n {{SCRIPT}} {{TEST_SCRIPT}} {{TEST_LIB_FILES}} {{TEST_COMPLETION_SCRIPT}}
-    shellcheck -x {{SCRIPT}} {{TEST_SCRIPT}} {{TEST_LIB_FILES}} {{TEST_COMPLETION_SCRIPT}}
+    bash -n {{SCRIPT}} {{TEST_SCRIPT}} {{TEST_LIB_FILES}} {{TEST_COMPLETION_SCRIPT}} {{TEST_MANUAL_SCRIPT}}
+    shellcheck -x {{SCRIPT}} {{TEST_SCRIPT}} {{TEST_LIB_FILES}} {{TEST_COMPLETION_SCRIPT}} {{TEST_MANUAL_SCRIPT}}
 
 # Format the scripts in place with shfmt
 format:
-    shfmt -w -ln bash -i 4 {{SCRIPT}} {{TEST_SCRIPT}} {{TEST_LIB_FILES}} {{TEST_COMPLETION_SCRIPT}}
+    shfmt -w -ln bash -i 4 {{SCRIPT}} {{TEST_SCRIPT}} {{TEST_LIB_FILES}} {{TEST_COMPLETION_SCRIPT}} {{TEST_MANUAL_SCRIPT}}
 
 # Check formatting without writing (used by CI; `just format` to fix)
 format-check:
-    shfmt -d -ln bash -i 4 {{SCRIPT}} {{TEST_SCRIPT}} {{TEST_LIB_FILES}} {{TEST_COMPLETION_SCRIPT}}
+    shfmt -d -ln bash -i 4 {{SCRIPT}} {{TEST_SCRIPT}} {{TEST_LIB_FILES}} {{TEST_COMPLETION_SCRIPT}} {{TEST_MANUAL_SCRIPT}}
 
 # Run the CI workflow locally via `act` (https://github.com/nektos/act); only ubuntu-latest, act can't run the macos-latest job
 ci-local:
