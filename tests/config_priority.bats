@@ -52,7 +52,7 @@ load test_helper
     ANON_GIT_NAME='Grace Murray' ANON_GIT_EMAIL='grace.murray@example.com' ANON_GIT_DATE='2019-05-05 00:00:00 +0000' \
         run ./anon-git.sh --no-confirm --no-backup --current-branch "HEAD~${PICKED_INDEX}"
     assert_success
-    assert_equal "$(git show -s --format='%an <%ae>' "HEAD~${PICKED_INDEX}")" 'Grace Murray <grace.murray@example.com>'
+    assert_equal "$(commit_author "HEAD~${PICKED_INDEX}")" 'Grace Murray <grace.murray@example.com>'
     assert_equal "$(git show -s --format='%ai' "HEAD~${PICKED_INDEX}")" '2019-05-05 00:00:00 +0000'
 }
 
@@ -64,7 +64,7 @@ load test_helper
     git config --local anon-git.date '2018-08-08 00:00:00 +0000'
     run ./anon-git.sh --no-confirm --no-backup --current-branch HEAD
     assert_success
-    assert_equal "$(git show -s --format='%an <%ae>' HEAD)" 'Barbara McClintock <barbara.mcclintock@example.com>'
+    assert_equal "$(commit_author HEAD)" 'Barbara McClintock <barbara.mcclintock@example.com>'
     assert_equal "$(git show -s --format='%ai' HEAD)" '2018-08-08 00:00:00 +0000'
 }
 
@@ -90,11 +90,11 @@ keepuser_bool() {
     # $1: spelling. Any git bool spelling (any case) must normalize like
     # --keep-user.
     local before_author
-    before_author=$(git show -s --format='%an <%ae>' HEAD)
+    before_author=$(commit_author HEAD)
     git config --local anon-git.keepuser "$1"
     run ./anon-git.sh --no-confirm --no-backup --current-branch HEAD
     assert_success
-    assert_equal "$(git show -s --format='%an <%ae>' HEAD)" "$before_author"
+    assert_equal "$(commit_author HEAD)" "$before_author"
 }
 
 @test "anon-git.keepuser=yes acts as --keep-user" {
@@ -144,7 +144,7 @@ keepuser_bool() {
     # Isolates the envvar path from --entire-history's flag path.
     ANON_GIT_ENTIREHISTORY=1 run ./anon-git.sh --no-confirm --no-backup --current-branch
     assert_success
-    assert_equal "$(git log --format='%an <%ae>' | sort -u)" "${DEFAULT_NAME} <${DEFAULT_EMAIL}>"
+    assert_equal "$(history_authors)" "$DEFAULT_AUTHOR"
 }
 
 @test "rejects ANON_GIT_ENTIREHISTORY=1 with commit" {

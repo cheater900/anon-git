@@ -46,15 +46,15 @@ file_count() {
     local parents_before parent1_author_before tree_before
     merge_side_branch
     parents_before=$(git show -s --format='%P' HEAD)
-    parent1_author_before=$(git show -s --format='%an <%ae>' HEAD^1)
+    parent1_author_before=$(commit_author HEAD^1)
     tree_before=$(git show -s --format='%T' HEAD)
     run ./anon-git.sh --no-confirm --no-backup --current-branch \
         --name 'Merge Single Tester' --email 'merge.single@example.com' HEAD
     assert_success
-    assert_equal "$(git show -s --format='%an <%ae>' HEAD)" 'Merge Single Tester <merge.single@example.com>'
+    assert_equal "$(commit_author HEAD)" 'Merge Single Tester <merge.single@example.com>'
     assert_equal "$(git show -s --format='%P' HEAD)" "$parents_before"
     assert_equal "$(git show -s --format='%T' HEAD)" "$tree_before"
-    assert_equal "$(git show -s --format='%an <%ae>' HEAD^1)" "$parent1_author_before"
+    assert_equal "$(commit_author HEAD^1)" "$parent1_author_before"
     git fsck --full
 }
 
@@ -75,7 +75,7 @@ add_main_ancestor() {
     run ./anon-git.sh --no-confirm --no-backup --current-branch \
         --name 'Ancestor Tester' --email 'ancestor.tester@example.com' HEAD^1
     assert_success
-    assert_equal "$(git show -s --format='%an <%ae>' HEAD^1)" 'Ancestor Tester <ancestor.tester@example.com>'
+    assert_equal "$(commit_author HEAD^1)" 'Ancestor Tester <ancestor.tester@example.com>'
     assert_equal "$(git show -s --format='%P' HEAD | wc -w | tr -d ' ')" 2
     assert_equal "$(git rev-parse HEAD^2)" "$other_parent_before"
     assert_equal "$(git show -s --format='%T' HEAD)" "$tree_before"

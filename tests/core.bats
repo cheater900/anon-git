@@ -60,12 +60,12 @@ load test_helper
 @test "multiple commits per run" {
     run ./anon-git.sh --no-confirm --no-backup --current-branch --name 'Donald Knuth' --email 'donald.knuth@example.com' HEAD~1 HEAD~3
     assert_success
-    assert_equal "$(git show -s --format='%an <%ae>' HEAD~1)" 'Donald Knuth <donald.knuth@example.com>'
-    assert_equal "$(git show -s --format='%an <%ae>' HEAD~3)" 'Donald Knuth <donald.knuth@example.com>'
+    assert_equal "$(commit_author HEAD~1)" 'Donald Knuth <donald.knuth@example.com>'
+    assert_equal "$(commit_author HEAD~3)" 'Donald Knuth <donald.knuth@example.com>'
 }
 
 @test "--entire-history rewrites all commits" {
     run ./anon-git.sh --no-confirm --no-backup --current-branch --entire-history
     assert_success
-    assert_equal "$(git log --format='%an <%ae>' | sort -u)" "${DEFAULT_NAME} <${DEFAULT_EMAIL}>"
+    assert_equal "$(history_authors)" "$DEFAULT_AUTHOR"
 }

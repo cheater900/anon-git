@@ -189,7 +189,7 @@ run_installer() {
     git add staged.txt committed.txt
     echo 'unstaged' >>file_1.txt
     git commit -q -m 'Partial commit' committed.txt
-    assert_equal "$(git show -s --format='%an <%ae>' HEAD)" "${DEFAULT_NAME} <${DEFAULT_EMAIL}>"
+    assert_equal "$(commit_author HEAD)" "$DEFAULT_AUTHOR"
     assert_equal "$(git diff --name-only)" 'file_1.txt'
     assert_equal "$(git diff --cached --name-only)" 'staged.txt'
 }
@@ -234,7 +234,7 @@ run_installer() {
         git add "file_${i}.txt"
         git commit -q -m "Add file_${i}.txt"
     done
-    assert_equal "$(git show -s --format='%an <%ae>' HEAD)" "${DEFAULT_NAME} <${DEFAULT_EMAIL}>"
+    assert_equal "$(commit_author HEAD)" "$DEFAULT_AUTHOR"
     assert_equal "$(git show -s --format='%ai' HEAD)" "$DEFAULT_DATE"
     assert_equal "$(git show -s --pretty=fuller --date=iso "$HEAD_BEFORE")" "$prior_commit"
     assert_equal "$(branch_count)" 1

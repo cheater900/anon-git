@@ -64,6 +64,16 @@ pick_random_index() {
     echo "target HEAD~${PICKED_INDEX}, replay with TEST_RANDOM_INDEX=${PICKED_INDEX}"
 }
 
+# Prints a commit's "name <email>" author.
+commit_author() {
+    git show -s --format='%an <%ae>' "$1"
+}
+
+# Prints the distinct "name <email>" authors in HEAD's history.
+history_authors() {
+    git log --format='%an <%ae>' | sort -u
+}
+
 # Prints a commit's author date in strftime format.
 commit_date() {
     # $1: commit, $2: strftime format
@@ -76,7 +86,7 @@ assert_rewrite() {
     # $@: flags to pass through (--name, --email, --date, --keep-user, --keep-date)
     local expected_name=$DEFAULT_NAME expected_email=$DEFAULT_EMAIL expected_date=$DEFAULT_DATE
     local keep_user=$DEFAULT_KEEPUSER keep_date=$DEFAULT_KEEPDATE args=("$@")
-    local commit_format='%an <%aE> (%ai) %cn <%cE> (%ci)' target old_user old_date old_others
+    local commit_format='%an <%aE> (%ai) %cn <%cE> (%ci)' target old_user old_date untouched_commits
     while [[ $# -gt 0 ]]; do
         case "$1" in
         --date)
@@ -108,14 +118,13 @@ assert_rewrite() {
     target="HEAD~${PICKED_INDEX}"
     old_user=$(git show -s --format='%an <%ae> %cn <%ce>' "$target")
     old_date=$(git show -s --format='%ai %ci' "$target")
-    # Every other commit, to verify only the target changes.
-    old_others=$(git log --format="$commit_format" | sed "$((PICKED_INDEX + 1))d")
+    untouched_commits=$(git log --format="$commit_format" | sed "$((PICKED_INDEX + 1))d")
     run ./anon-git.sh --no-confirm --no-backup "${args[@]}" "$target"
     assert_success
     if [[ "$keep_user" == '1' ]]; then
         assert_equal "$(git show -s --format='%an <%ae> %cn <%ce>' "$target")" "$old_user"
     else
-        assert_equal "$(git show -s --format='%an <%ae>' "$target")" "${expected_name} <${expected_email}>"
+        assert_equal "$(commit_author "$target")" "${expected_name} <${expected_email}>"
         assert_equal "$(git show -s --format='%cn <%ce>' "$target")" "${expected_name} <${expected_email}>"
     fi
     if [[ "$keep_date" == '1' ]]; then
@@ -124,7 +133,7 @@ assert_rewrite() {
         assert_equal "$(git show -s --format='%ai' "$target")" "$expected_date"
         assert_equal "$(git show -s --format='%ci' "$target")" "$expected_date"
     fi
-    assert_equal "$(git log --format="$commit_format" | sed "$((PICKED_INDEX + 1))d")" "$old_others"
+    assert_equal "$(git log --format="$commit_format" | sed "$((PICKED_INDEX + 1))d")" "$untouched_commits"
 }
 
 # Runs anon-git.sh with $@ and checks it rejects them as conflicting,

@@ -21,6 +21,7 @@ setup_suite() {
     DEFAULT_EMAIL=$(script_default EMAIL)
     DEFAULT_KEEPUSER=$(script_default KEEPUSER)
     DEFAULT_KEEPDATE=$(script_default KEEPDATE)
+    export DEFAULT_AUTHOR="${DEFAULT_NAME} <${DEFAULT_EMAIL}>"
     export REPO_TEMPLATE=${BATS_SUITE_TMPDIR}/template
     new_repo "$REPO_TEMPLATE"
     for ((i = 1; i <= COMMIT_COUNT; i++)); do

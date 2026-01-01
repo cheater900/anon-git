@@ -105,11 +105,11 @@ keep_partial() {
     GIT_AUTHOR_DATE='1600000000 +0530' GIT_COMMITTER_DATE='1600000000 +0530' \
         git commit -q -m 'Strip timezone alone test'
     assert_equal "$(commit_date HEAD '%z')" '+0530'
-    old_author=$(git show -s --format='%an <%ae>' HEAD)
+    old_author=$(commit_author HEAD)
     old_date_no_tz=$(commit_date HEAD '%Y-%m-%d %H:%M:%S')
     run ./anon-git.sh --no-confirm --no-backup --current-branch --strip-timezone HEAD
     assert_success
-    assert_equal "$(git show -s --format='%an <%ae>' HEAD)" "$old_author"
+    assert_equal "$(commit_author HEAD)" "$old_author"
     assert_equal "$(commit_date HEAD '%Y-%m-%d %H:%M:%S')" "$old_date_no_tz"
     assert_equal "$(commit_date HEAD '%z')" '+0000'
 }
@@ -127,7 +127,7 @@ keep_partial() {
     old_date_no_tz=$(commit_date HEAD '%Y-%m-%d %H:%M:%S')
     run ./anon-git.sh --no-confirm --no-backup --current-branch --strip-timezone --keep-date HEAD
     assert_success
-    assert_equal "$(git show -s --format='%an <%ae>' HEAD)" "${DEFAULT_NAME} <${DEFAULT_EMAIL}>"
+    assert_equal "$(commit_author HEAD)" "$DEFAULT_AUTHOR"
     assert_equal "$(commit_date HEAD '%Y-%m-%d %H:%M:%S')" "$old_date_no_tz"
     assert_equal "$(commit_date HEAD '%z')" '+0000'
 }
@@ -147,7 +147,7 @@ keep_partial() {
     run ./anon-git.sh --no-confirm --no-backup --current-branch \
         --strip-timezone --name 'Strip TZ Not Alone' HEAD
     assert_success
-    assert_equal "$(git show -s --format='%an <%ae>' HEAD)" "Strip TZ Not Alone <${DEFAULT_EMAIL}>"
+    assert_equal "$(commit_author HEAD)" "Strip TZ Not Alone <${DEFAULT_EMAIL}>"
     assert_equal "$(git show -s --date=iso --format='%ad' HEAD)" "$DEFAULT_DATE"
 }
 
