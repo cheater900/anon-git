@@ -228,3 +228,10 @@ shell_injection() {
 @test "shell metacharacters in --name not executed" {
     shell_injection --name '%an' Evil ''
 }
+
+@test "scratch file owner-only" {
+    local path
+    path=$(bash -c 'source "$1" && make_scratch_file f && printf "%s" "$f"' _ "$SCRIPT")
+    assert_equal "$(find "$path" -perm 600)" "$path"
+    rm -f "$path"
+}

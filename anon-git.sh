@@ -59,8 +59,10 @@ make_scratch_file() {
     local path
     path=$(mktemp -u)
     printf -v "$1" '%s' "$path"
+    # umask 077: the file holds pre-anonymization names, emails and messages.
     (
         set -C
+        umask 077
         : >"$path"
     )
 }
