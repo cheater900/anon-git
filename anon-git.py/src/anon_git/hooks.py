@@ -7,7 +7,7 @@ import sys
 from anon_git.constants import HOOK_MARKER
 from anon_git.templates import HOOK_BODY
 from anon_git.utils.errors import fail
-from anon_git.utils.git import git, git_ok
+from anon_git.utils.git import git, git_config_get, git_ok
 
 
 # The post-commit hook path git actually runs. `--git-path hooks` honors
@@ -33,11 +33,28 @@ def require_work_tree_for(flag):
         fail(f"Error: {flag} must be run inside a git repository.")
 
 
+# A core.hooksPath from global/system/command config is shared by other
+# repos: the hook would rewrite HEAD with --no-backup in every one of them.
+def require_repo_local_hooks_path():
+    status, scoped_value = git_config_get("core.hooksPath", "--show-scope")
+    if status != 0:
+        return
+    scope, hooks_path = scoped_value.split("\t", 1)
+    if scope in ("local", "worktree"):
+        return
+    fail(
+        f"Error: core.hooksPath is set in {scope} config ({hooks_path}), shared with other "
+        "repositories; refusing to install the hook there.\n"
+        "  Set a repo-local one first: git config --local core.hooksPath .git/hooks"
+    )
+
+
 # --install-hook: re-anonymizes HEAD in place after every commit, with
 # --no-backup (would accumulate one branch per commit) and --quiet. Calls
 # this exact interpreter, never whatever `anon-git` is first on $PATH.
 def install_hook():
     require_work_tree_for("--install-hook")
+    require_repo_local_hooks_path()
     hook_file = hook_file_path()
     if os.path.lexists(hook_file) and not hook_is_ours(hook_file):
         fail(

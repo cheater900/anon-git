@@ -31,6 +31,8 @@ uv tool uninstall anon-git
 install`/`uv tool uninstall` replace them. Passing one exits 1 with that hint.
 - The post-commit hook from `--install-hook` calls this exact install
   (`<python> -m anon_git`), not whatever `anon-git` is on `$PATH`.
+- `--install-hook` refuses a `core.hooksPath` set outside repo-local config:
+  that directory is shared, so the hook would rewrite every repo's commits.
 - `--dry-run` pipes the preview to `$PAGER` on stdin; no preview file is
   written to disk.
 

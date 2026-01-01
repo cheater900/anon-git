@@ -66,6 +66,15 @@ def test_install_hook_uses_core_hooks_path(repo):
     assert not os.path.exists(HOOK_FILE)
 
 
+def test_install_hook_refuses_global_hooks_path(repo, tmp_path):
+    shared = tmp_path / "shared-hooks"
+    git("config", "--global", "core.hooksPath", str(shared))
+    result = run_cli("--install-hook")
+    assert result.returncode == 1
+    assert "global config" in result.stderr
+    assert not shared.exists()
+
+
 def test_hook_anonymizes_partial_commit_keeps_changes(repo):
     run_install_hook()
     for name in ("staged.txt", "committed.txt"):
