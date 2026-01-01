@@ -1866,6 +1866,141 @@ test_match_merge_commit() {
     record_result "$errors" 'flag --entire-history handles merge commits'
 }
 
+test_match_merge_commit_single_target() {
+    # Regression test: anonymizing a merge commit directly (single-commit
+    # mode, i.e. targeted by hash, not --entire-history) must rewrite only
+    # that commit's metadata while leaving its two-parent topology, both
+    # parents' own metadata, and the merge's tree/content untouched.
+    # Complements test_match_merge_commit, which only covers
+    # --entire-history + a merge commit.
+    local original_branch feature_branch parent1_before parent2_before
+    local parent1_author_before merge_hash tree_before exit_status
+    local new_merge_author parents_after tree_after parent1_author_after
+    local errors=0
+
+    original_branch=$(git branch --show-current)
+    feature_branch="merge_single_test_$$"
+
+    git switch --create "$feature_branch" >/dev/null 2>&1
+    echo 'feature work' >feature_single_file.txt
+    git add feature_single_file.txt >/dev/null
+    git commit -m 'Add feature single file' >/dev/null
+
+    git switch "$original_branch" >/dev/null 2>&1
+    git merge --no-ff -m 'Merge feature branch (single target)' "$feature_branch" >/dev/null 2>&1
+
+    merge_hash=$(git rev-parse HEAD)
+    parent1_before=$(git rev-parse HEAD^1)
+    parent2_before=$(git rev-parse HEAD^2)
+    parent1_author_before=$(git show -s --format='%an <%ae>' "$parent1_before")
+    tree_before=$(git show -s --format='%T' "$merge_hash")
+
+    ./${SCRIPT_NAME} --no-confirm --no-backup --current-branch \
+        --name 'Merge Single Tester' --email 'merge.single@example.com' "$merge_hash" >/dev/null 2>&1
+    exit_status=$?
+
+    new_merge_author=$(git show -s --format='%an <%ae>' HEAD)
+    parents_after=$(git show -s --format='%P' HEAD)
+    tree_after=$(git show -s --format='%T' HEAD)
+    parent1_author_after=$(git show -s --format='%an <%ae>' "$parent1_before" 2>/dev/null)
+
+    if [[ "$exit_status" -ne 0 ]]; then
+        printf 'Error: anonymizing a merge commit by hash exited with status %s\n' "$exit_status"
+        errors=$((errors + 1))
+    fi
+    if [[ "$new_merge_author" != 'Merge Single Tester <merge.single@example.com>' ]]; then
+        printf 'Error: targeted merge commit was not anonymized (got "%s")\n' "$new_merge_author"
+        errors=$((errors + 1))
+    fi
+    if [[ "$parents_after" != "${parent1_before} ${parent2_before}" ]]; then
+        printf 'Error: merge commit parents changed despite not being rewrite targets\n'
+        errors=$((errors + 1))
+    fi
+    if [[ "$tree_after" != "$tree_before" ]]; then
+        printf 'Error: merge commit tree/content drifted from a metadata-only rewrite\n'
+        errors=$((errors + 1))
+    fi
+    if [[ "$parent1_author_after" != "$parent1_author_before" ]]; then
+        printf 'Error: a parent commit was unexpectedly rewritten\n'
+        errors=$((errors + 1))
+    fi
+    if ! git fsck --full >/dev/null 2>&1; then
+        printf 'Error: git fsck reported a corrupt repository after the rewrite\n'
+        errors=$((errors + 1))
+    fi
+
+    git branch -D "$feature_branch" >/dev/null 2>&1
+
+    record_result "$errors" 'anonymizing a merge commit by hash (single-commit mode) preserves its topology'
+}
+
+test_match_merge_commit_ancestor_only() {
+    # Regression test: anonymizing a single ancestor commit that a later
+    # merge commit descends from (single-commit mode, not --entire-history)
+    # must cascade through git-filter-repo — the merge commit's parent
+    # pointer follows the ancestor's new hash — while the merge's tree,
+    # parent count, and the OTHER (non-rewritten) parent branch stay intact.
+    local original_branch feature_branch other_parent_before ancestor_hash
+    local tree_before exit_status new_ancestor_author merge_parent_count
+    local other_parent_after tree_after errors=0
+
+    original_branch=$(git branch --show-current)
+    feature_branch="merge_ancestor_test_$$"
+
+    git switch --create "$feature_branch" >/dev/null 2>&1
+    echo 'feature work' >feature_ancestor_file.txt
+    git add feature_ancestor_file.txt >/dev/null
+    git commit -m 'Add feature ancestor file' >/dev/null
+    other_parent_before=$(git rev-parse HEAD)
+
+    git switch "$original_branch" >/dev/null 2>&1
+    echo 'main ancestor work' >main_ancestor_file.txt
+    git add main_ancestor_file.txt >/dev/null
+    git commit -m 'Add main ancestor file' >/dev/null
+    ancestor_hash=$(git rev-parse HEAD)
+
+    git merge --no-ff -m 'Merge feature branch (ancestor target)' "$feature_branch" >/dev/null 2>&1
+    tree_before=$(git show -s --format='%T' HEAD)
+
+    ./${SCRIPT_NAME} --no-confirm --no-backup --current-branch \
+        --name 'Ancestor Tester' --email 'ancestor.tester@example.com' "$ancestor_hash" >/dev/null 2>&1
+    exit_status=$?
+
+    new_ancestor_author=$(git show -s --format='%an <%ae>' HEAD^1)
+    merge_parent_count=$(git show -s --format='%P' HEAD | wc -w)
+    other_parent_after=$(git rev-parse HEAD^2)
+    tree_after=$(git show -s --format='%T' HEAD)
+
+    if [[ "$exit_status" -ne 0 ]]; then
+        printf 'Error: anonymizing a merge ancestor by hash exited with status %s\n' "$exit_status"
+        errors=$((errors + 1))
+    fi
+    if [[ "$new_ancestor_author" != 'Ancestor Tester <ancestor.tester@example.com>' ]]; then
+        printf 'Error: targeted ancestor commit was not anonymized (got "%s")\n' "$new_ancestor_author"
+        errors=$((errors + 1))
+    fi
+    if [[ "$merge_parent_count" -ne 2 ]]; then
+        printf 'Error: merge commit lost its two-parent topology after an ancestor rewrite (got %s parent(s))\n' "$merge_parent_count"
+        errors=$((errors + 1))
+    fi
+    if [[ "$other_parent_after" != "$other_parent_before" ]]; then
+        printf 'Error: the other (non-rewritten) branch of the merge was unexpectedly re-hashed\n'
+        errors=$((errors + 1))
+    fi
+    if [[ "$tree_after" != "$tree_before" ]]; then
+        printf 'Error: merge commit tree/content drifted after an ancestor-only rewrite\n'
+        errors=$((errors + 1))
+    fi
+    if ! git fsck --full >/dev/null 2>&1; then
+        printf 'Error: git fsck reported a corrupt repository after the rewrite\n'
+        errors=$((errors + 1))
+    fi
+
+    git branch -D "$feature_branch" >/dev/null 2>&1
+
+    record_result "$errors" 'anonymizing a merge-commit ancestor by hash cascades the merge parent pointer'
+}
+
 test_match_outside_git_repo() {
     local no_repo_dir output exit_status errors=0
 
@@ -2137,6 +2272,8 @@ main() {
     test_match_shell_injection_email
     test_match_shell_injection_name
     test_match_merge_commit
+    test_match_merge_commit_single_target
+    test_match_merge_commit_ancestor_only
     printf -- '----------------------------------------\n'
     printf 'Summary: %s/%s tests passed (%s errors)\n' "$TESTS_PASSED" "$((TESTS_PASSED + TESTS_FAILED))" "$TOTAL_ERRORS"
     if [[ "$TESTS_FAILED" -eq 0 ]]; then
