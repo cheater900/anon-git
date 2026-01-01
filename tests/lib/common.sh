@@ -12,9 +12,12 @@ cd "$TMP_DIR" || exit 1
 cp "$SCRIPT" .
 chmod +x "./${SCRIPT_NAME}"
 
+# Pristine copy of init_repo's .git, restored after every test.
+REPO_TEMPLATE="${TMP_DIR}.template"
+
 cleanup() {
     cd - >/dev/null 2>&1 || true
-    rm -rf "$TMP_DIR"
+    rm -rf "$TMP_DIR" "$REPO_TEMPLATE"
 }
 trap cleanup EXIT
 
@@ -40,6 +43,16 @@ init_repo() {
         git add "$filename" >/dev/null
         git commit -m "Add file $filename" >/dev/null
     done
+    cp -a .git "$REPO_TEMPLATE"
+}
+
+restore_repo() {
+    # Each test starts from the same fresh history, so one test's leftovers
+    # can't cascade into the next.
+    rm -rf "${TMP_DIR}/.git"
+    cp -a "$REPO_TEMPLATE" "${TMP_DIR}/.git"
+    git -C "$TMP_DIR" reset -q --hard
+    git -C "$TMP_DIR" clean -fdq -e "$SCRIPT_NAME"
 }
 
 test_script() {
@@ -182,6 +195,7 @@ record_result() {
     fi
     TOTAL_ERRORS=$((TOTAL_ERRORS + errors))
     printf '%s Test %02d » test %s\n' "$status" "$CURRENT_TEST_INDEX" "$label"
+    restore_repo
 }
 
 run_with_tty() {
