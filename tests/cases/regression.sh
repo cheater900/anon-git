@@ -205,7 +205,7 @@ test_match_outside_git_repo() {
     cp "$SCRIPT" "$no_repo_dir/"
     chmod +x "${no_repo_dir}/${SCRIPT_NAME}"
 
-    output=$(cd "$no_repo_dir" && "./${SCRIPT_NAME}" --no-confirm 2>&1)
+    output=$(cd "$no_repo_dir" && "./${SCRIPT_NAME}" --no-confirm 2>&1 >/dev/null)
     exit_status=$?
 
     if [[ "$exit_status" -eq 0 ]]; then
@@ -213,7 +213,7 @@ test_match_outside_git_repo() {
         errors=$((errors + 1))
     fi
     if ! grep -qi 'git repository' <<<"$output"; then
-        printf 'Error: expected "git repository" message not found\n'
+        printf 'Error: expected "git repository" message not found on stderr\n'
         errors=$((errors + 1))
     fi
 

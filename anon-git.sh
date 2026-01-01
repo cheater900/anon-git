@@ -605,12 +605,12 @@ handle_early_options() {
 # git-filter-repo available. Everything after this can assume a usable repo.
 safety_checks() {
     if ! git rev-parse --git-dir >/dev/null 2>&1; then
-        printf 'AnonGit must be run inside a git repository.\n'
+        printf 'AnonGit must be run inside a git repository.\n' >&2
         exit 1
     fi
 
     if ! git diff-index --quiet HEAD -- || ! git diff-files --quiet; then
-        printf 'Repository has uncommitted changes. Commit or stash first to prevent losing the changes.\n'
+        printf 'Repository has uncommitted changes. Commit or stash first to prevent losing the changes.\n' >&2
         exit 1
     fi
 
@@ -1119,7 +1119,7 @@ backup_branch() {
         else
             # Not gated by --quiet: this is a data-loss warning, not routine
             # informational output, so it stays visible even when quiet.
-            printf 'WARNING! Overwriting existing branch %s without backup!\n' "$branch_label"
+            printf 'WARNING! Overwriting existing branch %s without backup!\n' "$branch_label" >&2
         fi
     fi
 }
