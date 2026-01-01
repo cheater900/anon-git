@@ -326,6 +326,14 @@ source <(./anon-git.sh --print-completion)
 - Consider using environment variables (`export ANON_GIT_NAME="..."` etc.)
   instead of hard-coding flags in the hook
 - Consider squashing commits or using merge requests from anonymous remotes
+- Only author/committer name, email and date get rewritten. Identities can
+  still leak through:
+  - Message trailers (`Signed-off-by:`, `Co-authored-by:`, ...) stay in the
+    commit message as written
+  - Annotated tags keep their tagger name, email and date
+  - The original branch stays untouched next to the anonymized copy, so
+    `git push --all` publishes both; push only the anonymized branch, or
+    delete the original once satisfied
 - The script's scratch files (the `--dry-run` preview, `git filter-repo`'s log)
   are cleaned up by an `EXIT` trap, so killing it mid-run (Ctrl-C, a CI timeout,
   ...) doesn't leave them behind in `/tmp` either
