@@ -89,7 +89,8 @@ main() {
     test_combo_env_var_dry_run_entire_history
     test_combo_env_var_flag_priority
     test_flag_current_branch_backup
-    test_flag_dry_run
+    test_flag_dry_run cat
+    test_flag_dry_run "cat -u"
     test_flag_env_vars
     test_gitconfig_defaults
     test_gitconfig_beats_envvar

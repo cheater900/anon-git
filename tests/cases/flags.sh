@@ -35,10 +35,11 @@ test_flag_current_branch_backup() {
 }
 
 test_flag_dry_run() {
-    local before after output exit_status errors=0
+    # $1: PAGER value; may carry arguments, like git's
+    local pager="$1" before after output exit_status errors=0
 
     before=$(git rev-parse HEAD)
-    output=$(PAGER="cat" ./"${SCRIPT_NAME}" --dry-run HEAD 2>&1)
+    output=$(PAGER="$pager" ./"${SCRIPT_NAME}" --dry-run HEAD 2>&1)
     exit_status=$?
     after=$(git rev-parse HEAD)
 
@@ -55,7 +56,7 @@ test_flag_dry_run() {
         errors=$((errors + 1))
     fi
 
-    record_result "$errors" 'flag --dry-run'
+    record_result "$errors" "flag --dry-run with PAGER=\"${pager}\""
 }
 
 test_flag_keep_partial() {

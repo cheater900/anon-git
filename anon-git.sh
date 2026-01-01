@@ -1398,8 +1398,8 @@ run_filter_repo() {
 # dryrun_file is removed by the EXIT trap (cleanup_on_exit), not here.
 print_result() {
     if [[ "$ANON_GIT_DRYRUN" == '1' && -f "$dryrun_file" ]]; then
-        local pager=${PAGER:-cat}
-        command "$pager" "$dryrun_file"
+        # Through sh, like git, so PAGER may carry arguments ("less -R").
+        sh -c "${PAGER:-cat} \"\$1\"" sh "$dryrun_file"
     elif [[ "$ANON_GIT_QUIET" != '1' ]]; then
         printf 'Done. History has been rewritten.\n'
     fi
