@@ -4,6 +4,7 @@ Derived from git history, newest first.
 
 ## 2026-11-04
 
+- test(sh): cover offset and ISO --date, duplicate targets, untouched non-targets
 - test(sh): compile embedded Python as bash expands it, not raw script text
 - fix(sh): escape control chars in --dry-run preview
 - fix(sh): refuse --install-hook into shared core.hooksPath

@@ -98,6 +98,19 @@ assert_rewrite() {
     assert_rewrite --date '2020-01-01 00:07:07 +0000'
 }
 
+@test "--date with negative offset rewrites target" {
+    assert_rewrite --date '2020-01-01 03:07:07 -0230'
+}
+
+@test "--date accepts ISO 8601 forms" {
+    run ./anon-git.sh --no-confirm --no-backup --current-branch --date '2025-06-15T14:20:00Z' HEAD
+    assert_success
+    assert_equal "$(git show -s --format='%ai %ci' HEAD)" '2025-06-15 14:20:00 +0000 2025-06-15 14:20:00 +0000'
+    run ./anon-git.sh --no-confirm --no-backup --current-branch --date '2025-06-15T14:20:00+05:30' HEAD
+    assert_success
+    assert_equal "$(git show -s --format='%ai' HEAD)" '2025-06-15 14:20:00 +0530'
+}
+
 @test "--keep-date keeps date" {
     assert_rewrite --keep-date
 }
@@ -123,10 +136,17 @@ assert_rewrite() {
     assert_success
     assert_equal "$(commit_author HEAD~1)" 'Donald Knuth <donald.knuth@example.com>'
     assert_equal "$(commit_author HEAD~3)" 'Donald Knuth <donald.knuth@example.com>'
+    assert_not_equal "$(commit_author HEAD~2)" 'Donald Knuth <donald.knuth@example.com>'
 }
 
 @test "--entire-history rewrites all commits" {
     run ./anon-git.sh --no-confirm --no-backup --current-branch --entire-history
     assert_success
     assert_equal "$(history_authors)" "$DEFAULT_AUTHOR"
+}
+
+@test "duplicate targets rewrite once" {
+    run ./anon-git.sh --no-confirm --no-backup --current-branch HEAD HEAD
+    assert_success
+    assert_equal "$(commit_author HEAD)" "$DEFAULT_AUTHOR"
 }
