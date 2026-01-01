@@ -211,3 +211,28 @@ test_match_malformed_date() {
 
     record_result "$errors" 'malformed --date rejected safely'
 }
+
+test_match_malformed_date_no_branch() {
+    local branch_before branch_count_before output exit_status errors=0
+
+    branch_before=$(git branch --show-current)
+    branch_count_before=$(git branch --list | wc -l)
+    output=$(./"${SCRIPT_NAME}" --no-confirm --date '2025-13-45 99:00:00 +0000' HEAD 2>&1)
+    exit_status=$?
+
+    if [[ "$exit_status" -eq 0 ]]; then
+        printf 'Error: malformed --date value did not cause failure\n'
+        errors=$((errors + 1))
+    fi
+    if [[ "$(git branch --list | wc -l)" != "$branch_count_before" ]]; then
+        printf 'Error: malformed --date left a stray branch\n'
+        errors=$((errors + 1))
+    fi
+    if ! grep -q 'invalid date' <<<"$output"; then
+        printf 'Error: expected "invalid date" message not found (got: %s)\n' "$output"
+        errors=$((errors + 1))
+    fi
+    git switch "$branch_before" >/dev/null 2>&1
+
+    record_result "$errors" 'malformed --date rejected before branch creation'
+}

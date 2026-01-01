@@ -905,6 +905,15 @@ validate_final_options() {
     validate_bool ANON_GIT_QUIET "$ANON_GIT_QUIET"
 }
 
+validate_date() {
+    if ! ANON_GIT_DATE="$ANON_GIT_DATE" python3 -c "${python_parse_target_date}
+import os
+parse_target_date(os.environ['ANON_GIT_DATE'])" 2>/dev/null; then
+        printf 'Error: invalid date "%s" (expected e.g. "2025-03-10 13:37:00 +0000")\n' "$ANON_GIT_DATE" >&2
+        exit 1
+    fi
+}
+
 # Prints a summary, gated on flags explicitly passed on the CLI (not the
 # resolved envvar/default), so e.g. ANON_GIT_KEEPUSER in a shell profile
 # doesn't spam this on every run.
@@ -1179,12 +1188,31 @@ setup_random_dates() {
     fi
 }
 
+# Prepended to python_commit_callback, and run alone by validate_date so a
+# malformed date fails before anything is touched.
+python_parse_target_date="
+import re
+from datetime import datetime
+
+def parse_target_date(date_str):
+    # Also accepts ISO 8601 compact form (e.g. '2025-06-15T14:20:00Z'),
+    # normalized to the space-separated, 4-digit-offset form '%z' expects.
+    normalized = date_str.strip()
+    if 'T' in normalized:
+        normalized = normalized.replace('T', ' ', 1)
+        if normalized.endswith('Z'):
+            normalized = normalized[:-1] + '+0000'
+        match = re.match(r'^(.*\d{2}:\d{2}:\d{2})([+-]\d{2}:?\d{2})$', normalized)
+        if match:
+            normalized = '%s %s' % (match.group(1), match.group(2).replace(':', ''))
+    return datetime.strptime(normalized, '%Y-%m-%d %H:%M:%S %z')
+"
+
 # Kept as a plain top-level assignment (not nested in a function): the test
 # suite locates this callback by its exact, unindented
 # `python_commit_callback="` ... `"` line anchors to check it's valid Python.
 python_commit_callback="
 import os
-import re
 from datetime import datetime, timedelta, timezone
 
 name  = os.environ['ANON_GIT_NAME']
@@ -1246,19 +1274,6 @@ def parse_git_date(date_bytes):
     ts = float(unix_ts)
     dt = datetime.fromtimestamp(ts, tz=tz)
     return dt
-
-def parse_target_date(date_str):
-    # Also accepts ISO 8601 compact form (e.g. '2025-06-15T14:20:00Z'),
-    # normalized to the space-separated, 4-digit-offset form '%z' expects.
-    normalized = date_str.strip()
-    if 'T' in normalized:
-        normalized = normalized.replace('T', ' ', 1)
-        if normalized.endswith('Z'):
-            normalized = normalized[:-1] + '+0000'
-        match = re.match(r'^(.*\d{2}:\d{2}:\d{2})([+-]\d{2}:?\d{2})$', normalized)
-        if match:
-            normalized = '%s %s' % (match.group(1), match.group(2).replace(':', ''))
-    return datetime.strptime(normalized, '%Y-%m-%d %H:%M:%S %z')
 
 if not keepuser:
     author_name = name.encode()
@@ -1373,7 +1388,7 @@ run_filter_repo() {
         dryrun_args=(--dry-run)
     fi
     filter_repo_log=$(mktemp)
-    if ! git filter-repo --force ${dryrun_args[@]+"${dryrun_args[@]}"} --commit-callback "$python_commit_callback" --refs HEAD >"$filter_repo_log" 2>&1; then
+    if ! git filter-repo --force ${dryrun_args[@]+"${dryrun_args[@]}"} --commit-callback "${python_parse_target_date}${python_commit_callback}" --refs HEAD >"$filter_repo_log" 2>&1; then
         printf 'Error: git filter-repo failed:\n' >&2
         cat "$filter_repo_log" >&2
         exit 1
@@ -1403,6 +1418,7 @@ main() {
     apply_strip_timezone_alone
     validate_final_options
     require_target
+    validate_date
     verbose_info
     confirm
     backup_branch
