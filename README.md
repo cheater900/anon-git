@@ -30,6 +30,7 @@ the Python version does differently.
 ## Docs
 
 - [`docs/ROADMAP.md`](docs/ROADMAP.md): planned work
+- [`docs/IDEA.md`](docs/IDEA.md): unplanned ideas
 - [`docs/CHANGELOG.md`](docs/CHANGELOG.md): change history
 
 ## License

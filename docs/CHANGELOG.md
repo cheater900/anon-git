@@ -4,6 +4,7 @@ Derived from git history, newest first.
 
 ## 2026-11-04
 
+- docs: add IDEA with kcov coverage for anon-git.sh
 - docs: plan shell fix for out-of-range timezone offsets
 - docs(sh): describe hook symlink and shared core.hooksPath refusals
 - test(sh): cover filter-repo failure report
