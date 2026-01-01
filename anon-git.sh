@@ -1074,9 +1074,7 @@ confirm() {
 # but reusing it after certain repo state changes hits a known assertion bug
 # in the tool. Removing it forces a clean run each time.
 clean_cache() {
-    if [[ -d "$PWD/.git/filter-repo" ]]; then
-        rm -rf "$PWD/.git/filter-repo"
-    fi
+    rm -rf -- "$(git rev-parse --git-dir)/filter-repo"
 }
 
 # Internal: creates the scratch file the Python commit-callback writes its

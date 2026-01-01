@@ -222,6 +222,25 @@ test_match_outside_git_repo() {
     record_result "$errors" 'outside git repo fails cleanly'
 }
 
+test_match_clean_cache_from_subdir() {
+    # Run from a subdir, $PWD/.git does not exist; the cache must still go.
+    local marker errors=0
+
+    marker="$(git rev-parse --absolute-git-dir)/filter-repo/stale_marker"
+    mkdir -p "$(dirname "$marker")"
+    touch "$marker"
+    mkdir -p subdir
+    (cd subdir && PAGER="cat" ../"${SCRIPT_NAME}" --dry-run HEAD >/dev/null 2>&1)
+    rmdir subdir
+
+    if [[ -e "$marker" ]]; then
+        printf 'Error: filter-repo cache not cleared when run from subdir\n'
+        errors=$((errors + 1))
+    fi
+
+    record_result "$errors" 'filter-repo cache cleared from subdir'
+}
+
 test_match_trap_cleanup_on_kill() {
     # The EXIT trap (cleanup_on_exit) must remove scratch files even when
     # killed mid-run. Uses a large repo (gives filter-repo time to run) and a
