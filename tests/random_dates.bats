@@ -13,13 +13,13 @@ EPOCH_2019_01_01=1546300800
 EPOCH_2020_01_01=1577836800
 
 # Runs python_compute_random_dates directly against synthetic
-# "<hash> <epoch> [parents...]" stdin input (bypassing git/git-filter-repo),
+# "<hash> <epoch> <offset> [parents...]" stdin input (bypassing git/git-filter-repo),
 # so its ordering guarantee can be checked against input a real repo test
 # can't easily produce.
 run_random_dates_script() {
     # $1: granularity envvar to set to '1'. $2: ANON_GIT_ENTIREHISTORY value.
     # $3: space-separated ANON_GIT_TARGET_COMMITS (ignored when $2 is '1').
-    # stdin: "<hash> <epoch> [parents...]" lines, oldest to newest; parents
+    # stdin: "<hash> <epoch> <offset> [parents...]" lines, oldest to newest; parents
     # and children are what the script treats as "real neighbors". stdout:
     # "<hash> <epoch> <offset>", targets only.
     env ANON_GIT_RANDOMTIME=0 ANON_GIT_RANDOMDAY=0 ANON_GIT_RANDOMMONTH=0 "${1}=1" \
@@ -27,13 +27,13 @@ run_random_dates_script() {
         python3 -c "$(extract_script_block python_compute_random_dates)"
 }
 
-# Builds $1 linear "<hash> <epoch> <parent>" lines, $2 seconds apart, from
+# Builds $1 linear "<hash> <epoch> +0000 <parent>" lines, $2 seconds apart, from
 # EPOCH_2020_01_01. Hashes named commit_0, commit_1, ...
 build_synthetic_history() {
     local count=$1 spacing=$2 base=$EPOCH_2020_01_01 i
-    printf 'commit_0 %s\n' "$base"
+    printf 'commit_0 %s +0000\n' "$base"
     for ((i = 1; i < count; i++)); do
-        printf 'commit_%s %s commit_%s\n' "$i" "$((base + i * spacing))" "$((i - 1))"
+        printf 'commit_%s %s +0000 commit_%s\n' "$i" "$((base + i * spacing))" "$((i - 1))"
     done
 }
 
@@ -189,15 +189,50 @@ order_within_bucket() {
     local history day=$SECONDS_PER_DAY base=$EPOCH_2020_01_01 merge_epoch i
     merge_epoch=$((base + 2 * day))
     history=$(printf '%s\n' \
-        "root ${base}" \
-        "side_1 $((base + day)) root" \
-        "main_1 $((base + 20 * day)) root" \
-        "merge ${merge_epoch} main_1 side_1")
+        "root ${base} +0000" \
+        "side_1 $((base + day)) +0000 root" \
+        "main_1 $((base + 20 * day)) +0000 root" \
+        "merge ${merge_epoch} +0000 main_1 side_1")
     for i in 1 2 3 4 5; do
         run run_random_dates_script ANON_GIT_RANDOMDAY 0 'side_1' <<<"$history"
         assert_success
         assert_increasing "$base" "$(random_dates_lookup side_1 <<<"$output")" "$merge_epoch"
     done
+}
+
+@test "random dates: same-second neighbors at bucket end stay in bucket" {
+    # Parent, target and child all at 23:59:59: no room left, the target must
+    # tie at the bucket's last second, not spill into the next day.
+    local last=$((EPOCH_2020_01_01 + SECONDS_PER_DAY - 1))
+    run run_random_dates_script ANON_GIT_RANDOMTIME 0 'target' < <(printf '%s\n' \
+        "parent ${last} +0000" \
+        "target ${last} +0000 parent" \
+        "child ${last} +0000 target")
+    assert_success
+    assert_output "target ${last} +0000"
+}
+
+@test "random dates: bucket follows local calendar, not UTC" {
+    # 2020-01-01 01:00 +0200 is 2019-12-31 23:00 UTC; the year shown must stay 2020.
+    local epoch=$((EPOCH_2020_01_01 - SECONDS_PER_HOUR)) picked
+    for _ in 1 2 3 4 5; do
+        run run_random_dates_script ANON_GIT_RANDOMTIME 1 '' <<<"commit ${epoch} +0200"
+        assert_success
+        picked=$(random_dates_lookup commit <<<"$output")
+        assert [ "$picked" -ge "$EPOCH_2020_01_01" ]
+        assert [ "$picked" -lt $((EPOCH_2020_01_01 + SECONDS_PER_DAY)) ]
+    done
+}
+
+@test "--random-month keeps local year across UTC new year" {
+    local repo_dir=${BATS_TEST_TMPDIR}/random_local_year_repo
+    new_repo "$repo_dir"
+    cd "$repo_dir"
+    GIT_AUTHOR_DATE='2020-01-01 01:00:00 +0200' GIT_COMMITTER_DATE='2020-01-01 01:00:00 +0200' \
+        git commit -q --allow-empty -m 'new year'
+    run ./anon-git.sh --no-confirm --no-backup --current-branch --random-month HEAD
+    assert_success
+    assert_equal "$(git log -1 --date=format:'%Y' --format='%ad')" 2020
 }
 
 # INTEGRATION TEST: same shape as keep_partial (flags.bats), for the

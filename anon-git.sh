@@ -1115,13 +1115,14 @@ export_rewrite_env() {
 }
 
 # Precomputes one random timestamp per target commit for --random-time/-day/
-# -month: reads full history from stdin ("<hash> <epoch> [parents...]"), tags
-# each commit target/anchor (a parent or child of a target)/ignored, buckets
-# by the fixed calendar unit, and assigns each
-# bucket's runs random timestamps bounded by their nearest anchor, preserving
-# relative order. Prints "<hash> <epoch> +0000" lines, targets only. Kept as
-# a plain top-level assignment: the test suite locates it by its exact,
-# unindented `python_compute_random_dates="` ... `"` line anchors.
+# -month: reads full history from stdin, oldest first ("<hash> <epoch>
+# <offset> [parents...]"), tags each commit target/anchor (a parent or child
+# of a target)/ignored, buckets by the commit's local calendar unit (what
+# `git log` shows, as --keep-* uses), and assigns each bucket's runs random
+# timestamps bounded by their nearest anchor, preserving relative order.
+# Prints "<hash> <epoch> +0000" lines, targets only. Kept as a plain
+# top-level assignment: the test suite locates it by its exact, unindented
+# `python_compute_random_dates="` ... `"` line anchors.
 python_compute_random_dates="
 import os
 import random
@@ -1161,17 +1162,24 @@ def bucket_bounds(dt):
         end = start + timedelta(hours=23, minutes=59, seconds=59)
     return key, int(start.timestamp()), int(end.timestamp())
 
+def local_datetime(epoch, offset):
+    # Wall-clock date/time in the commit's own offset, labeled UTC: the
+    # output is +0000, so bucket bounds must be these digits read as UTC.
+    sign = -1 if offset.startswith('-') else 1
+    seconds = sign * (int(offset[1:3]) * 3600 + int(offset[3:5]) * 60)
+    return datetime.fromtimestamp(epoch + seconds, tz=timezone.utc)
+
 history = []
 for line in sys.stdin:
     fields = line.split()
     if not fields:
         continue
-    history.append((fields[0], int(fields[1]), fields[2:]))
+    history.append((fields[0], int(fields[1]), fields[2], fields[3:]))
 
 # Real neighbors are parents and children: across a merge, the commit next
 # in log order can sit on another branch.
 anchors = set()
-for commit_hash, _epoch, parents in history:
+for commit_hash, _epoch, _offset, parents in history:
     if commit_hash in target_hashes:
         anchors.update(parents)
     elif any(parent in target_hashes for parent in parents):
@@ -1181,7 +1189,7 @@ if entirehistory:
     roles = ['target'] * len(history)
 else:
     roles = []
-    for commit_hash, _epoch, _parents in history:
+    for commit_hash, _epoch, _offset, _parents in history:
         if commit_hash in target_hashes:
             roles.append('target')
         elif commit_hash in anchors:
@@ -1192,13 +1200,17 @@ else:
 buckets = defaultdict(list)
 bounds = {}
 
-for (commit_hash, epoch, _parents), role in zip(history, roles):
+# History index breaks epoch ties, so a parent sorts before its same-second child.
+for index, ((commit_hash, epoch, offset, _parents), role) in enumerate(zip(history, roles)):
     if role == 'skip':
         continue
-    dt = datetime.fromtimestamp(epoch, tz=timezone.utc)
-    key, start, end = bucket_bounds(dt)
-    buckets[key].append((epoch, commit_hash, role))
-    bounds[key] = (start, end)
+    keys = {bucket_bounds(local_datetime(epoch, offset))}
+    if role == 'anchor':
+        # Also bound targets whose bucket holds this anchor's real instant.
+        keys.add(bucket_bounds(datetime.fromtimestamp(epoch, tz=timezone.utc)))
+    for key, start, end in keys:
+        buckets[key].append((epoch, index, commit_hash, role))
+        bounds[key] = (start, end)
 
 for key, members in buckets.items():
     bucket_start, bucket_end = bounds[key]
@@ -1208,28 +1220,29 @@ for key, members in buckets.items():
     member_count = len(members)
     lower = bucket_start
     while i < member_count:
-        epoch, commit_hash, role = members[i]
+        epoch, _index, commit_hash, role = members[i]
         if role == 'anchor':
-            lower = epoch + 1
+            lower = max(epoch + 1, bucket_start)
             i += 1
             continue
         run_start = i
-        while i < member_count and members[i][2] == 'target':
+        while i < member_count and members[i][3] == 'target':
             i += 1
         run = members[run_start:i]
-        upper = members[i][0] - 1 if i < member_count else bucket_end
+        upper = min(members[i][0] - 1, bucket_end) if i < member_count else bucket_end
         count = len(run)
         span = upper - lower
         if span < 0:
             # No room between anchors (e.g. two real commits one second
-            # apart with a target sandwiched between). Fall back to a shared
-            # timestamp -- git allows identical author dates.
-            picks = [lower] * count
+            # apart with a target sandwiched between), or an anchor outside
+            # the bucket. Share the nearest in-bucket timestamp -- git allows
+            # identical dates, the calendar unit must not change.
+            picks = [min(max(lower - 1, bucket_start), bucket_end)] * count
         elif count <= span + 1:
             picks = sorted(rng.sample(range(lower, upper + 1), count))
         else:
             picks = sorted(rng.randint(lower, upper) for _ in range(count))
-        for (_original_epoch, member_hash, _role), new_epoch in zip(run, picks):
+        for (_original_epoch, _member_index, member_hash, _role), new_epoch in zip(run, picks):
             print('%s %d +0000' % (member_hash, new_epoch))
 "
 
@@ -1244,7 +1257,7 @@ setup_random_dates() {
 
     make_scratch_file random_dates_file
 
-    if ! git log --reverse --format='%H %at %P' HEAD |
+    if ! git log --reverse --topo-order --date=format:%z --format='%H %at %ad %P' HEAD |
         ANON_GIT_RANDOMTIME="$ANON_GIT_RANDOMTIME" ANON_GIT_RANDOMDAY="$ANON_GIT_RANDOMDAY" ANON_GIT_RANDOMMONTH="$ANON_GIT_RANDOMMONTH" \
             ANON_GIT_ENTIREHISTORY="$ANON_GIT_ENTIREHISTORY" ANON_GIT_TARGET_COMMITS="$ANON_GIT_COMMIT" \
             python3 -c "$python_compute_random_dates" >"$random_dates_file"; then

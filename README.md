@@ -313,6 +313,9 @@ source <(./anon-git.sh --print-completion)
   target is given (not `--entire-history`): the one real commit immediately
   before and after each target is used to bound that target's randomized
   date, without itself being touched or appearing anywhere in the rewrite
+- The year/month/day `--random-*` keeps is the commit's own local calendar
+  date (what `git log` shows), not UTC; when an untouched neighbor's timezone
+  conflicts with that, the calendar wins and the target ties at the edge
 - Timestamps must be in a format `git` understands (ISO 8601 with timezone
   recommended), and not before 1970 (`git fsck` rejects negative timestamps)
 - `--name`/`--email` must not contain `<`, `>` or a newline (git can't store
