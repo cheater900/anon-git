@@ -279,3 +279,14 @@ def test_ctrl_c_reports_interrupt_not_traceback(repo, monkeypatch, capsys):
         main(["HEAD"])
     assert exc.value.code == 1
     assert "Interrupted" in capsys.readouterr().err
+
+
+def test_git_failure_reports_command_not_traceback(repo, monkeypatch, capsys):
+    def git_fails():
+        raise subprocess.CalledProcessError(128, ["git", "rev-parse"], stderr="fatal: boom\n")
+
+    monkeypatch.setattr(cli, "safety_checks", git_fails)
+    with pytest.raises(SystemExit) as exc:
+        main(["HEAD"])
+    assert exc.value.code == 1
+    assert capsys.readouterr().err == "Error: git rev-parse failed: fatal: boom\n"

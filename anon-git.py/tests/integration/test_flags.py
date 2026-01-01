@@ -95,6 +95,13 @@ def test_no_backup_skips_backup_branch(repo, head_before):
     assert "without backup" in result.stderr
 
 
+def test_quiet_keeps_no_backup_warning(repo):
+    result = run_cli(*REWRITE, "--quiet", "HEAD")
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == ""
+    assert "WARNING! Overwriting existing branch" in result.stderr
+
+
 def test_quiet_silences_informational_output(repo):
     result = run_cli("--no-confirm", "--quiet", "--name", "Ken Thompson", "HEAD")
     assert result.returncode == 0, result.stderr

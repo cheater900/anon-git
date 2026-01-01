@@ -2,7 +2,8 @@
 
 import re
 
-from helpers import PAGER_CAT, append_line, head, run_cli
+import pytest
+from helpers import PAGER_CAT, append_line, completion_file, head, run_cli
 
 from anon_git.constants import DEFAULT_EMAIL, FLAGS_DROPPED
 
@@ -72,3 +73,12 @@ def test_print_completion_rejects_unknown_shell(outside_repo):
     result = run_cli("--print-completion", "tcsh")
     assert result.returncode == 1
     assert 'unsupported shell "tcsh"' in result.stderr
+
+
+@pytest.mark.parametrize(
+    "args, env, shell", [(["fish"], {}, "fish"), ([], {"SHELL": "/usr/bin/zsh"}, "zsh")]
+)
+def test_print_completion_prints_shell_script(outside_repo, args, env, shell):
+    result = run_cli("--print-completion", *args, env=env)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == completion_file(shell).read_text()

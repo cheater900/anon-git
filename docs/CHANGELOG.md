@@ -4,6 +4,7 @@ Derived from git history, newest first.
 
 ## 2026-11-04
 
+- test(py): cover --print-completion output, quiet no-backup warning, git failure report
 - fix: complete zsh value flags as separate word, not --flag=
 - test(sh): isolate tests from user's git config, ANON_GIT_*, PAGER
 
