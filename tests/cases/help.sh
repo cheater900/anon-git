@@ -93,7 +93,7 @@ test_show_help_inside_dirty_repo() {
 
     git checkout -- "$tracked_file"
 
-    record_result "$errors" 'show help inside dirty repo (no args)'
+    record_result "$errors" 'no args in dirty repo shows help'
 }
 
 test_match_default_shows_help() {
@@ -119,7 +119,7 @@ test_match_default_shows_help() {
         errors=$((errors + 1))
     fi
 
-    record_result "$errors" 'no commit target will show help by default'
+    record_result "$errors" 'no target shows help'
 }
 
 test_match_dry_run_without_target_shows_help() {
@@ -144,5 +144,5 @@ test_match_dry_run_without_target_shows_help() {
         errors=$((errors + 1))
     fi
 
-    record_result "$errors" 'flag --dry-run without a target still shows help'
+    record_result "$errors" 'flag --dry-run without target shows help'
 }

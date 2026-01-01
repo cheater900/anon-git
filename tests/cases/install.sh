@@ -91,7 +91,7 @@ test_flag_install_both_dirs() {
 
     rm -rf "$fake_home"
 
-    record_result "$errors" 'flag --install copies to both ~/.local/bin and ~/.bin when both exist'
+    record_result "$errors" 'flag --install copies to ~/.local/bin and ~/.bin when both exist'
 }
 
 test_flag_install_path_already_set() {
@@ -114,7 +114,7 @@ test_flag_install_path_already_set() {
 
     rm -rf "$fake_home"
 
-    record_result "$errors" "flag --install skips the \$PATH warning when already on \$PATH"
+    record_result "$errors" "flag --install skips \$PATH warning when already on \$PATH"
 }
 
 test_flag_install_no_target_dir() {
@@ -141,7 +141,7 @@ test_flag_install_no_target_dir() {
 
     rm -rf "$fake_home"
 
-    record_result "$errors" 'flag --install fails cleanly when neither target directory exists'
+    record_result "$errors" 'flag --install fails cleanly without target dir'
 }
 
 test_flag_install_idempotent() {
@@ -173,7 +173,7 @@ test_flag_install_idempotent() {
 
     rm -rf "$fake_home"
 
-    record_result "$errors" 'flag --install is idempotent when re-run from the installed copy'
+    record_result "$errors" 'flag --install idempotent when re-run from installed copy'
 }
 
 test_flag_uninstall_removes_both_dirs() {
@@ -209,7 +209,7 @@ test_flag_uninstall_removes_both_dirs() {
 
     rm -rf "$fake_home"
 
-    record_result "$errors" 'flag --uninstall removes the script from both ~/.local/bin and ~/.bin'
+    record_result "$errors" 'flag --uninstall removes script from ~/.local/bin and ~/.bin'
 }
 
 test_flag_uninstall_skips_missing_dir() {
@@ -236,7 +236,7 @@ test_flag_uninstall_skips_missing_dir() {
 
     rm -rf "$fake_home"
 
-    record_result "$errors" 'flag --uninstall skips a candidate directory with no installed copy'
+    record_result "$errors" 'flag --uninstall skips dir without installed copy'
 }
 
 test_flag_uninstall_nothing_installed() {
@@ -259,7 +259,7 @@ test_flag_uninstall_nothing_installed() {
 
     rm -rf "$fake_home"
 
-    record_result "$errors" 'flag --uninstall with nothing installed succeeds and says so'
+    record_result "$errors" 'flag --uninstall with nothing installed succeeds, reports it'
 }
 
 new_hook_test_repo() {
@@ -319,7 +319,7 @@ test_flag_install_hook_creates_hook() {
 
     rm -rf "$repo_dir"
 
-    record_result "$errors" 'flag --install-hook creates a post-commit hook'
+    record_result "$errors" 'flag --install-hook creates post-commit hook'
 }
 
 test_flag_install_hook_requires_git_repo() {
@@ -346,7 +346,7 @@ test_flag_install_hook_requires_git_repo() {
 
     rm -rf "$no_repo_dir"
 
-    record_result "$errors" 'flag --install-hook requires a git repository'
+    record_result "$errors" 'flag --install-hook requires git repo'
 }
 
 test_flag_install_hook_preserves_foreign_hook() {
@@ -376,7 +376,7 @@ test_flag_install_hook_preserves_foreign_hook() {
 
     rm -rf "$repo_dir"
 
-    record_result "$errors" 'flag --install-hook does not overwrite a pre-existing foreign hook'
+    record_result "$errors" 'flag --install-hook keeps foreign hook'
 }
 
 test_flag_install_hook_warns_on_hookspath() {
@@ -411,7 +411,7 @@ test_flag_install_hook_warns_on_hookspath() {
 
     rm -rf "$repo_dir"
 
-    record_result "$errors" 'flag --install-hook warns when core.hooksPath is set'
+    record_result "$errors" 'flag --install-hook warns when core.hooksPath set'
 }
 
 test_flag_install_hook_no_warning_without_hookspath() {
@@ -434,7 +434,7 @@ test_flag_install_hook_no_warning_without_hookspath() {
 
     rm -rf "$repo_dir"
 
-    record_result "$errors" 'flag --install-hook does not warn when core.hooksPath is unset'
+    record_result "$errors" 'flag --install-hook silent when core.hooksPath unset'
 }
 
 test_flag_install_hook_idempotent() {
@@ -463,7 +463,7 @@ test_flag_install_hook_idempotent() {
 
     rm -rf "$repo_dir"
 
-    record_result "$errors" 'flag --install-hook is idempotent when re-run over its own hook'
+    record_result "$errors" 'flag --install-hook idempotent over own hook'
 }
 
 test_flag_install_hook_anonymizes_next_commit() {
@@ -512,7 +512,7 @@ test_flag_install_hook_anonymizes_next_commit() {
 
     rm -rf "$repo_dir"
 
-    record_result "$errors" 'flag --install-hook anonymizes only the just-made commit'
+    record_result "$errors" 'flag --install-hook anonymizes only new commit'
 }
 
 test_flag_install_hook_quiet() {
@@ -531,7 +531,7 @@ test_flag_install_hook_quiet() {
 
     rm -rf "$repo_dir"
 
-    record_result "$errors" 'flag --install-hook generates a hook that passes --quiet'
+    record_result "$errors" 'flag --install-hook generates hook passing --quiet'
 }
 
 test_flag_uninstall_hook_removes_hook() {
@@ -560,7 +560,7 @@ test_flag_uninstall_hook_removes_hook() {
 
     rm -rf "$repo_dir"
 
-    record_result "$errors" 'flag --uninstall-hook removes a hook it installed'
+    record_result "$errors" 'flag --uninstall-hook removes own hook'
 }
 
 test_flag_uninstall_hook_requires_git_repo() {
@@ -584,7 +584,7 @@ test_flag_uninstall_hook_requires_git_repo() {
 
     rm -rf "$no_repo_dir"
 
-    record_result "$errors" 'flag --uninstall-hook requires a git repository'
+    record_result "$errors" 'flag --uninstall-hook requires git repo'
 }
 
 test_flag_uninstall_hook_nothing_installed() {
@@ -607,7 +607,7 @@ test_flag_uninstall_hook_nothing_installed() {
 
     rm -rf "$repo_dir"
 
-    record_result "$errors" 'flag --uninstall-hook with no hook installed succeeds and says so'
+    record_result "$errors" 'flag --uninstall-hook without hook succeeds, reports it'
 }
 
 test_flag_uninstall_hook_preserves_foreign_hook() {
@@ -637,5 +637,5 @@ test_flag_uninstall_hook_preserves_foreign_hook() {
 
     rm -rf "$repo_dir"
 
-    record_result "$errors" 'flag --uninstall-hook does not remove a pre-existing foreign hook'
+    record_result "$errors" 'flag --uninstall-hook keeps foreign hook'
 }

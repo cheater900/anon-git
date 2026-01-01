@@ -94,7 +94,7 @@ test_catch_invalid_commit() {
         errors=$((errors + 1))
     fi
 
-    record_result "$errors" 'invalid commit ref'
+    record_result "$errors" 'invalid commit ref rejected'
 }
 
 test_catch_uncommitted_changes() {
@@ -116,7 +116,7 @@ test_catch_uncommitted_changes() {
         errors=$((errors + 1))
     fi
 
-    record_result "$errors" 'uncommitted changes guard'
+    record_result "$errors" 'uncommitted changes rejected'
 }
 
 test_flag_missing_value() {
@@ -165,7 +165,7 @@ test_flag_unknown() {
         errors=$((errors + 1))
     fi
 
-    record_result "$errors" 'unknown flag'
+    record_result "$errors" 'unknown flag rejected'
 }
 
 test_catch_incompatible_quiet_verbose() {
@@ -209,5 +209,5 @@ test_match_malformed_date() {
         errors=$((errors + 1))
     fi
 
-    record_result "$errors" 'malformed --date value is rejected safely'
+    record_result "$errors" 'malformed --date rejected safely'
 }

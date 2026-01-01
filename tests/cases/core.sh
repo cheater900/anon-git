@@ -28,7 +28,7 @@ test_multiple_commits() {
         errors=$((errors + 1))
     fi
 
-    record_result "$errors" 'multiple commits in one run'
+    record_result "$errors" 'multiple commits per run'
 }
 
 test_entire_history() {

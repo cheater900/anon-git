@@ -55,7 +55,7 @@ test_combo_env_var_dry_run_entire_history() {
         errors=$((errors + 1))
     fi
 
-    record_result "$errors" 'envvars ANON_GIT_DRYRUN=1 ANON_GIT_ENTIREHISTORY=1 preview entire history without rewriting'
+    record_result "$errors" 'envvars ANON_GIT_DRYRUN=1 ANON_GIT_ENTIREHISTORY=1 preview history, no rewrite'
 }
 
 test_combo_env_var_flag_priority() {
@@ -147,7 +147,7 @@ test_gitconfig_defaults() {
         errors=$((errors + 1))
     fi
 
-    record_result "$errors" 'git config anon-git.* provides repo-local defaults'
+    record_result "$errors" 'git config anon-git.* sets repo-local defaults'
 }
 
 test_gitconfig_beats_envvar() {
@@ -227,7 +227,7 @@ test_gitconfig_keepuser_bool() {
         errors=$((errors + 1))
     fi
 
-    record_result "$errors" 'anon-git.keepuser config behaves like --keep-user'
+    record_result "$errors" 'anon-git.keepuser config acts as --keep-user'
 }
 
 test_gitconfig_invalid_bool() {
@@ -255,7 +255,7 @@ test_gitconfig_invalid_bool() {
         errors=$((errors + 1))
     fi
 
-    record_result "$errors" 'anon-git.keepuser with a non-boolean value fails cleanly'
+    record_result "$errors" 'non-boolean anon-git.keepuser fails cleanly'
 }
 
 test_gitconfig_catch_incompatible() {
@@ -321,7 +321,7 @@ test_gitconfig_quiet() {
         errors=$((errors + 1))
     fi
 
-    record_result "$errors" 'anon-git.quiet config suppresses output; --verbose overrides it'
+    record_result "$errors" 'anon-git.quiet config suppresses output; --verbose overrides'
 }
 
 test_flag_env_var_entirehistory() {
@@ -343,7 +343,7 @@ test_flag_env_var_entirehistory() {
         errors=$((errors + 1))
     fi
 
-    record_result "$errors" 'ANON_GIT_ENTIREHISTORY=1 rewrites entire history without the flag'
+    record_result "$errors" 'ANON_GIT_ENTIREHISTORY=1 rewrites entire history without flag'
 }
 
 test_flag_env_var_currentbranch() {
@@ -372,7 +372,7 @@ test_flag_env_var_currentbranch() {
         errors=$((errors + 1))
     fi
 
-    record_result "$errors" 'ANON_GIT_CURRENTBRANCH=1 rewrites in place without the flag'
+    record_result "$errors" 'ANON_GIT_CURRENTBRANCH=1 rewrites in place without flag'
 }
 
 test_flag_env_var_dryrun() {
@@ -406,7 +406,7 @@ test_flag_env_var_dryrun() {
         errors=$((errors + 1))
     fi
 
-    record_result "$errors" 'ANON_GIT_DRYRUN=1 previews without rewriting, without the flag'
+    record_result "$errors" 'ANON_GIT_DRYRUN=1 previews without flag, no rewrite'
 }
 
 test_flag_verbose_overrides_env_quiet() {

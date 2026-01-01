@@ -32,7 +32,7 @@ test_match_detached_head_current_branch() {
 
     git checkout "$original_branch" >/dev/null 2>&1
 
-    record_result "$errors" 'running in detached HEAD with flag --current-branch is rejected'
+    record_result "$errors" 'detached HEAD with flag --current-branch rejected'
 }
 
 test_match_merge_commit() {
@@ -130,7 +130,7 @@ test_match_merge_commit_single_target() {
 
     git branch -D "$feature_branch" >/dev/null 2>&1
 
-    record_result "$errors" 'anonymizing a merge commit by hash (single-commit mode) preserves its topology'
+    record_result "$errors" 'merge commit by hash (single-commit mode) keeps topology'
 }
 
 test_match_merge_commit_ancestor_only() {
@@ -195,7 +195,7 @@ test_match_merge_commit_ancestor_only() {
 
     git branch -D "$feature_branch" >/dev/null 2>&1
 
-    record_result "$errors" 'anonymizing a merge-commit ancestor by hash cascades the merge parent pointer'
+    record_result "$errors" 'merge-commit ancestor by hash cascades merge parent pointer'
 }
 
 test_match_outside_git_repo() {
@@ -219,7 +219,7 @@ test_match_outside_git_repo() {
 
     rm -rf "$no_repo_dir"
 
-    record_result "$errors" 'running outside a git repository fails cleanly'
+    record_result "$errors" 'outside git repo fails cleanly'
 }
 
 test_match_trap_cleanup_on_kill() {
@@ -275,7 +275,7 @@ test_match_trap_cleanup_on_kill() {
             printf 'Error: %s scratch file(s) left behind after killing the script mid-run\n' "$leftover"
             errors=$((errors + 1))
         fi
-        record_result "$errors" 'EXIT trap cleans up scratch files when killed mid-run'
+        record_result "$errors" 'EXIT trap cleans scratch files when killed mid-run'
     fi
 
     rm -rf "$repo_dir" "$scratch_tmpdir"
@@ -305,7 +305,7 @@ test_match_rerun_cache() {
         errors=$((errors + 1))
     fi
 
-    record_result "$errors" 'consecutive runs do not hit the filter-repo cache bug'
+    record_result "$errors" 'consecutive runs avoid filter-repo cache bug'
 }
 
 test_match_shell_injection_email() {
@@ -332,7 +332,7 @@ test_match_shell_injection_email() {
         errors=$((errors + 1))
     fi
 
-    record_result "$errors" 'shell metacharacters in --email are not executed'
+    record_result "$errors" 'shell metacharacters in --email not executed'
 }
 
 test_match_shell_injection_name() {
@@ -359,5 +359,5 @@ test_match_shell_injection_name() {
         errors=$((errors + 1))
     fi
 
-    record_result "$errors" 'shell metacharacters in --name are not executed'
+    record_result "$errors" 'shell metacharacters in --name not executed'
 }

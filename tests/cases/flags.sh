@@ -31,7 +31,7 @@ test_flag_current_branch_backup() {
         errors=$((errors + 1))
     fi
 
-    record_result "$errors" 'creates backup with flag --current-branch'
+    record_result "$errors" 'flag --current-branch creates backup'
 }
 
 test_flag_dry_run() {
@@ -55,7 +55,7 @@ test_flag_dry_run() {
         errors=$((errors + 1))
     fi
 
-    record_result "$errors" 'flag dry-run'
+    record_result "$errors" 'flag --dry-run'
 }
 
 test_flag_keep_partial() {
@@ -131,7 +131,7 @@ test_flag_new_branch() {
 
     [[ -n "$new_branch_name" ]] && git branch -D "$new_branch_name" >/dev/null 2>&1
 
-    record_result "$errors" 'it creates new branch by default'
+    record_result "$errors" 'creates new branch by default'
 }
 
 test_flag_no_backup() {
@@ -340,7 +340,7 @@ test_flag_strip_timezone_not_alone_resets_date() {
         errors=$((errors + 1))
     fi
 
-    record_result "$errors" 'flag --strip-timezone + another flag is not "alone": date resets to default'
+    record_result "$errors" 'flag --strip-timezone + other flag resets date to default'
 }
 
 test_flag_no_confirm() {
@@ -404,7 +404,7 @@ test_noconfirm_executes_first() {
         errors=$((errors + 1))
     fi
 
-    record_result "$errors" 'declining the confirmation prompt creates no branch'
+    record_result "$errors" 'declined confirmation creates no branch'
 }
 
 test_flag_keep_user_keep_date_verbose_message() {
@@ -436,5 +436,5 @@ test_flag_keep_user_keep_date_verbose_message() {
         errors=$((errors + 1))
     fi
 
-    record_result "$errors" 'flags --keep-user --keep-date print "Not overwriting ..." instead of the stale default'
+    record_result "$errors" 'flags --keep-user --keep-date print "Not overwriting ...", not stale default'
 }

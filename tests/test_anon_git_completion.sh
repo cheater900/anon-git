@@ -74,7 +74,7 @@ test_completion_flags() {
         fi
     done <<<"$flags"
 
-    record_result "$errors" 'zsh/fish completions list every flag'
+    record_result "$errors" 'zsh/fish completions list all flags'
 }
 
 # Drives a real interactive shell via `expect` and checks TAB actually

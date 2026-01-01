@@ -65,7 +65,7 @@ test_python_random_dates_syntax() {
         errors=$((errors + 1))
     fi
 
-    record_result "$errors" 'python compute-random-dates script syntax'
+    record_result "$errors" 'python compute-random-dates syntax valid'
 }
 
 # UNIT TEST: a synthetic bucket of commits, all targets (--entire-history,
@@ -101,7 +101,7 @@ test_random_dates_order_within_bucket() {
         prev="$cur"
     done
 
-    record_result "$errors" "temp file for $flag keeps commits in original chronological order"
+    record_result "$errors" "temp file for $flag keeps chronological commit order"
 }
 
 # UNIT TEST: two separate single-commit targets (commit_3, commit_6), each
@@ -148,7 +148,7 @@ test_random_dates_neighbor_bounds_sparse_targets() {
         errors=$((errors + 1))
     fi
 
-    record_result "$errors" 'random dates: sparse target runs are bounded by their real neighbors'
+    record_result "$errors" 'random dates: sparse target runs bounded by real neighbors'
 }
 
 # UNIT TEST: a contiguous target run (commit_3-5) between two real
@@ -176,7 +176,7 @@ test_random_dates_neighbor_bounds_contiguous_run() {
         errors=$((errors + 1))
     fi
 
-    record_result "$errors" 'random dates: a contiguous target run is bounded by its real neighbors and stays internally ordered'
+    record_result "$errors" 'random dates: contiguous target run bounded by real neighbors, stays ordered'
 }
 
 # UNIT TEST: a run starting at the first commit has no "before" neighbor --
@@ -201,7 +201,7 @@ test_random_dates_no_lower_neighbor_at_history_start() {
         errors=$((errors + 1))
     fi
 
-    record_result "$errors" 'random dates: a run starting at the very first commit needs no fabricated lower neighbor'
+    record_result "$errors" 'random dates: run at first commit needs no fake lower neighbor'
 }
 
 # UNIT TEST: mirror of the above -- a run ending at the last commit has no
@@ -226,7 +226,7 @@ test_random_dates_no_upper_neighbor_at_history_end() {
         errors=$((errors + 1))
     fi
 
-    record_result "$errors" 'random dates: a run ending at the very last commit needs no fabricated upper neighbor'
+    record_result "$errors" 'random dates: run at last commit needs no fake upper neighbor'
 }
 
 # INTEGRATION TEST: same shape as test_flag_keep_partial (flags.sh), for the
@@ -295,7 +295,7 @@ test_random_day_multiple_commits() {
         errors=$((errors + 1))
     fi
 
-    record_result "$errors" 'flag --random-day with multiple explicit target commits'
+    record_result "$errors" 'flag --random-day with multiple target commits'
 }
 
 # INTEGRATION TEST: commits a few days apart within one month (--random-day's
@@ -345,7 +345,7 @@ test_random_day_preserves_neighbor_order_real_repo() {
         git -C "$repo_dir" log --reverse --format='%ad' --date=iso-strict >&2
     fi
 
-    record_result "$errors" 'flag --random-day keeps the whole log ordered relative to untouched neighboring commits'
+    record_result "$errors" 'flag --random-day keeps log ordered vs untouched neighbors'
 }
 
 # INTEGRATION TEST: a dedicated repo (not the shared same-day fixture) with
@@ -400,5 +400,5 @@ test_random_month_preserves_order_and_year() {
         errors=$((errors + 1))
     fi
 
-    record_result "$errors" 'flag --random-month --entire-history preserves year and relative commit order across years'
+    record_result "$errors" 'flag --random-month --entire-history keeps year and commit order across years'
 }
