@@ -54,11 +54,14 @@ A new flag touches several places; grep for an existing similar flag (e.g. `--dr
    `test_catch_incompatible` and its call sites in `main()`).
 6. If the flag has an `ANON_GIT_*` environment variable equivalent, it needs a
    spot in `merge_args_with_defaults()`'s three-tier
-   `${FLAG_ARG:-${ANON_GIT_X:-${DEFAULT_X}}}` fallback, a mention in the
-   "Priority" list in both `show_help()` and `README.md`, and — if it can
-   conflict with another option — a `*_set` computation in
-   `reject_incompatible_options()` (see the comment at the top of that function
-   for why it must run *before* `merge_args_with_defaults`, not after).
+   `${FLAG_ARG:-${ANON_GIT_X:-${DEFAULT_X}}}` fallback (four-tier —
+   `${FLAG_ARG:-${GITCONFIG_X:-${ANON_GIT_X:-${DEFAULT_X}}}}` — if it also has
+   a repo-local `git config anon-git.*` equivalent; config outranks the
+   envvar, see `read_git_config()`), a mention in the "Priority" list in both
+   `show_help()` and `README.md`, and — if it can conflict with another
+   option — a `*_set` computation in `reject_incompatible_options()` (see the
+   comment at the top of that function for why it must run *before*
+   `merge_args_with_defaults`, not after).
 
 ## Testing
 

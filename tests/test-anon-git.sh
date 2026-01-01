@@ -520,7 +520,7 @@ test_flag_dry_run() {
 }
 
 test_flag_env_vars() {
-    # ANON_GIT_NAME/EMAIL/DATE must work as priority-2 config (README:
+    # ANON_GIT_NAME/EMAIL/DATE must work as priority-3 config (README:
     # "Environment variables"), same as their --name/--email/--date flags.
     local random_index commit_hash new_commit_hash exit_status commit_info errors=0
     local env_name='Grace Murray' env_email='grace.murray@example.com' env_date='2019-05-05 00:00:00 +0000'
@@ -552,8 +552,8 @@ test_flag_env_vars() {
 }
 
 test_gitconfig_defaults() {
-    # git config anon-git.name/email/date must work as priority-3 config
-    # (below flags and ANON_GIT_* envvars, above hardcoded defaults), same as
+    # git config anon-git.name/email/date must work as priority-2 config
+    # (below flags, above ANON_GIT_* envvars and hardcoded defaults), same as
     # their --name/--email/--date flags.
     local cfg_name='Barbara McClintock' cfg_email='barbara.mcclintock@example.com'
     local cfg_date='2018-08-08 00:00:00 +0000'
@@ -587,10 +587,11 @@ test_gitconfig_defaults() {
     record_result "$errors" 'git config anon-git.* provides repo-local defaults'
 }
 
-test_gitconfig_envvar_priority() {
-    # ANON_GIT_NAME (priority 2) must win over anon-git.name config
-    # (priority 3), per the documented priority order.
-    local cfg_name='Config Loses' env_name='Envvar Wins'
+test_gitconfig_beats_envvar() {
+    # anon-git.name config (priority 2) must win over ANON_GIT_NAME
+    # (priority 3), per the documented priority order: repo-local config
+    # outranks an inherited/exported envvar.
+    local cfg_name='Config Wins' env_name='Envvar Loses'
     local exit_status commit_info errors=0
 
     git config --local anon-git.name "$cfg_name"
@@ -605,20 +606,20 @@ test_gitconfig_envvar_priority() {
         printf 'Error: ANON_GIT_NAME + anon-git.name run exited with status %s\n' "$exit_status"
         errors=$((errors + 1))
     fi
-    if ! grep -q "^Author:\s\+${env_name} <" <<<"$commit_info"; then
-        printf 'Error: ANON_GIT_NAME did not take priority over anon-git.name config\n'
+    if ! grep -q "^Author:\s\+${cfg_name} <" <<<"$commit_info"; then
+        printf 'Error: anon-git.name config did not take priority over ANON_GIT_NAME\n'
         errors=$((errors + 1))
     fi
-    grep -qF "$cfg_name" <<<"$commit_info" && {
-        printf 'Error: anon-git.name config leaked through despite ANON_GIT_NAME\n'
+    grep -qF "$env_name" <<<"$commit_info" && {
+        printf 'Error: ANON_GIT_NAME leaked through despite anon-git.name config\n'
         errors=$((errors + 1))
     }
 
-    record_result "$errors" 'ANON_GIT_NAME envvar overrides anon-git.name config'
+    record_result "$errors" 'anon-git.name config overrides ANON_GIT_NAME envvar'
 }
 
 test_gitconfig_flag_priority() {
-    # --name (priority 1) must win over anon-git.name config (priority 3).
+    # --name (priority 1) must win over anon-git.name config (priority 2).
     local cfg_name='Config Loses' flag_name='Flag Wins'
     local exit_status commit_info errors=0
 
@@ -2023,7 +2024,7 @@ main() {
     test_flag_dry_run
     test_flag_env_vars
     test_gitconfig_defaults
-    test_gitconfig_envvar_priority
+    test_gitconfig_beats_envvar
     test_gitconfig_flag_priority
     test_gitconfig_keepuser_bool
     test_gitconfig_invalid_bool

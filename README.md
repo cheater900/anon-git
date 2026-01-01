@@ -170,11 +170,11 @@ git log --format=%H --grep='^fix:' | xargs ./anon-git.sh
 **Priority order** (highest to lowest):
 
 1. Command-line flags
-2. Environment variables (`ANON_GIT_DATE`, `ANON_GIT_NAME`, `ANON_GIT_EMAIL`, `ANON_GIT_KEEPUSER`, `ANON_GIT_KEEPDATE`, `ANON_GIT_KEEPYEAR`, `ANON_GIT_KEEPMONTH`, `ANON_GIT_KEEPDAY`, `ANON_GIT_ENTIREHISTORY`, `ANON_GIT_CURRENTBRANCH`, `ANON_GIT_DRYRUN`, `ANON_GIT_QUIET`)
-3. Repo-local git config (`git config anon-git.name`, `anon-git.email`, `anon-git.date`, `anon-git.keepuser`, `anon-git.keepdate`, `anon-git.keepyear`, `anon-git.keepmonth`, `anon-git.keepday`, `anon-git.quiet` — see [Repo-local config](#repo-local-config) below; `--entire-history`/`--current-branch`/`--dry-run` have no config equivalent, flag/envvar only)
+2. Repo-local git config (`git config anon-git.name`, `anon-git.email`, `anon-git.date`, `anon-git.keepuser`, `anon-git.keepdate`, `anon-git.keepyear`, `anon-git.keepmonth`, `anon-git.keepday`, `anon-git.quiet` — see [Repo-local config](#repo-local-config) below; `--entire-history`/`--current-branch`/`--dry-run` have no config equivalent, flag/envvar only)
+3. Environment variables (`ANON_GIT_DATE`, `ANON_GIT_NAME`, `ANON_GIT_EMAIL`, `ANON_GIT_KEEPUSER`, `ANON_GIT_KEEPDATE`, `ANON_GIT_KEEPYEAR`, `ANON_GIT_KEEPMONTH`, `ANON_GIT_KEEPDAY`, `ANON_GIT_ENTIREHISTORY`, `ANON_GIT_CURRENTBRANCH`, `ANON_GIT_DRYRUN`, `ANON_GIT_QUIET`)
 4. Hardcoded defaults
 
-`--verbose` has no `ANON_GIT_VERBOSE` environment variable or config equivalent; it's a CLI-only override that forces informational output back on for one run, regardless of what set `ANON_GIT_QUIET` (flag, envvar, or repo-local config).
+`--verbose` has no `ANON_GIT_VERBOSE` environment variable or config equivalent; it's a CLI-only override that forces informational output back on for one run, regardless of what set `ANON_GIT_QUIET` (flag, repo-local config, envvar, or default).
 
 > [!WARNING]
 > `--name`, `--email` and `--date` (and their `ANON_GIT_*` environment variable
@@ -183,7 +183,7 @@ git log --format=%H --grep='^fix:' | xargs ./anon-git.sh
 
 ### Repo-local config
 
-A repository can pin its own defaults instead of every invocation needing flags or exported envvars:
+A repository can pin its own defaults instead of every invocation needing flags or exported envvars. Repo config outranks `ANON_GIT_*` envvars (it wins over an inherited/exported envvar you didn't set for this specific invocation), but a CLI flag still overrides it:
 
 ```bash
 git config anon-git.name "Sherlock"

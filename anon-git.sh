@@ -84,13 +84,13 @@ Arguments:
 
 Priority (highest to lowest):
   1. Command-line flags (--date, --name, --email, --keep-user, --keep-date, ...)
-  2. Environment variables (ANON_GIT_DATE, ANON_GIT_NAME, ANON_GIT_EMAIL, ANON_GIT_KEEPUSER,
-     ANON_GIT_KEEPDATE, ANON_GIT_KEEPYEAR, ANON_GIT_KEEPMONTH, ANON_GIT_KEEPDAY,
-     ANON_GIT_ENTIREHISTORY, ANON_GIT_CURRENTBRANCH, ANON_GIT_DRYRUN, ANON_GIT_QUIET)
-  3. Repo-local git config (git config anon-git.name, anon-git.email, anon-git.date,
+  2. Repo-local git config (git config anon-git.name, anon-git.email, anon-git.date,
      anon-git.keepuser, anon-git.keepdate, anon-git.keepyear, anon-git.keepmonth,
      anon-git.keepday, anon-git.quiet — --entire-history/--current-branch/--dry-run
      have no config equivalent, flag/envvar only)
+  3. Environment variables (ANON_GIT_DATE, ANON_GIT_NAME, ANON_GIT_EMAIL, ANON_GIT_KEEPUSER,
+     ANON_GIT_KEEPDATE, ANON_GIT_KEEPYEAR, ANON_GIT_KEEPMONTH, ANON_GIT_KEEPDAY,
+     ANON_GIT_ENTIREHISTORY, ANON_GIT_CURRENTBRANCH, ANON_GIT_DRYRUN, ANON_GIT_QUIET)
   4. Hardcoded defaults (${DEFAULT_NAME} <${DEFAULT_EMAIL}>)
 
 Note: --verbose has no ANON_GIT_VERBOSE environment variable or config
@@ -435,9 +435,10 @@ read_git_config_bool() {
 }
 
 # Reads repo-local defaults from `git config anon-git.*` into the GITCONFIG_*
-# globals that merge_args_with_defaults consults between ANON_GIT_* envvars
-# and the hardcoded DEFAULT_* fallbacks (see README's "Repo-local config"
-# section). Deliberately scoped to name/email/date/keep-*/quiet — the
+# globals that merge_args_with_defaults consults above ANON_GIT_* envvars
+# (repo config wins over an inherited/exported envvar) and below CLI flags
+# (see README's "Repo-local config" section). Deliberately scoped to
+# name/email/date/keep-*/quiet — the
 # settings that make sense to pin per-repo; --entire-history,
 # --current-branch and --dry-run stay flag/envvar-only, since a silently
 # configured default for any of those would be far more destructive than a
@@ -582,8 +583,8 @@ check_incompatible() {
 }
 
 # Rejects mutually-exclusive option combinations regardless of whether each
-# side was provided via CLI flag, its ANON_GIT_* environment variable
-# equivalent, or repo-local `git config anon-git.*` — so e.g.
+# side was provided via CLI flag, repo-local `git config anon-git.*`, or its
+# ANON_GIT_* environment variable equivalent — so e.g.
 # `ANON_GIT_KEEP_USER=1 ANON_GIT_NAME=X` and a repo with both `anon-git.keepuser`
 # and `anon-git.name` configured are rejected the same way `--keep-user --name X`
 # is, instead of silently letting one win. Must run before RESOLVE ARGS
@@ -598,9 +599,9 @@ reject_incompatible_options() {
 
     flag_errors=0
 
-    date_set="${DATE_ARG:-${ANON_GIT_DATE:-${GITCONFIG_DATE:-}}}"
-    name_set="${NAME_ARG:-${ANON_GIT_NAME:-${GITCONFIG_NAME:-}}}"
-    email_set="${EMAIL_ARG:-${ANON_GIT_EMAIL:-${GITCONFIG_EMAIL:-}}}"
+    date_set="${DATE_ARG:-${GITCONFIG_DATE:-${ANON_GIT_DATE:-}}}"
+    name_set="${NAME_ARG:-${GITCONFIG_NAME:-${ANON_GIT_NAME:-}}}"
+    email_set="${EMAIL_ARG:-${GITCONFIG_EMAIL:-${ANON_GIT_EMAIL:-}}}"
     keepuser_set="$KEEPUSER_ARG"
     keepdate_set="$KEEPDATE_ARG"
     keepyear_set="$KEEPYEAR_ARG"
@@ -642,26 +643,27 @@ reject_incompatible_options() {
     return 0
 }
 
-# Internal: merges flags > ANON_GIT_* envvars > DEFAULT_* fallbacks into the
-# final ANON_GIT_* globals used by everything from here on (verbose output,
-# the backup/rewrite logic, and the Python commit-callback's environment).
+# Internal: merges flags > repo-local git config > ANON_GIT_* envvars >
+# DEFAULT_* fallbacks into the final ANON_GIT_* globals used by everything
+# from here on (verbose output, the backup/rewrite logic, and the Python
+# commit-callback's environment).
 merge_args_with_defaults() {
     DEFAULT_COMMIT=$(git rev-parse HEAD)
-    ANON_GIT_DATE="${DATE_ARG:-${ANON_GIT_DATE:-${GITCONFIG_DATE:-${DEFAULT_DATE}}}}"
-    ANON_GIT_NAME="${NAME_ARG:-${ANON_GIT_NAME:-${GITCONFIG_NAME:-${DEFAULT_NAME}}}}"
-    ANON_GIT_EMAIL="${EMAIL_ARG:-${ANON_GIT_EMAIL:-${GITCONFIG_EMAIL:-${DEFAULT_EMAIL}}}}"
-    ANON_GIT_KEEPUSER="${KEEPUSER_ARG:-${ANON_GIT_KEEPUSER:-${GITCONFIG_KEEPUSER:-${DEFAULT_KEEPUSER}}}}"
-    ANON_GIT_KEEPDATE="${KEEPDATE_ARG:-${ANON_GIT_KEEPDATE:-${GITCONFIG_KEEPDATE:-${DEFAULT_KEEPDATE}}}}"
-    ANON_GIT_KEEPYEAR="${KEEPYEAR_ARG:-${ANON_GIT_KEEPYEAR:-${GITCONFIG_KEEPYEAR:-${DEFAULT_KEEPYEAR}}}}"
-    ANON_GIT_KEEPMONTH="${KEEPMONTH_ARG:-${ANON_GIT_KEEPMONTH:-${GITCONFIG_KEEPMONTH:-${DEFAULT_KEEPMONTH}}}}"
-    ANON_GIT_KEEPDAY="${KEEPDAY_ARG:-${ANON_GIT_KEEPDAY:-${GITCONFIG_KEEPDAY:-${DEFAULT_KEEPDAY}}}}"
+    ANON_GIT_DATE="${DATE_ARG:-${GITCONFIG_DATE:-${ANON_GIT_DATE:-${DEFAULT_DATE}}}}"
+    ANON_GIT_NAME="${NAME_ARG:-${GITCONFIG_NAME:-${ANON_GIT_NAME:-${DEFAULT_NAME}}}}"
+    ANON_GIT_EMAIL="${EMAIL_ARG:-${GITCONFIG_EMAIL:-${ANON_GIT_EMAIL:-${DEFAULT_EMAIL}}}}"
+    ANON_GIT_KEEPUSER="${KEEPUSER_ARG:-${GITCONFIG_KEEPUSER:-${ANON_GIT_KEEPUSER:-${DEFAULT_KEEPUSER}}}}"
+    ANON_GIT_KEEPDATE="${KEEPDATE_ARG:-${GITCONFIG_KEEPDATE:-${ANON_GIT_KEEPDATE:-${DEFAULT_KEEPDATE}}}}"
+    ANON_GIT_KEEPYEAR="${KEEPYEAR_ARG:-${GITCONFIG_KEEPYEAR:-${ANON_GIT_KEEPYEAR:-${DEFAULT_KEEPYEAR}}}}"
+    ANON_GIT_KEEPMONTH="${KEEPMONTH_ARG:-${GITCONFIG_KEEPMONTH:-${ANON_GIT_KEEPMONTH:-${DEFAULT_KEEPMONTH}}}}"
+    ANON_GIT_KEEPDAY="${KEEPDAY_ARG:-${GITCONFIG_KEEPDAY:-${ANON_GIT_KEEPDAY:-${DEFAULT_KEEPDAY}}}}"
     ANON_GIT_ENTIREHISTORY="${ENTIREHISTORY_ARG:-${ANON_GIT_ENTIREHISTORY:-${DEFAULT_ENTIREHISTORY}}}"
     ANON_GIT_CURRENTBRANCH="${CURRENTBRANCH_ARG:-${ANON_GIT_CURRENTBRANCH:-${DEFAULT_CURRENTBRANCH}}}"
     ANON_GIT_COMMIT="${COMMIT_ARG:-${DEFAULT_COMMIT}}"
     ANON_GIT_DRYRUN="${DRYRUN_ARG:-${ANON_GIT_DRYRUN:-${DEFAULT_DRYRUN}}}"
-    ANON_GIT_QUIET="${QUIET_ARG:-${ANON_GIT_QUIET:-${GITCONFIG_QUIET:-${DEFAULT_QUIET}}}}"
+    ANON_GIT_QUIET="${QUIET_ARG:-${GITCONFIG_QUIET:-${ANON_GIT_QUIET:-${DEFAULT_QUIET}}}}"
     # --verbose always wins, regardless of what set ANON_GIT_QUIET above (flag,
-    # envvar, repo-local config, or default): it exists specifically to force
+    # repo-local config, envvar, or default): it exists specifically to force
     # output back on.
     if [[ "$VERBOSE_ARG" == '1' ]]; then
         ANON_GIT_QUIET='0'
