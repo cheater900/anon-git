@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Sourced by test-anon-git.sh — not meant to be run directly.
+# Sourced by test_anon_git.sh — not meant to be run directly.
 # FLAG TESTS: individual CLI flags governing how a run behaves\n# (branching, backups, dry-run, quiet/verbose, timezone, confirmation).
 
 test_flag_current_branch_backup() {

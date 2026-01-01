@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Shell-completion tests for anon-git.sh (bash/zsh/fish), split out from
-# test-anon-git.sh since they drive real interactive shells via `expect`
+# test_anon_git.sh since they drive real interactive shells via `expect`
 # instead of exercising anon-git.sh itself, and depend on tooling
 # (expect, and optionally bash/zsh/fish) that not every environment has.
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Sourced by test-anon-git.sh — not meant to be run directly.
+# Sourced by test_anon_git.sh — not meant to be run directly.
 # INSTALL / HOOK TESTS: --install and --install-hook.
 
 test_flag_install_local_bin() {

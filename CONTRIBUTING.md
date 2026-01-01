@@ -15,7 +15,7 @@
 ```bash
 just lint             # bash -n + shellcheck
 just format           # shfmt -w, 4-space indent
-just test             # tests/test-anon-git.sh + tests/test-anon-git-completion.sh
+just test             # tests/test_anon_git.sh + tests/test_anon_git_completion.sh
 just test-completion  # just the completion tests
 just all              # lint, format, test, test-completion, in order
 just sync-docs        # regenerate README's ### Options block from `anon-git.sh --help`
@@ -25,13 +25,13 @@ Run `just lint`, `just format`, and `just test` before every commit — `.github
 
 If you change `show_help()`'s `Options:` section (new/renamed/reworded flag), run `just sync-docs` too — it regenerates README's `### Options` code block from `anon-git.sh --help` so the two can't silently drift apart, and stages the result like any other edit.
 
-`tests/test-manually.sh` drops you into a disposable git repo with sample commits for interactive poking — useful when a failing test isn't enough context to see what's going on.
+`tests/test_manually.sh` drops you into a disposable git repo with sample commits for interactive poking — useful when a failing test isn't enough context to see what's going on.
 
 ## Code style
 
 - Match the existing style: 4-space indent (`shfmt -i 4`), `snake_case` function names, `local` for anything not meant to leak out of a function.
 - `anon-git.sh` is organized as small, single-purpose functions (`parse_args`, `merge_args_with_defaults`, `reject_incompatible_options`, `backup_branch`, ...) called in sequence from `main()` at the bottom. Keep new logic in a similarly-scoped function rather than adding to `main()` directly or to an existing function's unrelated concern.
-- One exception: the `python_commit_callback` string assignment must stay an unindented, top-level `python_commit_callback="..."` (opening) / `"` (closing) pair — `tests/test-anon-git.sh` locates it with a `sed` line-anchor regex to check it's valid Python. Don't nest it inside a function.
+- One exception: the `python_commit_callback` string assignment must stay an unindented, top-level `python_commit_callback="..."` (opening) / `"` (closing) pair — `tests/test_anon_git.sh` locates it with a `sed` line-anchor regex to check it's valid Python. Don't nest it inside a function.
 - Comments explain *why*, not *what* — see the existing header comments on each function for the expected tone.
 
 ## Adding or changing a flag
@@ -45,11 +45,11 @@ A new flag touches several places; grep for an existing similar flag (e.g. `--dr
    hand-maintained, since they carry per-flag descriptions that `--_list-flags`
    can't express. `completions/anon-git.bash` needs no change; it calls
    `--_list-flags` dynamically.
-3. `tests/test-anon-git-completion.sh`'s `test_completion_flags` will fail if
+3. `tests/test_anon_git_completion.sh`'s `test_completion_flags` will fail if
    zsh/fish drift from `--_list-flags` — that's the tripwire for step 2.
 4. `README.md`: the `### Options` block, and an example if the flag isn't
    obvious from its description.
-5. `tests/test-anon-git.sh`: at least one test exercising the new flag, plus
+5. `tests/test_anon_git.sh`: at least one test exercising the new flag, plus
    incompatibility tests if it conflicts with existing flags (see
    `test_catch_incompatible` and its call sites in `main()`).
 6. If the flag has an `ANON_GIT_*` environment variable equivalent, it needs a
@@ -68,7 +68,7 @@ A new flag touches several places; grep for an existing similar flag (e.g. `--dr
 Run the main test:
 
 ```bash
-./tests/test-anon-git.sh
+./tests/test_anon_git.sh
 ```
 
 Spins up a disposable git repository in `/tmp`, runs the script against it
@@ -77,7 +77,7 @@ through a range of flags and edge cases (defaults, `--keep-*`, `--dry-run`,
 — flags, `ANON_GIT_*` envvars, and mixes of both -- the uncommitted-changes
 guard, ...), and prints a pass/fail summary. It cleans up the temp repo on exit.
 
-The test `tests/test-manually.sh` creates a disposable repo with sample commits
+The test `tests/test_manually.sh` creates a disposable repo with sample commits
 and drops you into it, for manual/interactive poking at the script.
 
 ## Commit messages

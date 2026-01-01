@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Sourced by test-anon-git.sh — not meant to be run directly.
+# Sourced by test_anon_git.sh — not meant to be run directly.
 # HELP / VERSION TESTS: --help, --version, and the default-to-help paths.
 
 test_show_help() {

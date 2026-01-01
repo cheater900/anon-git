@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Sourced by test-anon-git.sh — not meant to be run directly.
+# Sourced by test_anon_git.sh — not meant to be run directly.
 # Shared setup, globals, and helper functions used across all test-case
 # files under cases/.
 

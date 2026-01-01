@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Sourced by test-anon-git.sh — not meant to be run directly.
+# Sourced by test_anon_git.sh — not meant to be run directly.
 # VALIDATION TESTS: rejecting bad input (incompatible flags, invalid commit refs,\n# a dirty tree, malformed dates) and the python-callback syntax sanity check.
 
 test_python_callback_syntax() {

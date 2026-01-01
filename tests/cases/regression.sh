@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Sourced by test-anon-git.sh — not meant to be run directly.
+# Sourced by test_anon_git.sh — not meant to be run directly.
 # REGRESSION TESTS: pinned-down edge cases (merge commits, detached HEAD,\n# shell injection, EXIT-trap cleanup, filter-repo rerun cache) so a future\n# change cannot silently reintroduce them.
 
 test_match_detached_head_current_branch() {

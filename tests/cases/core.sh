@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Sourced by test-anon-git.sh — not meant to be run directly.
+# Sourced by test_anon_git.sh — not meant to be run directly.
 # CORE / INTEGRATION TESTS: rewriting multiple commits or the entire history in one run.
 
 test_multiple_commits() {

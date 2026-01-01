@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Sourced by test-anon-git.sh — not meant to be run directly.
+# Sourced by test_anon_git.sh — not meant to be run directly.
 # CONFIG PRIORITY TESTS: precedence among CLI flags, git config anon-git.*,\n# and ANON_GIT_* environment variables.
 
 test_combo_dry_run_entire_history() {
