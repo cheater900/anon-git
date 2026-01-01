@@ -1,55 +1,66 @@
 # anon-git (Python)
 
-Python implementation of anon-git: same options, messages and exit codes as
-[`anon-git.sh`](../anon-git.sh/README.md). Rewrites run in-process through the
-`git_filter_repo` library instead of spawning `git filter-repo`.
-
-See [`anon-git.sh/README.md`](../anon-git.sh/README.md) for why and when to
-anonymize, every option, and examples. This file only covers what differs.
+Python implementation of anon-git. It takes the same options as
+`anon-git.sh`; see the [top-level README](../README.md) for every option,
+examples and notes.
 
 ## Install
 
-Needs `git` and Python ≥ 3.10. [`uv`](https://docs.astral.sh/uv/) pulls in
+Needs `git` and Python >= 3.10. [`uv`](https://docs.astral.sh/uv/) pulls in
 `git-filter-repo` itself.
 
-```bash
-uv tool install ./anon-git.py                                                        # from a checkout
-uv tool install 'git+<repo-url>#subdirectory=anon-git.py'                           # from git
+Install from a checkout, run from the repo root:
+
+```sh
+uv tool install ./anon-git.py
 ```
 
-Remove:
+Install from git:
 
-```bash
+```sh
+uv tool install 'git+https://github.com/radioactively/anon-git#subdirectory=anon-git.py'
+```
+
+Uninstall:
+
+```sh
 uv tool uninstall anon-git
 ```
 
-## Differences from anon-git.sh
+## Usage
 
-- Executable is `anon-git`, same name `anon-git.sh --install` uses. Whichever
-  comes first on `$PATH` wins; `anon-git --version` does not tell them apart.
-- `--install`, `--install-system` and `--uninstall` are gone: `uv tool
-install`/`uv tool uninstall` replace them. Passing one exits 1 with that hint.
+Run `anon-git` with the same options and arguments as `anon-git.sh`:
+
+```sh
+anon-git --dry-run HEAD~2
+```
+
+- The executable is `anon-git`, the same name `anon-git.sh --install` uses.
+  Whichever comes first on `$PATH` wins; `anon-git --version` does not tell
+  them apart.
+- `--install`, `--install-system` and `--uninstall` don't exist here: use
+  `uv tool install`/`uv tool uninstall`. Passing one exits 1 with that hint.
 - The post-commit hook from `--install-hook` calls this exact install
   (`<python> -m anon_git`), not whatever `anon-git` is on `$PATH`.
-- `--install-hook` refuses a `core.hooksPath` set outside repo-local config:
-  that directory is shared, so the hook would rewrite every repo's commits.
-- `--dry-run` pipes the preview to `$PAGER` on stdin; no preview file is
-  written to disk. Control characters in commit metadata show as `\xNN`.
+- `--dry-run` pipes the preview to `$PAGER` on stdin and writes no preview
+  file to disk. Control characters in commit metadata show as `\xNN`.
 
 ## Shell completion
 
-```bash
+Install bash completion:
+
+```sh
 anon-git --print-completion bash > ~/.local/share/bash-completion/completions/anon-git
-anon-git --print-completion zsh  > "${fpath[1]}/_anon-git"
-anon-git --print-completion fish > ~/.config/fish/completions/anon-git.fish
 ```
 
-## Development
+Install zsh completion, into a directory already in `$fpath`:
 
-- [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md): workflow, code layout, tests
-- [`docs/NOTES.md`](docs/NOTES.md): design notes
-- [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md): known issues left unfixed, with reasons
+```sh
+anon-git --print-completion zsh > "${fpath[1]}/_anon-git"
+```
 
-## License
+Install fish completion:
 
-[GPL-3.0](../LICENSE).
+```sh
+anon-git --print-completion fish > ~/.config/fish/completions/anon-git.fish
+```

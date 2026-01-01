@@ -1,9 +1,9 @@
-# Contributing
+# Development
 
 ## Prerequisites
 
 - `bash` (the script and test suite are bash, not POSIX `sh`)
-- [`git-filter-repo`](README.md#pre-requisites) — required to actually run `anon-git.sh`, and by the test suite
+- [`git-filter-repo`](../../README.md#pre-requisites) — required to actually run `anon-git.sh`, and by the test suite
 - `python3` — one test compiles the embedded commit-callback to check it's valid Python
 - [`bats-core`](https://github.com/bats-core/bats-core) ≥ 1.5 with [`bats-support`](https://github.com/bats-core/bats-support), [`bats-assert`](https://github.com/bats-core/bats-assert), [`bats-file`](https://github.com/bats-core/bats-file) — runs the test suite; libs are found via `BATS_LIB_PATH` (default `/usr/lib/bats`, e.g. Arch `pacman -S bats bats-support bats-assert bats-file`)
 - [`just`](https://github.com/casey/just) — runs the recipes below
@@ -19,7 +19,7 @@ just format           # shfmt -w, 4-space indent
 just test             # bats tests/
 just test-completion  # bats tests/completion.bats
 just all              # lint, format, test, in order
-just sync-docs        # regenerate README's ### Options block from `anon-git.sh --help`
+just sync-docs        # regenerate top-level README's ### Options block from `anon-git.sh --help`
 ```
 
 Run `just lint`, `just format`, and `just test` before every commit — `.github/workflows/ci.yml` runs `just lint`, `just format-check` (fails if you forgot `just format`), and `just test` on every push/PR, so catching drift locally first saves a round-trip.
@@ -48,7 +48,7 @@ A new flag touches several places; grep for an existing similar flag (e.g. `--dr
    `--_list-flags` dynamically.
 3. `tests/completion.bats`'s "zsh/fish completions list all flags" will fail if
    zsh/fish drift from `--_list-flags` — that's the tripwire for step 2.
-4. `README.md`: the `### Options` block, and an example if the flag isn't
+4. `../../README.md`: the `### Options` block, and an example if the flag isn't
    obvious from its description.
 5. `tests/*.bats`: at least one `@test` exercising the new flag, plus
    incompatibility tests if it conflicts with existing flags (see
@@ -59,7 +59,7 @@ A new flag touches several places; grep for an existing similar flag (e.g. `--dr
    `${FLAG_ARG:-${GITCONFIG_X:-${ANON_GIT_X:-${DEFAULT_X}}}}` — if it also has
    a repo-local `git config anon-git.*` equivalent; config outranks the
    envvar, see `read_git_config()`), a mention in the "Priority" list in both
-   `show_help()` and `README.md`, and — if it can conflict with another
+   `show_help()` and `../../README.md`, and — if it can conflict with another
    option — a `*_set` computation in `reject_incompatible_options()` (see the
    comment at the top of that function for why it must run *before*
    `merge_args_with_defaults`, not after).

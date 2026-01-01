@@ -1,7 +1,7 @@
 SCRIPT := "anon-git.sh"
 TEST_BASH_FILES := "tests/setup_suite.bash tests/test_helper.bash tests/test_manually.sh"
 TEST_BATS_FILES := "tests/*.bats"
-README := "README.md"
+README := "../README.md"
 
 default:
     @just --list
