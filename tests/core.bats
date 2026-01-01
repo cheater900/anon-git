@@ -5,6 +5,67 @@
 
 load test_helper
 
+# Prints identity and dates of every commit except HEAD~$1.
+commits_except() {
+    git log --format='%an <%aE> (%ai) %cn <%cE> (%ci)' | sed "$(($1 + 1))d"
+}
+
+# Rewrites a random HEAD~N with $@ and checks only that commit changed, as
+# the flags ask.
+assert_rewrite() {
+    # $@: flags to pass through (--name, --email, --date, --keep-user, --keep-date)
+    local expected_name=$DEFAULT_NAME expected_email=$DEFAULT_EMAIL expected_date=$DEFAULT_DATE
+    local keep_user=$DEFAULT_KEEPUSER keep_date=$DEFAULT_KEEPDATE args=("$@")
+    local target old_user old_date untouched_commits
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+        --date)
+            expected_date=$2
+            shift 2
+            ;;
+        --name)
+            expected_name=$2
+            shift 2
+            ;;
+        --email)
+            expected_email=$2
+            shift 2
+            ;;
+        --keep-user)
+            keep_user=1
+            shift
+            ;;
+        --keep-date)
+            keep_date=1
+            shift
+            ;;
+        *)
+            fail "unexpected argument in assert_rewrite: $1"
+            ;;
+        esac
+    done
+    pick_random_index
+    target="HEAD~${PICKED_INDEX}"
+    old_user=$(git show -s --format='%an <%ae> %cn <%ce>' "$target")
+    old_date=$(git show -s --format='%ai %ci' "$target")
+    untouched_commits=$(commits_except "$PICKED_INDEX")
+    run ./anon-git.sh --no-confirm --no-backup "${args[@]}" "$target"
+    assert_success
+    if [[ "$keep_user" == '1' ]]; then
+        assert_equal "$(git show -s --format='%an <%ae> %cn <%ce>' "$target")" "$old_user"
+    else
+        assert_equal "$(commit_author "$target")" "${expected_name} <${expected_email}>"
+        assert_equal "$(git show -s --format='%cn <%ce>' "$target")" "${expected_name} <${expected_email}>"
+    fi
+    if [[ "$keep_date" == '1' ]]; then
+        assert_equal "$(git show -s --format='%ai %ci' "$target")" "$old_date"
+    else
+        assert_equal "$(git show -s --format='%ai' "$target")" "$expected_date"
+        assert_equal "$(git show -s --format='%ci' "$target")" "$expected_date"
+    fi
+    assert_equal "$(commits_except "$PICKED_INDEX")" "$untouched_commits"
+}
+
 @test "defaults rewrite target" {
     assert_rewrite
 }

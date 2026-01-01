@@ -5,6 +5,24 @@
 
 load test_helper
 
+# Runs anon-git.sh with $@ and checks it rejects them as conflicting,
+# leaving HEAD alone. "ANON_GIT_*=value" args are routed to `env`, so one
+# helper covers flag-vs-flag, envvar-vs-envvar, and mixed conflicts.
+assert_incompatible() {
+    local arg envvars=() cli_args=()
+    for arg in "$@"; do
+        if [[ "$arg" == ANON_GIT_*=* ]]; then
+            envvars+=("$arg")
+        else
+            cli_args+=("$arg")
+        fi
+    done
+    run env "${envvars[@]}" ./anon-git.sh --no-confirm --no-backup "${cli_args[@]}"
+    assert_failure
+    assert_head_unchanged
+    assert_output --partial 'cannot be used together'
+}
+
 @test "python commit callback syntax valid" {
     # Wrapped in a dummy function before compiling since the body uses bare
     # `return`, only legal inside a function -- matching how

@@ -5,6 +5,36 @@
 
 load test_helper
 
+# Prints the newest "<branch>_anonymized_*" branch, created by a run without
+# --current-branch.
+anonymized_branch() {
+    git branch --format='%(refname:short)' | grep "_anonymized_" | tail -1 || true
+}
+
+run_with_tty() {
+    # $1: keystrokes typed into the terminal, rest: command. confirm() reads
+    # /dev/tty, not stdin, so a pipe can't answer it; a pty can.
+    python3 -c '
+import os, pty, sys
+pid, fd = pty.fork()
+if pid == 0:
+    os.execvp(sys.argv[2], sys.argv[2:])
+os.write(fd, sys.argv[1].encode())
+while True:
+    try:
+        if not os.read(fd, 1024):
+            break
+    except OSError:
+        break
+sys.exit(os.waitstatus_to_exitcode(os.waitpid(pid, 0)[1]))
+' "$@"
+}
+
+run_without_tty() {
+    # New session: no controlling terminal, so /dev/tty can't be opened.
+    python3 -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' "$@"
+}
+
 @test "--current-branch creates backup" {
     local backup_branch
     run ./anon-git.sh --no-confirm --current-branch --name 'Edsger Dijkstra' HEAD
