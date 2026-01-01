@@ -13,6 +13,7 @@ timestamps or email leaking information about them. Specifically, anon-git can:
 - Anonymize metadata using arbitrary values for user name, user email and date
 - Anonymize just the timestamps (keep authorship) or the username (keep timestamp)
 - Anonymize timestamps partially: preserve the commit year, month, or day while anonymizing the rest (hour & timezone)
+- Anonymize timestamps by *randomizing* month, day, or time instead of zeroing them (never the year), while keeping commits in their original relative order
 
 ## Introduction
 
@@ -115,6 +116,11 @@ Alternatively, just download or copy-paste the file and put it into your `$PATH`
 # Keep the commit's day (and month/year) but scrub the time-of-day and timezone
 ./anon-git.sh --keep-day HEAD~2
 
+# Keep the commit year, randomize month/day/time; commits being rewritten in
+# this run keep their original relative order (an earlier commit's random
+# date never lands after a later commit's, and vice versa)
+./anon-git.sh --random-month --entire-history
+
 # Silence informational output (only errors print)
 ./anon-git.sh --quiet HEAD
 
@@ -154,6 +160,15 @@ git log --format=%H --grep='^fix:' | xargs ./anon-git.sh
   --keep-year                     Do not change commit year
   --keep-month                    Do not change commit month (and year)
   --keep-day                      Do not change commit day (and year and month)
+  --random-time                   Keep commit date year, month and day; replace the time
+                                   with a random one, ordered to match the original
+                                   relative commit order (never touches the year)
+  --random-day                    Keep commit date year and month; replace day and time
+                                   with random values, ordered to match the original
+                                   relative commit order (never touches the year)
+  --random-month                  Keep commit date year; replace month, day and time
+                                   with random values, ordered to match the original
+                                   relative commit order (never touches the year)
   --strip-timezone                Force the timezone offset to UTC+0000 without changing
                                    the date/time digits. Used with no other option, also
                                    leaves author and date/time untouched (only the offset
@@ -183,8 +198,8 @@ git log --format=%H --grep='^fix:' | xargs ./anon-git.sh
 **Priority order** (highest to lowest):
 
 1. Command-line flags
-2. Repo-local git config (`git config anon-git.name`, `anon-git.email`, `anon-git.date`, `anon-git.keepuser`, `anon-git.keepdate`, `anon-git.keepyear`, `anon-git.keepmonth`, `anon-git.keepday`, `anon-git.striptimezone`, `anon-git.quiet`, see [Repo-local config](#repo-local-config) below; `--entire-history`/`--current-branch`/`--dry-run` have no config equivalent, flag/envvar only)
-3. Environment variables (`ANON_GIT_DATE`, `ANON_GIT_NAME`, `ANON_GIT_EMAIL`, `ANON_GIT_KEEPUSER`, `ANON_GIT_KEEPDATE`, `ANON_GIT_KEEPYEAR`, `ANON_GIT_KEEPMONTH`, `ANON_GIT_KEEPDAY`, `ANON_GIT_STRIPTIMEZONE`, `ANON_GIT_ENTIREHISTORY`, `ANON_GIT_CURRENTBRANCH`, `ANON_GIT_DRYRUN`, `ANON_GIT_QUIET`)
+2. Repo-local git config (`git config anon-git.name`, `anon-git.email`, `anon-git.date`, `anon-git.keepuser`, `anon-git.keepdate`, `anon-git.keepyear`, `anon-git.keepmonth`, `anon-git.keepday`, `anon-git.randomtime`, `anon-git.randomday`, `anon-git.randommonth`, `anon-git.striptimezone`, `anon-git.quiet`, see [Repo-local config](#repo-local-config) below; `--entire-history`/`--current-branch`/`--dry-run` have no config equivalent, flag/envvar only)
+3. Environment variables (`ANON_GIT_DATE`, `ANON_GIT_NAME`, `ANON_GIT_EMAIL`, `ANON_GIT_KEEPUSER`, `ANON_GIT_KEEPDATE`, `ANON_GIT_KEEPYEAR`, `ANON_GIT_KEEPMONTH`, `ANON_GIT_KEEPDAY`, `ANON_GIT_RANDOMTIME`, `ANON_GIT_RANDOMDAY`, `ANON_GIT_RANDOMMONTH`, `ANON_GIT_STRIPTIMEZONE`, `ANON_GIT_ENTIREHISTORY`, `ANON_GIT_CURRENTBRANCH`, `ANON_GIT_DRYRUN`, `ANON_GIT_QUIET`)
 4. Hardcoded defaults
 
 `--verbose` has no `ANON_GIT_VERBOSE` environment variable or config equivalent; it's a CLI-only override that forces informational output back on for one run, regardless of what set `ANON_GIT_QUIET` (flag, repo-local config, envvar, or default).
@@ -213,13 +228,16 @@ git config anon-git.keepdate true
 git config anon-git.keepyear true
 git config anon-git.keepmonth true
 git config anon-git.keepday true
+git config anon-git.randomtime true
+git config anon-git.randomday true
+git config anon-git.randommonth true
 git config anon-git.striptimezone true
 git config anon-git.quiet true
 ```
 
 Booleans accept anything `git config --bool` does (`true`/`false`, `yes`/`no`, `on`/`off`, `1`/`0`); anything else is a hard error rather than silently ignored, since a typo'd repo config shouldn't fail open. `git config` writes to `.git/config` (local to your clone) by default; use `git config --global` instead if you want the same defaults across every repo.
 
-This is deliberately scoped to `name`/`email`/`date`/`keep-*`/`striptimezone`/`quiet`,
+This is deliberately scoped to `name`/`email`/`date`/`keep-*`/`random-*`/`striptimezone`/`quiet`,
 the settings that make sense to pin per-repo. `--entire-history`, `--current-branch` and
 `--dry-run` stay flag/envvar-only: a silently-configured default for any of
 those would be far more destructive than a wrong name or email (e.g. every
@@ -284,6 +302,12 @@ source <(./anon-git.sh --print-completion)
 - If you pushed before using the script, you'll need `git push
   --force-with-lease` afterward (dangerous on shared branches!)
 - The flags `--keep-user` and `--keep-date` are useful for partial anonymization
+- `--random-time`/`--random-day`/`--random-month` keep every rewritten
+  commit in its original relative order, including relative to real,
+  untouched neighboring commits when only a single/multiple explicit commit
+  target is given (not `--entire-history`): the one real commit immediately
+  before and after each target is used to bound that target's randomized
+  date, without itself being touched or appearing anywhere in the rewrite
 - Timestamps must be in a format `git` understands (ISO 8601 with timezone
   recommended)
 - The script runs `git filter-repo --force`, which skips filter-repo's own "is

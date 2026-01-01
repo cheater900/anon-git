@@ -24,10 +24,20 @@ source "${TESTS_DIR}/cases/flags.sh"
 source "${TESTS_DIR}/cases/help.sh"
 # shellcheck source=tests/cases/regression.sh
 source "${TESTS_DIR}/cases/regression.sh"
+# shellcheck source=tests/cases/random_dates.sh
+source "${TESTS_DIR}/cases/random_dates.sh"
 
 main() {
     init_repo
     test_python_callback_syntax
+    test_python_random_dates_syntax
+    test_random_dates_order_within_bucket --random-time ANON_GIT_RANDOMTIME
+    test_random_dates_order_within_bucket --random-day ANON_GIT_RANDOMDAY
+    test_random_dates_order_within_bucket --random-month ANON_GIT_RANDOMMONTH
+    test_random_dates_neighbor_bounds_sparse_targets
+    test_random_dates_neighbor_bounds_contiguous_run
+    test_random_dates_no_lower_neighbor_at_history_start
+    test_random_dates_no_upper_neighbor_at_history_end
     test_script
     test_script --name 'Grace Hopper'
     test_script --name 'Alan Turing' --email 'alan.turing@example.com'
@@ -51,6 +61,19 @@ main() {
     test_catch_incompatible --keep-year --keep-day
     test_catch_incompatible --keep-month --keep-day
     test_catch_incompatible --entire-history HEAD
+    # random-time/random-day/random-month are mutually exclusive with each
+    # other (only one granularity at a time, same as keep-year/month/day
+    # above), with --keep-date/--keep-year/--keep-month/--keep-day (both
+    # families dictate a fill strategy for the same fields), and with an
+    # explicit --date (a hardcoded target date leaves nothing to randomize).
+    test_catch_incompatible --random-day --keep-day
+    test_catch_incompatible --random-time --keep-year
+    test_catch_incompatible --random-month --keep-month
+    test_catch_incompatible --keep-date --random-time
+    test_catch_incompatible --random-time --random-day
+    test_catch_incompatible --random-day --random-month
+    test_catch_incompatible --random-time --random-month
+    test_catch_incompatible --date '2020-01-01 00:00:00 +0000' --random-month
     # Same combinations, provided via their ANON_GIT_* envvar equivalents
     # instead of flags (--entire-history has none: there is no ANON_GIT_COMMIT
     # envvar users are meant to set, so it's flag-only and not repeated here).
@@ -61,6 +84,8 @@ main() {
     test_catch_incompatible ANON_GIT_KEEPYEAR=1 ANON_GIT_KEEPMONTH=1
     test_catch_incompatible ANON_GIT_KEEPYEAR=1 ANON_GIT_KEEPDAY=1
     test_catch_incompatible ANON_GIT_KEEPMONTH=1 ANON_GIT_KEEPDAY=1
+    test_catch_incompatible ANON_GIT_RANDOMDAY=1 ANON_GIT_KEEPDAY=1
+    test_catch_incompatible ANON_GIT_RANDOMTIME=1 ANON_GIT_RANDOMMONTH=1
     # Mixed: one side via flag, the other via envvar — the combination must
     # still be rejected regardless of where each side came from.
     test_catch_incompatible --keep-user ANON_GIT_NAME=Nobody
@@ -105,6 +130,12 @@ main() {
     test_flag_keep_partial --keep-year
     test_flag_keep_partial --keep-month
     test_flag_keep_partial --keep-day
+    test_flag_random_partial --random-time
+    test_flag_random_partial --random-day
+    test_flag_random_partial --random-month
+    test_random_day_multiple_commits
+    test_random_day_preserves_neighbor_order_real_repo
+    test_random_month_preserves_order_and_year
     test_flag_missing_value --date
     test_flag_missing_value --name
     test_flag_missing_value --email

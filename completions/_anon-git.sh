@@ -40,6 +40,9 @@ _anon_git() {
         '--keep-year[Do not change commit year]' \
         '--keep-month[Do not change commit month (and year)]' \
         '--keep-day[Do not change commit day (and year and month)]' \
+        '--random-time[Keep year/month/day, randomize time (order-preserving)]' \
+        '--random-day[Keep year/month, randomize day and time (order-preserving)]' \
+        '--random-month[Keep year, randomize month/day/time (order-preserving)]' \
         '--strip-timezone[Force timezone offset to UTC+0000 without changing date/time digits]' \
         '--no-confirm[Do not prompt for confirmation]' \
         '--no-backup[Do not create backup branch]' \

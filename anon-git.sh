@@ -13,6 +13,9 @@ DEFAULT_KEEPDATE='0'
 DEFAULT_KEEPYEAR='0'
 DEFAULT_KEEPMONTH='0'
 DEFAULT_KEEPDAY='0'
+DEFAULT_RANDOMTIME='0'
+DEFAULT_RANDOMDAY='0'
+DEFAULT_RANDOMMONTH='0'
 DEFAULT_STRIPTIMEZONE='0'
 DEFAULT_ENTIREHISTORY='0'
 DEFAULT_CURRENTBRANCH='0'
@@ -25,6 +28,7 @@ DEFAULT_QUIET='0'
 # can safely run even before setup_dryrun/run_filter_repo populate them.
 dryrun_file=''
 filter_repo_log=''
+random_dates_file=''
 
 cleanup_on_exit() {
     if [[ -n "$dryrun_file" && -f "$dryrun_file" ]]; then
@@ -32,6 +36,9 @@ cleanup_on_exit() {
     fi
     if [[ -n "$filter_repo_log" && -f "$filter_repo_log" ]]; then
         rm -f "$filter_repo_log"
+    fi
+    if [[ -n "$random_dates_file" && -f "$random_dates_file" ]]; then
+        rm -f "$random_dates_file"
     fi
 }
 trap cleanup_on_exit EXIT
@@ -61,6 +68,15 @@ Options:
   --keep-year                     Do not change commit year
   --keep-month                    Do not change commit month (and year)
   --keep-day                      Do not change commit day (and year and month)
+  --random-time                   Keep commit date year, month and day; replace the time
+                                   with a random one, ordered to match the original
+                                   relative commit order (never touches the year)
+  --random-day                    Keep commit date year and month; replace day and time
+                                   with random values, ordered to match the original
+                                   relative commit order (never touches the year)
+  --random-month                  Keep commit date year; replace month, day and time
+                                   with random values, ordered to match the original
+                                   relative commit order (never touches the year)
   --strip-timezone                Force the timezone offset to UTC+0000 without changing
                                    the date/time digits. Used with no other option, also
                                    leaves author and date/time untouched (only the offset
@@ -96,10 +112,12 @@ Priority (highest to lowest):
   1. Command-line flags (--date, --name, --email, --keep-user, --keep-date, ...)
   2. Repo-local git config (git config anon-git.name, anon-git.email, anon-git.date,
      anon-git.keepuser, anon-git.keepdate, anon-git.keepyear, anon-git.keepmonth,
-     anon-git.keepday, anon-git.striptimezone, anon-git.quiet;
+     anon-git.keepday, anon-git.randomtime, anon-git.randomday, anon-git.randommonth,
+     anon-git.striptimezone, anon-git.quiet;
      --entire-history/--current-branch/--dry-run have no config equivalent, flag/envvar only)
   3. Environment variables (ANON_GIT_DATE, ANON_GIT_NAME, ANON_GIT_EMAIL, ANON_GIT_KEEPUSER,
      ANON_GIT_KEEPDATE, ANON_GIT_KEEPYEAR, ANON_GIT_KEEPMONTH, ANON_GIT_KEEPDAY,
+     ANON_GIT_RANDOMTIME, ANON_GIT_RANDOMDAY, ANON_GIT_RANDOMMONTH,
      ANON_GIT_STRIPTIMEZONE, ANON_GIT_ENTIREHISTORY, ANON_GIT_CURRENTBRANCH,
      ANON_GIT_DRYRUN, ANON_GIT_QUIET)
   4. Hardcoded defaults (${DEFAULT_NAME} <${DEFAULT_EMAIL}>)
@@ -123,6 +141,10 @@ Examples:
 
     # Keep real name/email, only change date
     ./anon-git.sh --keep-user --date "2025-06-15T14:20:00Z"
+
+    # Keep the commit year, randomize month/day/time; commits keep their
+    # relative order (a later commit never lands earlier than an earlier one)
+    ./anon-git.sh --random-month --entire-history
 
     # Used alone: keep author and date/time as-is, only force the timezone
     # offset to UTC+0000 (hides where the committer is, keeps everything else)
@@ -201,6 +223,9 @@ list_flags() {
 --keep-year
 --keep-month
 --keep-day
+--random-time
+--random-day
+--random-month
 --strip-timezone
 --no-confirm
 --no-backup
@@ -568,7 +593,7 @@ read_git_config_bool() {
 # globals that merge_args_with_defaults consults above ANON_GIT_* envvars
 # (repo config wins over an inherited/exported envvar) and below CLI flags
 # (see README's "Repo-local config" section). Deliberately scoped to
-# name/email/date/keep-*/striptimezone/quiet, the
+# name/email/date/keep-*/random-*/striptimezone/quiet, the
 # settings that make sense to pin per-repo; --entire-history,
 # --current-branch and --dry-run stay flag/envvar-only, since a silently
 # configured default for any of those would be far more destructive than a
@@ -582,6 +607,9 @@ read_git_config() {
     GITCONFIG_KEEPYEAR=$(read_git_config_bool anon-git.keepyear)
     GITCONFIG_KEEPMONTH=$(read_git_config_bool anon-git.keepmonth)
     GITCONFIG_KEEPDAY=$(read_git_config_bool anon-git.keepday)
+    GITCONFIG_RANDOMTIME=$(read_git_config_bool anon-git.randomtime)
+    GITCONFIG_RANDOMDAY=$(read_git_config_bool anon-git.randomday)
+    GITCONFIG_RANDOMMONTH=$(read_git_config_bool anon-git.randommonth)
     GITCONFIG_STRIPTIMEZONE=$(read_git_config_bool anon-git.striptimezone)
     GITCONFIG_QUIET=$(read_git_config_bool anon-git.quiet)
 }
@@ -598,6 +626,9 @@ parse_args() {
     KEEPYEAR_ARG=""
     KEEPMONTH_ARG=""
     KEEPDAY_ARG=""
+    RANDOMTIME_ARG=""
+    RANDOMDAY_ARG=""
+    RANDOMMONTH_ARG=""
     STRIPTIMEZONE_ARG=""
     NOCONFIRM_ARG=""
     NOBACKUP_ARG=""
@@ -653,6 +684,18 @@ parse_args() {
             ;;
         --keep-day)
             KEEPDAY_ARG='1'
+            shift
+            ;;
+        --random-time)
+            RANDOMTIME_ARG='1'
+            shift
+            ;;
+        --random-day)
+            RANDOMDAY_ARG='1'
+            shift
+            ;;
+        --random-month)
+            RANDOMMONTH_ARG='1'
             shift
             ;;
         --strip-timezone)
@@ -732,6 +775,7 @@ check_incompatible() {
 reject_incompatible_options() {
     local date_set name_set email_set
     local keepuser_set keepdate_set keepyear_set keepmonth_set keepday_set
+    local randomtime_set randomday_set randommonth_set
 
     flag_errors=0
 
@@ -743,16 +787,25 @@ reject_incompatible_options() {
     keepyear_set="$KEEPYEAR_ARG"
     keepmonth_set="$KEEPMONTH_ARG"
     keepday_set="$KEEPDAY_ARG"
+    randomtime_set="$RANDOMTIME_ARG"
+    randomday_set="$RANDOMDAY_ARG"
+    randommonth_set="$RANDOMMONTH_ARG"
     [[ "${ANON_GIT_KEEPUSER:-}" == '1' ]] && keepuser_set='1'
     [[ "${ANON_GIT_KEEPDATE:-}" == '1' ]] && keepdate_set='1'
     [[ "${ANON_GIT_KEEPYEAR:-}" == '1' ]] && keepyear_set='1'
     [[ "${ANON_GIT_KEEPMONTH:-}" == '1' ]] && keepmonth_set='1'
     [[ "${ANON_GIT_KEEPDAY:-}" == '1' ]] && keepday_set='1'
+    [[ "${ANON_GIT_RANDOMTIME:-}" == '1' ]] && randomtime_set='1'
+    [[ "${ANON_GIT_RANDOMDAY:-}" == '1' ]] && randomday_set='1'
+    [[ "${ANON_GIT_RANDOMMONTH:-}" == '1' ]] && randommonth_set='1'
     [[ "${GITCONFIG_KEEPUSER:-}" == '1' ]] && keepuser_set='1'
     [[ "${GITCONFIG_KEEPDATE:-}" == '1' ]] && keepdate_set='1'
     [[ "${GITCONFIG_KEEPYEAR:-}" == '1' ]] && keepyear_set='1'
     [[ "${GITCONFIG_KEEPMONTH:-}" == '1' ]] && keepmonth_set='1'
     [[ "${GITCONFIG_KEEPDAY:-}" == '1' ]] && keepday_set='1'
+    [[ "${GITCONFIG_RANDOMTIME:-}" == '1' ]] && randomtime_set='1'
+    [[ "${GITCONFIG_RANDOMDAY:-}" == '1' ]] && randomday_set='1'
+    [[ "${GITCONFIG_RANDOMMONTH:-}" == '1' ]] && randommonth_set='1'
 
     check_incompatible --keep-user "$keepuser_set" --name "$name_set"
     check_incompatible --keep-user "$keepuser_set" --email "$email_set"
@@ -760,12 +813,37 @@ reject_incompatible_options() {
     check_incompatible --date "$date_set" --keep-year "$keepyear_set"
     check_incompatible --date "$date_set" --keep-month "$keepmonth_set"
     check_incompatible --date "$date_set" --keep-day "$keepday_set"
+    check_incompatible --date "$date_set" --random-time "$randomtime_set"
+    check_incompatible --date "$date_set" --random-day "$randomday_set"
+    check_incompatible --date "$date_set" --random-month "$randommonth_set"
     check_incompatible --keep-date "$keepdate_set" --keep-year "$keepyear_set"
     check_incompatible --keep-date "$keepdate_set" --keep-month "$keepmonth_set"
     check_incompatible --keep-date "$keepdate_set" --keep-day "$keepday_set"
+    check_incompatible --keep-date "$keepdate_set" --random-time "$randomtime_set"
+    check_incompatible --keep-date "$keepdate_set" --random-day "$randomday_set"
+    check_incompatible --keep-date "$keepdate_set" --random-month "$randommonth_set"
     check_incompatible --keep-year "$keepyear_set" --keep-month "$keepmonth_set"
     check_incompatible --keep-year "$keepyear_set" --keep-day "$keepday_set"
     check_incompatible --keep-month "$keepmonth_set" --keep-day "$keepday_set"
+    # random-* and keep-year/keep-month/keep-day both dictate a fill strategy
+    # (zero vs. random) for whichever of month/day/time isn't kept, so any
+    # cross-pairing between the two families is a genuine conflict, not just
+    # redundancy -- same reasoning as the keep-year/keep-month/keep-day
+    # pairs above, just across both families instead of within one.
+    check_incompatible --keep-year "$keepyear_set" --random-time "$randomtime_set"
+    check_incompatible --keep-year "$keepyear_set" --random-day "$randomday_set"
+    check_incompatible --keep-year "$keepyear_set" --random-month "$randommonth_set"
+    check_incompatible --keep-month "$keepmonth_set" --random-time "$randomtime_set"
+    check_incompatible --keep-month "$keepmonth_set" --random-day "$randomday_set"
+    check_incompatible --keep-month "$keepmonth_set" --random-month "$randommonth_set"
+    check_incompatible --keep-day "$keepday_set" --random-time "$randomtime_set"
+    check_incompatible --keep-day "$keepday_set" --random-day "$randomday_set"
+    check_incompatible --keep-day "$keepday_set" --random-month "$randommonth_set"
+    # random-time/random-day/random-month are three granularities of the same
+    # thing (mirroring keep-year/keep-month/keep-day above): only one at a time.
+    check_incompatible --random-time "$randomtime_set" --random-day "$randomday_set"
+    check_incompatible --random-time "$randomtime_set" --random-month "$randommonth_set"
+    check_incompatible --random-day "$randomday_set" --random-month "$randommonth_set"
     # The commit(s) argument is CLI-only (there is no ANON_GIT_COMMIT env var
     # users are meant to set), so this one stays flag-vs-flag.
     check_incompatible "commit(s) argument" "$COMMIT_ARG" --entire-history "$ENTIREHISTORY_ARG"
@@ -793,6 +871,9 @@ merge_args_with_defaults() {
     ANON_GIT_KEEPYEAR="${KEEPYEAR_ARG:-${GITCONFIG_KEEPYEAR:-${ANON_GIT_KEEPYEAR:-${DEFAULT_KEEPYEAR}}}}"
     ANON_GIT_KEEPMONTH="${KEEPMONTH_ARG:-${GITCONFIG_KEEPMONTH:-${ANON_GIT_KEEPMONTH:-${DEFAULT_KEEPMONTH}}}}"
     ANON_GIT_KEEPDAY="${KEEPDAY_ARG:-${GITCONFIG_KEEPDAY:-${ANON_GIT_KEEPDAY:-${DEFAULT_KEEPDAY}}}}"
+    ANON_GIT_RANDOMTIME="${RANDOMTIME_ARG:-${GITCONFIG_RANDOMTIME:-${ANON_GIT_RANDOMTIME:-${DEFAULT_RANDOMTIME}}}}"
+    ANON_GIT_RANDOMDAY="${RANDOMDAY_ARG:-${GITCONFIG_RANDOMDAY:-${ANON_GIT_RANDOMDAY:-${DEFAULT_RANDOMDAY}}}}"
+    ANON_GIT_RANDOMMONTH="${RANDOMMONTH_ARG:-${GITCONFIG_RANDOMMONTH:-${ANON_GIT_RANDOMMONTH:-${DEFAULT_RANDOMMONTH}}}}"
     ANON_GIT_STRIPTIMEZONE="${STRIPTIMEZONE_ARG:-${GITCONFIG_STRIPTIMEZONE:-${ANON_GIT_STRIPTIMEZONE:-${DEFAULT_STRIPTIMEZONE}}}}"
     ANON_GIT_ENTIREHISTORY="${ENTIREHISTORY_ARG:-${ANON_GIT_ENTIREHISTORY:-${DEFAULT_ENTIREHISTORY}}}"
     ANON_GIT_CURRENTBRANCH="${CURRENTBRANCH_ARG:-${ANON_GIT_CURRENTBRANCH:-${DEFAULT_CURRENTBRANCH}}}"
@@ -820,7 +901,8 @@ merge_args_with_defaults() {
 apply_strip_timezone_alone() {
     if [[ "$STRIPTIMEZONE_ARG" == '1' && -z "$DATE_ARG" && -z "$NAME_ARG" && -z "$EMAIL_ARG" &&
         -z "$KEEPUSER_ARG" && -z "$KEEPDATE_ARG" &&
-        -z "$KEEPYEAR_ARG" && -z "$KEEPMONTH_ARG" && -z "$KEEPDAY_ARG" ]]; then
+        -z "$KEEPYEAR_ARG" && -z "$KEEPMONTH_ARG" && -z "$KEEPDAY_ARG" &&
+        -z "$RANDOMTIME_ARG" && -z "$RANDOMDAY_ARG" && -z "$RANDOMMONTH_ARG" ]]; then
         ANON_GIT_KEEPUSER='1'
         ANON_GIT_KEEPDATE='1'
     fi
@@ -854,6 +936,9 @@ validate_final_options() {
     validate_bool ANON_GIT_KEEPYEAR "$ANON_GIT_KEEPYEAR"
     validate_bool ANON_GIT_KEEPMONTH "$ANON_GIT_KEEPMONTH"
     validate_bool ANON_GIT_KEEPDAY "$ANON_GIT_KEEPDAY"
+    validate_bool ANON_GIT_RANDOMTIME "$ANON_GIT_RANDOMTIME"
+    validate_bool ANON_GIT_RANDOMDAY "$ANON_GIT_RANDOMDAY"
+    validate_bool ANON_GIT_RANDOMMONTH "$ANON_GIT_RANDOMMONTH"
     validate_bool ANON_GIT_STRIPTIMEZONE "$ANON_GIT_STRIPTIMEZONE"
     validate_bool ANON_GIT_ENTIREHISTORY "$ANON_GIT_ENTIREHISTORY"
     validate_bool ANON_GIT_CURRENTBRANCH "$ANON_GIT_CURRENTBRANCH"
@@ -891,6 +976,15 @@ verbose_info() {
     fi
     if [[ -n "$KEEPDAY_ARG" ]]; then
         printf 'Using commit date year, month and day (anonymizing only time and tz).\n'
+    fi
+    if [[ -n "$RANDOMTIME_ARG" ]]; then
+        printf 'Randomizing time only (keeping commit date year, month and day), preserving relative commit order.\n'
+    fi
+    if [[ -n "$RANDOMDAY_ARG" ]]; then
+        printf 'Randomizing day and time (keeping commit date year and month), preserving relative commit order.\n'
+    fi
+    if [[ -n "$RANDOMMONTH_ARG" ]]; then
+        printf 'Randomizing month, day and time (keeping commit date year), preserving relative commit order.\n'
     fi
     if [[ -n "$STRIPTIMEZONE_ARG" ]]; then
         printf 'Forcing timezone offset to UTC+0000 (date/time digits unchanged).\n'
@@ -1002,10 +1096,184 @@ setup_dryrun() {
 export_rewrite_env() {
     export ANON_GIT_NAME ANON_GIT_EMAIL ANON_GIT_DATE ANON_GIT_COMMIT
     export ANON_GIT_KEEPUSER ANON_GIT_KEEPDATE ANON_GIT_KEEPYEAR ANON_GIT_KEEPMONTH ANON_GIT_KEEPDAY
+    export ANON_GIT_RANDOMTIME ANON_GIT_RANDOMDAY ANON_GIT_RANDOMMONTH
+    export ANON_GIT_RANDOM_DATES_FILE="${random_dates_file}"
     export ANON_GIT_STRIPTIMEZONE
     export ANON_GIT_ENTIREHISTORY ANON_GIT_DRYRUN
     export ANON_GIT_DRYRUN_FILE="${dryrun_file}"
     export TZ=UTC
+}
+
+# Precomputes one random timestamp per target commit for --random-time/
+# --random-day/--random-month, run once (by setup_random_dates, as its own
+# `python3 -c` process, not inside git-filter-repo) before git-filter-repo
+# starts, so it can consider every commit at once instead of one at a time.
+#
+# Reads the FULL reachable history (oldest to newest, one "<hash> <epoch>"
+# line per commit -- not just the target commits) from stdin, plus which
+# commits are actual targets via ANON_GIT_ENTIREHISTORY/ANON_GIT_TARGET_COMMITS,
+# and tags every commit with a role:
+#   - 'target': one of the commits actually being rewritten.
+#   - 'anchor': not a target itself, but the one real commit immediately
+#     before or after a run of target commits in the full history -- kept
+#     at its own real date (never rewritten, never printed), used only to
+#     bound that run's random range so it can't cross into the anchor's
+#     side of history. A run at the very start/end of history simply has no
+#     anchor on that side (there's nothing there to bound it), same as
+#     --entire-history (where every commit is a target and no anchors exist
+#     at all).
+#   - everything else: irrelevant to any target's ordering, ignored.
+#
+# Commits are then grouped into buckets by whichever calendar unit stays
+# fixed (year for --random-month, year+month for --random-day, the exact
+# day for --random-time). Within a bucket, its members are walked in
+# original chronological order and split into maximal runs of consecutive
+# targets; each run draws that many random timestamps -- bounded by the
+# nearest in-bucket anchor's real epoch on either side, or the bucket's own
+# calendar edge where there's no closer anchor -- sorts them, and hands them
+# back to the run's commits in their original relative order. This is why
+# two target commits (in the same bucket, or in different ones -- the year,
+# and depending on flag month/day, is never touched, so an earlier bucket's
+# span never overlaps a later one's) always keep their original relative
+# order, and why a target run never sorts past a real, untouched neighbor
+# commit just outside the commits being rewritten in this run.
+#
+# Prints "<hash> <epoch> +0000" lines to stdout, targets only, for
+# python_commit_callback to look up by commit hash. Offset is always
+# +0000, matching how --keep-year/--keep-month/--keep-day already hardcode
+# +0000 for the parts they don't preserve, rather than leaking the original
+# timezone.
+#
+# Kept as a plain top-level assignment (not nested in a function), same as
+# python_commit_callback below: the test suite locates it by its exact,
+# unindented `python_compute_random_dates="` ... `"` line anchors to check
+# it's valid Python.
+python_compute_random_dates="
+import os
+import random
+import sys
+from collections import defaultdict
+from datetime import datetime, timedelta, timezone
+
+granularity = 'time-of-day'
+if os.environ.get('ANON_GIT_RANDOMMONTH') == '1':
+    granularity = 'month'
+elif os.environ.get('ANON_GIT_RANDOMDAY') == '1':
+    granularity = 'day-of-month'
+
+entirehistory = os.environ.get('ANON_GIT_ENTIREHISTORY') == '1'
+target_hashes = set(os.environ.get('ANON_GIT_TARGET_COMMITS', '').split())
+
+def bucket_bounds(dt):
+    # @param   <datetime.datetime>  UTC-aware original commit date
+    # @returns <tuple>              (bucket key, bucket start epoch, bucket end epoch)
+    if granularity == 'month':
+        key = (dt.year,)
+        start = datetime(dt.year, 1, 1, tzinfo=timezone.utc)
+        end = datetime(dt.year, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
+    elif granularity == 'day-of-month':
+        key = (dt.year, dt.month)
+        start = datetime(dt.year, dt.month, 1, tzinfo=timezone.utc)
+        if dt.month == 12:
+            next_month_start = datetime(dt.year + 1, 1, 1, tzinfo=timezone.utc)
+        else:
+            next_month_start = datetime(dt.year, dt.month + 1, 1, tzinfo=timezone.utc)
+        end = next_month_start - timedelta(seconds=1)
+    else:
+        key = (dt.year, dt.month, dt.day)
+        start = datetime(dt.year, dt.month, dt.day, tzinfo=timezone.utc)
+        end = start + timedelta(hours=23, minutes=59, seconds=59)
+    return key, int(start.timestamp()), int(end.timestamp())
+
+history = []
+for line in sys.stdin:
+    line = line.strip()
+    if not line:
+        continue
+    commit_hash, epoch_str = line.split()
+    history.append((commit_hash, int(epoch_str)))
+
+if entirehistory:
+    roles = ['target'] * len(history)
+else:
+    roles = []
+    for i, (commit_hash, _epoch) in enumerate(history):
+        if commit_hash in target_hashes:
+            roles.append('target')
+        else:
+            before_is_target = i > 0 and history[i - 1][0] in target_hashes
+            after_is_target = i + 1 < len(history) and history[i + 1][0] in target_hashes
+            roles.append('anchor' if (before_is_target or after_is_target) else 'skip')
+
+buckets = defaultdict(list)
+bounds = {}
+
+for (commit_hash, epoch), role in zip(history, roles):
+    if role == 'skip':
+        continue
+    dt = datetime.fromtimestamp(epoch, tz=timezone.utc)
+    key, start, end = bucket_bounds(dt)
+    buckets[key].append((epoch, commit_hash, role))
+    bounds[key] = (start, end)
+
+for key, members in buckets.items():
+    bucket_start, bucket_end = bounds[key]
+    members.sort()
+
+    i = 0
+    member_count = len(members)
+    lower = bucket_start
+    while i < member_count:
+        epoch, commit_hash, role = members[i]
+        if role == 'anchor':
+            lower = epoch + 1
+            i += 1
+            continue
+        run_start = i
+        while i < member_count and members[i][2] == 'target':
+            i += 1
+        run = members[run_start:i]
+        upper = members[i][0] - 1 if i < member_count else bucket_end
+        count = len(run)
+        span = upper - lower
+        if span < 0:
+            # The bounding anchors leave no room at all (e.g. two real
+            # commits one second apart with a target sandwiched between
+            # them). Fall back to a shared timestamp so relative order still
+            # holds (git accepts identical author dates on separate
+            # commits), even though true randomness isn't achievable here.
+            picks = [lower] * count
+        elif count <= span + 1:
+            picks = sorted(random.sample(range(lower, upper + 1), count))
+        else:
+            picks = sorted(random.randint(lower, upper) for _ in range(count))
+        for (_original_epoch, member_hash, _role), new_epoch in zip(run, picks):
+            print('%s %d +0000' % (member_hash, new_epoch))
+"
+
+# Internal: only runs when one of --random-time/--random-day/--random-month
+# is active. Feeds python_compute_random_dates the full history reachable
+# from HEAD (oldest to newest, one "<hash> <epoch>" line per commit -- the
+# same set git-filter-repo will walk via --refs HEAD) plus which of those
+# are actual targets, so it can bound each target run by its real
+# neighboring commit(s) and not just the target set in isolation. Produces
+# the "<hash> <epoch> +0000" lookup file python_commit_callback reads from
+# (see ANON_GIT_RANDOM_DATES_FILE in export_rewrite_env). random_dates_file
+# is the global the EXIT trap (cleanup_on_exit) removes.
+setup_random_dates() {
+    if [[ "$ANON_GIT_RANDOMTIME" != '1' && "$ANON_GIT_RANDOMDAY" != '1' && "$ANON_GIT_RANDOMMONTH" != '1' ]]; then
+        return
+    fi
+
+    random_dates_file=$(mktemp)
+
+    if ! git log --reverse --format='%H %at' HEAD |
+        ANON_GIT_RANDOMTIME="$ANON_GIT_RANDOMTIME" ANON_GIT_RANDOMDAY="$ANON_GIT_RANDOMDAY" ANON_GIT_RANDOMMONTH="$ANON_GIT_RANDOMMONTH" \
+            ANON_GIT_ENTIREHISTORY="$ANON_GIT_ENTIREHISTORY" ANON_GIT_TARGET_COMMITS="$ANON_GIT_COMMIT" \
+            python3 -c "$python_compute_random_dates" >"$random_dates_file"; then
+        printf 'Error: failed to compute randomized commit dates\n' >&2
+        exit 1
+    fi
 }
 
 # Kept as a plain top-level assignment (not nested in a function): the test
@@ -1026,10 +1294,27 @@ keepdate = os.environ['ANON_GIT_KEEPDATE'] == '1'
 keepyear = os.environ['ANON_GIT_KEEPYEAR'] == '1'
 keepmonth = os.environ['ANON_GIT_KEEPMONTH'] == '1'
 keepday = os.environ['ANON_GIT_KEEPDAY'] == '1'
+randomtime = os.environ['ANON_GIT_RANDOMTIME'] == '1'
+randomday = os.environ['ANON_GIT_RANDOMDAY'] == '1'
+randommonth = os.environ['ANON_GIT_RANDOMMONTH'] == '1'
 striptimezone = os.environ['ANON_GIT_STRIPTIMEZONE'] == '1'
 entirehistory = os.environ['ANON_GIT_ENTIREHISTORY'] == '1'
 dryrun = os.environ['ANON_GIT_DRYRUN'] == '1'
 dryrun_file = os.environ.get('ANON_GIT_DRYRUN_FILE', '')
+
+# Loaded once (module-level state persists across every commit-callback
+# invocation within this single git-filter-repo run) rather than re-read on
+# every commit, since setup_random_dates already precomputed the whole
+# lookup ahead of time.
+if 'RANDOM_DATES' not in globals():
+    RANDOM_DATES = {}
+    random_dates_file = os.environ.get('ANON_GIT_RANDOM_DATES_FILE', '')
+    if random_dates_file:
+        with open(random_dates_file, 'rb') as random_dates_fh:
+            for random_dates_line in random_dates_fh:
+                random_dates_parts = random_dates_line.split()
+                if len(random_dates_parts) == 3:
+                    RANDOM_DATES[random_dates_parts[0]] = b'%s %s' % (random_dates_parts[1], random_dates_parts[2])
 
 author_name = commit.author_name
 author_email = commit.author_email
@@ -1086,7 +1371,21 @@ if not keepuser:
     committer_email = email.encode()
 
 if not keepdate:
-    if keepyear or keepmonth or keepday:
+    if randomtime or randomday or randommonth:
+        # setup_random_dates already computed this commit's randomized date
+        # (bytes in the same epoch-then-offset shape parse_git_date expects),
+        # honoring the original relative order of every target commit within
+        # whatever calendar unit stays fixed (year/month/day depending on
+        # which of the three flags is set); just look it up by commit hash.
+        random_date = RANDOM_DATES.get(commit.original_id)
+        if random_date is None:
+            raise SystemExit(
+                'anon-git: no precomputed random date for commit %s' % commit.original_id.decode()
+            )
+        dt = parse_git_date(random_date)
+        ts = int(dt.timestamp())
+        offset = '+0000'
+    elif keepyear or keepmonth or keepday:
         # Strip the timezone (keeping the calendar date as the committer saw
         # it) and re-anchor to midnight UTC, so only the anonymized fields
         # (time, tz) leak; TZ=UTC above makes naive dt.timestamp() below UTC.
@@ -1219,6 +1518,7 @@ main() {
     backup_branch
     clean_cache
     setup_dryrun
+    setup_random_dates
     export_rewrite_env
     run_filter_repo
     print_result

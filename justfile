@@ -1,6 +1,6 @@
 SCRIPT := "anon-git.sh"
 TEST_SCRIPT := "tests/test_anon_git.sh"
-TEST_LIB_FILES := "tests/lib/common.sh tests/cases/core.sh tests/cases/validation.sh tests/cases/config_priority.sh tests/cases/install.sh tests/cases/flags.sh tests/cases/help.sh tests/cases/regression.sh"
+TEST_LIB_FILES := "tests/lib/common.sh tests/cases/core.sh tests/cases/validation.sh tests/cases/config_priority.sh tests/cases/install.sh tests/cases/flags.sh tests/cases/help.sh tests/cases/regression.sh tests/cases/random_dates.sh"
 TEST_COMPLETION_SCRIPT := "tests/test_anon_git_completion.sh"
 README := "README.md"
 
