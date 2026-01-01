@@ -80,7 +80,9 @@ test_completion_flags() {
 # Drives a real interactive shell via `expect` and checks TAB actually
 # completes a flag and a ref through the shipped scripts (unlike
 # test_completion_flags above, which only checks the scripts mention the
-# right strings). Matches "keep-user"/the ref name without a trailing space,
+# right strings). Types only a prefix, so the echoed input alone can't match.
+# Clears the line with Ctrl-U, not Ctrl-C: fish can drop a SIGINT that lands
+# mid-completion, while Ctrl-U is read in order with the following keys. Matches "keep-user"/the ref name without a trailing space,
 # since zsh wraps freshly-inserted text in bold escape codes that split up a
 # literal trailing-space match. Uses a dedicated git tag as the ref target so
 # this stays independent of how init_repo sets up the repo.
@@ -113,9 +115,8 @@ expect {
   "keep-user" {}
   timeout {exit 1}
 }
-send "\003"
-expect "${prompt}"
-send "./${SCRIPT_NAME} ${ref_marker}\t"
+send "\025"
+send "./${SCRIPT_NAME} ${ref_marker:0:20}\t"
 expect {
   "${ref_marker}" {}
   timeout {exit 1}
