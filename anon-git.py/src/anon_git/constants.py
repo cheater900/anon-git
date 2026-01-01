@@ -151,6 +151,10 @@ CONTROL_ESCAPES = {
 HOOK_MARKER = "# Installed by anon-git --install-hook"
 
 
+# rwxr-xr-x: git only runs executable hooks.
+HOOK_FILE_MODE = 0o755
+
+
 COMPLETION_FILES = {
     "bash": "anon-git.bash",
     "zsh": "_anon-git",

@@ -1,5 +1,20 @@
 """Long text blocks: --help output and the post-commit hook script."""
 
+# Filled by install_hook: {marker} is HOOK_MARKER, {interpreter} the
+# shell-quoted Python running anon-git.
+HOOK_HEADER = """#!/usr/bin/env bash
+{marker}
+#
+# Anonymizes the just-created commit (HEAD) after every `git commit`.
+# --no-backup avoids accumulating a branch per commit (use `git reflog`/
+# `git reset` to recover). --quiet drops the per-commit output; pass
+# --verbose to bring it back. Regenerate with: anon-git --install-hook
+
+set -e
+anon_git=({interpreter} -m anon_git)
+"""
+
+
 HOOK_BODY = """
 # The install this hook calls is gone (e.g. `uv tool uninstall anon-git`):
 # say so instead of failing every commit with a bare "No such file".

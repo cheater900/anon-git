@@ -4,8 +4,8 @@ import os
 import shlex
 import sys
 
-from anon_git.constants import HOOK_MARKER
-from anon_git.templates import HOOK_BODY
+from anon_git.constants import HOOK_FILE_MODE, HOOK_MARKER
+from anon_git.templates import HOOK_BODY, HOOK_HEADER
 from anon_git.utils.errors import fail
 from anon_git.utils.git import git, git_config_get, git_ok
 
@@ -63,20 +63,9 @@ def install_hook():
         )
     os.makedirs(os.path.dirname(hook_file), exist_ok=True)
     with open(hook_file, "w", encoding="utf-8") as fh:
-        fh.write(
-            "#!/usr/bin/env bash\n"
-            f"{HOOK_MARKER}\n"
-            "#\n"
-            "# Anonymizes the just-created commit (HEAD) after every `git commit`.\n"
-            "# --no-backup avoids accumulating a branch per commit (use `git reflog`/\n"
-            "# `git reset` to recover). --quiet drops the per-commit output; pass\n"
-            "# --verbose to bring it back. Regenerate with: anon-git --install-hook\n"
-            "\n"
-            "set -e\n"
-            f"anon_git=({shlex.quote(sys.executable)} -m anon_git)\n"
-            f"{HOOK_BODY}"
-        )
-    os.chmod(hook_file, 0o755)
+        fh.write(HOOK_HEADER.format(marker=HOOK_MARKER, interpreter=shlex.quote(sys.executable)))
+        fh.write(HOOK_BODY)
+    os.chmod(hook_file, HOOK_FILE_MODE)
     print(f"Installed post-commit hook: {hook_file}")
     sys.exit(0)
 
