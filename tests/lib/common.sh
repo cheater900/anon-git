@@ -28,11 +28,17 @@ TESTS_PASSED=0
 TESTS_FAILED=0
 TOTAL_ERRORS=0
 
-DEFAULT_DATE=$(grep '^DEFAULT_DATE=' "$SCRIPT" | sed -e "s/DEFAULT_DATE='//" -e "s/'\$//")
-DEFAULT_NAME=$(grep '^DEFAULT_NAME=' "$SCRIPT" | sed -e "s/DEFAULT_NAME='//" -e "s/'\$//")
-DEFAULT_EMAIL=$(grep '^DEFAULT_EMAIL=' "$SCRIPT" | sed -e "s/DEFAULT_EMAIL='//" -e "s/'\$//")
-DEFAULT_KEEPUSER=$(sed -n "s/^ *DEFAULT_KEEPUSER='\(.*\)'$/\1/p" "$SCRIPT")
-DEFAULT_KEEPDATE=$(sed -n "s/^ *DEFAULT_KEEPDATE='\(.*\)'$/\1/p" "$SCRIPT")
+script_default() {
+    # $1: option name. Prints DEFAULT_$1, read by sourcing the script in a
+    # subshell (main is skipped when sourced).
+    bash -c 'source "$1" && printf "%s" "${!2}"' _ "$SCRIPT" "DEFAULT_$1"
+}
+
+DEFAULT_DATE=$(script_default DATE)
+DEFAULT_NAME=$(script_default NAME)
+DEFAULT_EMAIL=$(script_default EMAIL)
+DEFAULT_KEEPUSER=$(script_default KEEPUSER)
+DEFAULT_KEEPDATE=$(script_default KEEPDATE)
 
 init_repo() {
     git init >/dev/null

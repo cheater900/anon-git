@@ -1460,4 +1460,7 @@ main() {
     print_result
 }
 
-main "$@"
+# Skipped when sourced, so the test suite can read DEFAULT_* directly.
+if [[ "${BASH_SOURCE[0]:-$0}" == "$0" ]]; then
+    main "$@"
+fi
