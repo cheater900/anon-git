@@ -45,6 +45,8 @@ _anon_git() {
         '--current-branch[Overwrite current branch instead of creating a copy]' \
         '--entire-history[Rewrite entire history and not a single commit]' \
         '--dry-run[Show history changes without rewriting it]' \
+        '--quiet[Suppress informational output (errors still print)]' \
+        '--verbose[Force informational output, overriding --quiet/ANON_GIT_QUIET/config]' \
         '--print-completion=[Print a shell completion script and exit]:shell:(bash zsh fish)' \
         '--install[Copy this script to ~/.local/bin and/or ~/.bin, whichever exist]' \
         '--install-system[Copy this script system-wide to /usr/bin via sudo]' \

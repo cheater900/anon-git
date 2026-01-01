@@ -16,6 +16,7 @@ DEFAULT_KEEPDAY='0'
 DEFAULT_ENTIREHISTORY='0'
 DEFAULT_CURRENTBRANCH='0'
 DEFAULT_DRYRUN='0'
+DEFAULT_QUIET='0'
 
 # ──────────────────────────────────────────────────────────────────────
 # HELP
@@ -47,6 +48,9 @@ Options:
   --current-branch                Overwrite current branch instead of creating a copy of it
   --entire-history                Rewrite entire history and not a single commit
   --dry-run                       Show history changes without rewriting it
+  --quiet                         Suppress informational output (errors/safety warnings still print)
+  --verbose                       Force informational output, overriding --quiet,
+                                   ANON_GIT_QUIET, or a repo-local quiet config
   --print-completion [SHELL]      Print a shell completion script (bash, zsh, or fish;
                                    defaults to \$SHELL) and exit
   --install                        Copy this script to ~/.local/bin and/or ~/.bin
@@ -65,8 +69,11 @@ Priority (highest to lowest):
   1. Command-line flags (--date, --name, --email, --keep-user, --keep-date, ...)
   2. Environment variables (ANON_GIT_DATE, ANON_GIT_NAME, ANON_GIT_EMAIL, ANON_GIT_KEEPUSER,
      ANON_GIT_KEEPDATE, ANON_GIT_KEEPYEAR, ANON_GIT_KEEPMONTH, ANON_GIT_KEEPDAY,
-     ANON_GIT_ENTIREHISTORY, ANON_GIT_CURRENTBRANCH, ANON_GIT_DRYRUN)
+     ANON_GIT_ENTIREHISTORY, ANON_GIT_CURRENTBRANCH, ANON_GIT_DRYRUN, ANON_GIT_QUIET)
   3. Hardcoded defaults (${DEFAULT_NAME} <${DEFAULT_EMAIL}>)
+
+Note: --verbose has no ANON_GIT_VERBOSE environment variable; it is a
+      CLI-only override that forces informational output back on.
 
 Examples:
     # Anonymize current HEAD with defaults
@@ -86,6 +93,12 @@ Examples:
 
     # Preview what would change before actually rewriting anything
     ./anon-git.sh --dry-run HEAD~2
+
+    # Silence informational output (only errors print)
+    ./anon-git.sh --quiet HEAD
+
+    # Force informational output back on, overriding a quiet default
+    ./anon-git.sh --verbose HEAD
 
     # Anonymize the last 10 commits using shell expansion (works in bash and zsh)
     ./anon-git.sh HEAD~{0..9}
@@ -144,6 +157,8 @@ list_flags() {
 --current-branch
 --entire-history
 --dry-run
+--quiet
+--verbose
 --print-completion=
 --install
 --install-system
@@ -283,7 +298,9 @@ HOOK_MARKER='# Installed by anon-git --install-hook'
 # per-commit backup branch would otherwise accumulate one extra branch per
 # commit forever (this fires on *every* commit, unlike a manual run); `git
 # reflog`/`git reset` still recover the pre-hook state if something goes
-# wrong, per the README.
+# wrong, per the README. Also passes --quiet: without it, every `git commit`
+# would print "Anonymizing commit(s): ..." / "Done." on top of git's own
+# commit summary.
 install_hook() {
     local git_dir hooks_dir hook_file src
 
@@ -310,10 +327,12 @@ $HOOK_MARKER
 # Anonymizes the just-created commit (HEAD) after every \`git commit\`.
 # --no-backup: this runs on every commit, so a per-commit backup branch
 # would accumulate forever; use \`git reflog\`/\`git reset\` to recover if
-# needed. Regenerate with: $src --install-hook
+# needed. --quiet: silences the per-commit "Anonymizing commit(s): ..." /
+# "Done." output; drop it (or pass --verbose) if you want that back.
+# Regenerate with: $src --install-hook
 
 set -e
-"$src" --no-confirm --no-backup --current-branch HEAD
+"$src" --no-confirm --no-backup --quiet --current-branch HEAD
 EOF
     chmod +x "$hook_file"
     printf 'Installed post-commit hook: %s\n' "$hook_file"
@@ -380,6 +399,8 @@ parse_args() {
     DRYRUN_ARG=""
     ENTIREHISTORY_ARG=""
     CURRENTBRANCH_ARG=""
+    QUIET_ARG=""
+    VERBOSE_ARG=""
     COMMIT_ARG=""
     COMMITS_ARG=()
 
@@ -447,6 +468,14 @@ parse_args() {
             ;;
         --dry-run)
             DRYRUN_ARG='1'
+            shift
+            ;;
+        --quiet)
+            QUIET_ARG='1'
+            shift
+            ;;
+        --verbose)
+            VERBOSE_ARG='1'
             shift
             ;;
         -*)
@@ -524,6 +553,11 @@ reject_incompatible_options() {
     # The commit(s) argument is CLI-only (there is no ANON_GIT_COMMIT env var
     # users are meant to set), so this one stays flag-vs-flag.
     check_incompatible "commit(s) argument" "$COMMIT_ARG" --entire-history "$ENTIREHISTORY_ARG"
+    # --verbose is a CLI-only override for ANON_GIT_QUIET/a repo-local quiet
+    # config (see merge_args_with_defaults), so this stays flag-vs-flag too:
+    # `ANON_GIT_QUIET=1 --verbose` is the intended way to un-silence a quiet
+    # default for one run, not a conflict to reject.
+    check_incompatible --quiet "$QUIET_ARG" --verbose "$VERBOSE_ARG"
 
     [[ "$flag_errors" -ne 0 ]] && exit 1
     return 0
@@ -546,6 +580,12 @@ merge_args_with_defaults() {
     ANON_GIT_CURRENTBRANCH="${CURRENTBRANCH_ARG:-${ANON_GIT_CURRENTBRANCH:-${DEFAULT_CURRENTBRANCH}}}"
     ANON_GIT_COMMIT="${COMMIT_ARG:-${DEFAULT_COMMIT}}"
     ANON_GIT_DRYRUN="${DRYRUN_ARG:-${ANON_GIT_DRYRUN:-${DEFAULT_DRYRUN}}}"
+    ANON_GIT_QUIET="${QUIET_ARG:-${ANON_GIT_QUIET:-${DEFAULT_QUIET}}}"
+    # --verbose always wins, regardless of what set ANON_GIT_QUIET above (flag,
+    # envvar, or default): it exists specifically to force output back on.
+    if [[ "$VERBOSE_ARG" == '1' ]]; then
+        ANON_GIT_QUIET='0'
+    fi
 }
 
 # Internal: without an explicit commit target or --entire-history there is
@@ -579,6 +619,7 @@ validate_final_options() {
     validate_bool ANON_GIT_ENTIREHISTORY "$ANON_GIT_ENTIREHISTORY"
     validate_bool ANON_GIT_CURRENTBRANCH "$ANON_GIT_CURRENTBRANCH"
     validate_bool ANON_GIT_DRYRUN "$ANON_GIT_DRYRUN"
+    validate_bool ANON_GIT_QUIET "$ANON_GIT_QUIET"
 }
 
 # Prints a short summary of what's about to happen, gated on which flags
@@ -586,6 +627,9 @@ validate_final_options() {
 # so setting e.g. ANON_GIT_KEEPUSER in your shell profile doesn't spam this
 # on every run.
 verbose_info() {
+    if [[ "$ANON_GIT_QUIET" == '1' ]]; then
+        return
+    fi
     if [[ -z "$ENTIREHISTORY_ARG" ]]; then
         local short_commit
         short_commit=$(echo "$ANON_GIT_COMMIT" | xargs -n 1 git rev-parse --short | tr '\n' ' ')
@@ -616,7 +660,7 @@ verbose_info() {
 # unless --no-backup) before rewriting, so the pre-rewrite history stays
 # reachable. No-op under --dry-run, since nothing is rewritten.
 backup_branch() {
-    local current_branch branch_label timestamp new_branch backup_branch_name
+    local current_branch branch_label timestamp new_branch backup_branch_name switch_target
 
     current_branch=$(git branch --show-current)
     if [[ -z "$current_branch" && "$ANON_GIT_CURRENTBRANCH" == '1' ]]; then
@@ -634,21 +678,34 @@ backup_branch() {
     if [[ "$ANON_GIT_DRYRUN" != '1' ]]; then
         if [[ "$ANON_GIT_CURRENTBRANCH" != '1' ]]; then
             new_branch="${branch_label}_anonymized_${timestamp}"
-            if ! git switch --create "$new_branch"; then
+            # --quiet: also silences git switch's own "Switched to a new
+            # branch '...'" line (git prints it to stderr); the printfs below
+            # already say the same thing, so nothing informative is lost.
+            switch_target='/dev/stderr'
+            if [[ "$ANON_GIT_QUIET" == '1' ]]; then
+                switch_target='/dev/null'
+            fi
+            if ! git switch --create "$new_branch" 2>"$switch_target"; then
                 printf 'Error: failed to create branch %s\n' "$new_branch" >&2
                 exit 1
             fi
-            printf 'Created new branch %s from %s\n' "$new_branch" "$branch_label"
-            printf 'Using branch %s to rewrite commits.\n' "$new_branch"
+            if [[ "$ANON_GIT_QUIET" != '1' ]]; then
+                printf 'Created new branch %s from %s\n' "$new_branch" "$branch_label"
+                printf 'Using branch %s to rewrite commits.\n' "$new_branch"
+            fi
         elif [[ "$NOBACKUP_ARG" != "1" ]]; then
             backup_branch_name="${branch_label}_backup_${timestamp}"
             if ! git branch "${backup_branch_name}"; then
                 printf 'Error: failed to create backup branch %s\n' "$backup_branch_name" >&2
                 exit 1
             fi
-            printf 'Created backup branch %s from %s\n' "$backup_branch_name" "$branch_label"
-            printf 'Using branch %s to rewrite commits\n' "$branch_label"
+            if [[ "$ANON_GIT_QUIET" != '1' ]]; then
+                printf 'Created backup branch %s from %s\n' "$backup_branch_name" "$branch_label"
+                printf 'Using branch %s to rewrite commits\n' "$branch_label"
+            fi
         else
+            # Not gated by --quiet: this is a data-loss warning, not routine
+            # informational output, so it stays visible even when quiet.
             printf 'WARNING! Overwriting existing branch %s without backup!\n' "$branch_label"
         fi
     fi
@@ -879,7 +936,7 @@ print_result() {
         local pager=${PAGER:-cat}
         command "$pager" "$dryrun_file"
         rm -f "$dryrun_file"
-    else
+    elif [[ "$ANON_GIT_QUIET" != '1' ]]; then
         printf 'Done. History has been rewritten.\n'
     fi
 }

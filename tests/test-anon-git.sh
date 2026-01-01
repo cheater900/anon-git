@@ -1252,6 +1252,104 @@ test_flag_no_backup() {
     record_result "$errors" 'flag --no-backup skips backup branch'
 }
 
+test_flag_quiet() {
+    # --quiet must suppress the informational "Anonymizing commit(s): ..." /
+    # "Created new branch ..." / "Done." output but still rewrite the commit
+    # and exit successfully. Uses the default (new-branch) code path with
+    # --no-backup dropped, since --current-branch --no-backup prints a
+    # "WARNING! Overwriting ... without backup!" safety warning that --quiet
+    # deliberately does not suppress.
+    local original_branch new_branch_name output exit_status errors=0
+
+    original_branch=$(git branch --show-current)
+
+    output=$(./${SCRIPT_NAME} --no-confirm --quiet --name 'Ken Thompson' HEAD 2>&1)
+    exit_status=$?
+
+    if [[ "$exit_status" -ne 0 ]]; then
+        printf 'Error: --quiet run exited with status %s\n' "$exit_status"
+        errors=$((errors + 1))
+    fi
+    if [[ -n "$output" ]]; then
+        printf 'Error: --quiet produced output: %s\n' "$output"
+        errors=$((errors + 1))
+    fi
+
+    new_branch_name=$(git branch --format='%(refname:short)' | grep "^${original_branch}_anonymized_" | tail -1)
+    if [[ -z "$new_branch_name" ]]; then
+        printf 'Error: --quiet did not still rewrite the commit onto a new branch\n'
+        errors=$((errors + 1))
+    elif [[ "$(git show -s --format='%an' "$new_branch_name")" != 'Ken Thompson' ]]; then
+        printf 'Error: --quiet did not still rewrite the commit\n'
+        errors=$((errors + 1))
+    fi
+
+    git switch "$original_branch" >/dev/null 2>&1
+    [[ -n "$new_branch_name" ]] && git branch -D "$new_branch_name" >/dev/null 2>&1
+
+    record_result "$errors" 'flag --quiet suppresses informational output'
+}
+
+test_flag_verbose_overrides_env_quiet() {
+    # --verbose is a CLI-only override that must win over ANON_GIT_QUIET=1,
+    # forcing the informational output back on for that one run.
+    local output exit_status errors=0
+
+    output=$(ANON_GIT_QUIET=1 ./${SCRIPT_NAME} --no-confirm --no-backup --current-branch --verbose --name 'Dennis Ritchie' HEAD 2>&1)
+    exit_status=$?
+
+    if [[ "$exit_status" -ne 0 ]]; then
+        printf 'Error: --verbose run exited with status %s\n' "$exit_status"
+        errors=$((errors + 1))
+    fi
+    if ! grep -q 'Anonymizing commit' <<<"$output"; then
+        printf 'Error: --verbose did not override ANON_GIT_QUIET=1\n'
+        errors=$((errors + 1))
+    fi
+
+    record_result "$errors" 'flag --verbose overrides ANON_GIT_QUIET=1'
+}
+
+test_catch_incompatible_quiet_verbose() {
+    local before after exit_status errors=0
+
+    before=$(git rev-parse HEAD)
+    ./${SCRIPT_NAME} --no-confirm --no-backup --quiet --verbose HEAD >/dev/null 2>&1
+    exit_status=$?
+    after=$(git rev-parse HEAD)
+
+    if [[ "$exit_status" -eq 0 ]]; then
+        printf 'Error: --quiet --verbose did not fail as expected\n'
+        errors=$((errors + 1))
+    fi
+    if [[ "$before" != "$after" ]]; then
+        printf 'Error: repository was modified despite incompatible --quiet --verbose\n'
+        errors=$((errors + 1))
+    fi
+
+    record_result "$errors" 'catch incompatible --quiet --verbose'
+}
+
+test_flag_install_hook_quiet() {
+    # The generated post-commit hook must pass --quiet, so it doesn't spam
+    # "Anonymizing commit(s): ..." / "Done." on every git commit.
+    local repo_dir hook_file errors=0
+
+    repo_dir=$(new_hook_test_repo)
+    hook_file="${repo_dir}/.git/hooks/post-commit"
+
+    (cd "$repo_dir" && "./${SCRIPT_NAME}" --install-hook >/dev/null 2>&1)
+
+    if ! grep -q -- '--quiet' "$hook_file"; then
+        printf 'Error: generated hook does not pass --quiet\n'
+        errors=$((errors + 1))
+    fi
+
+    rm -rf "$repo_dir"
+
+    record_result "$errors" 'flag --install-hook generates a hook that passes --quiet'
+}
+
 test_flag_no_confirm() {
     # Without --no-confirm the script must prompt for confirmation:
     # declining (n) must abort with no changes, accepting (y) must proceed.
@@ -1670,6 +1768,10 @@ main() {
     test_flag_missing_value --email
     test_flag_new_branch
     test_flag_no_backup
+    test_flag_quiet
+    test_flag_verbose_overrides_env_quiet
+    test_catch_incompatible_quiet_verbose
+    test_flag_install_hook_quiet
     test_flag_no_confirm
     test_noconfirm_executes_first
     test_flag_unknown

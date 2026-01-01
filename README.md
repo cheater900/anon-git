@@ -119,6 +119,9 @@ required — pass `HEAD` explicitly to anonymize the last commit.
   --entire-history                Rewrite entire history and not a single commit
   --current-branch                Overwrite current branch and not a copy of it
   --dry-run                       Show history changes without rewriting them
+  --quiet                         Suppress informational output (errors/safety warnings still print)
+  --verbose                       Force informational output, overriding --quiet,
+                                   ANON_GIT_QUIET, or a repo-local quiet config
   --print-completion [SHELL]      Print a shell completion script (bash, zsh, or fish;
                                    defaults to $SHELL) and exit
   --install                        Copy this script to ~/.local/bin and/or ~/.bin
@@ -131,8 +134,10 @@ required — pass `HEAD` explicitly to anonymize the last commit.
 **Priority order** (highest to lowest):
 
 1. Command-line flags
-2. Environment variables (`ANON_GIT_DATE`, `ANON_GIT_NAME`, `ANON_GIT_EMAIL`, `ANON_GIT_KEEPUSER`, `ANON_GIT_KEEPDATE`, `ANON_GIT_KEEPYEAR`, `ANON_GIT_KEEPMONTH`, `ANON_GIT_KEEPDAY`, `ANON_GIT_ENTIREHISTORY`, `ANON_GIT_CURRENTBRANCH`, `ANON_GIT_DRYRUN`)
+2. Environment variables (`ANON_GIT_DATE`, `ANON_GIT_NAME`, `ANON_GIT_EMAIL`, `ANON_GIT_KEEPUSER`, `ANON_GIT_KEEPDATE`, `ANON_GIT_KEEPYEAR`, `ANON_GIT_KEEPMONTH`, `ANON_GIT_KEEPDAY`, `ANON_GIT_ENTIREHISTORY`, `ANON_GIT_CURRENTBRANCH`, `ANON_GIT_DRYRUN`, `ANON_GIT_QUIET`)
 3. Hardcoded defaults
+
+`--verbose` has no `ANON_GIT_VERBOSE` environment variable equivalent; it's a CLI-only override that forces informational output back on for one run, regardless of what set `ANON_GIT_QUIET` (flag, envvar, or a repo-local quiet config).
 
 > [!WARNING]
 > `--name`, `--email` and `--date` (and their `ANON_GIT_*` environment variable
@@ -165,6 +170,12 @@ required — pass `HEAD` explicitly to anonymize the last commit.
 
 # Keep the commit's day (and month/year) but scrub the time-of-day and timezone
 ./anon-git.sh --keep-day HEAD~2
+
+# Silence informational output (only errors print)
+./anon-git.sh --quiet HEAD
+
+# Force informational output back on, overriding a quiet default
+./anon-git.sh --verbose HEAD
 
 # Use environment variables instead of flags (handy for hooks/CI)
 ANON_GIT_NAME="Anon" ANON_GIT_EMAIL="anon@localhost" ./anon-git.sh --keep-date HEAD
@@ -213,7 +224,7 @@ To automatically anonymize every new commit in the *current* repository, install
 ./anon-git.sh --install-hook
 ```
 
-This writes `.git/hooks/post-commit`, which anonymizes only the commit you just made (`HEAD`), using `--current-branch --no-backup` so it rewrites in place rather than creating a new branch (or a backup branch) after every commit — the hook fires on *every* commit, so a per-commit backup branch would otherwise accumulate forever; `git reflog`/`git reset` still recover the pre-hook state if something goes wrong. Re-running `--install-hook` safely refreshes a hook it created, but refuses to overwrite a pre-existing hook it didn't write (remove or back that one up first). See [Using anon-git as a post-commit hook](#using-anon-git-as-a-post-commit-hook) below to customize the flags it runs with instead.
+This writes `.git/hooks/post-commit`, which anonymizes only the commit you just made (`HEAD`), using `--current-branch --no-backup --quiet` so it rewrites in place rather than creating a new branch (or a backup branch) after every commit, and doesn't print "Anonymizing commit(s): ..." / "Done." on top of git's own commit summary — the hook fires on *every* commit, so a per-commit backup branch (or message) would otherwise accumulate/spam forever; `git reflog`/`git reset` still recover the pre-hook state if something goes wrong. Re-running `--install-hook` safely refreshes a hook it created, but refuses to overwrite a pre-existing hook it didn't write (remove or back that one up first). See [Using anon-git as a post-commit hook](#using-anon-git-as-a-post-commit-hook) below to customize the flags it runs with instead.
 
 ### Shell completion
 
@@ -278,7 +289,9 @@ You can automatically anonymize **every new commit right after** you run `git co
    # IMPORTANT: Customize flags/environment variables here before running it!
    # --no-backup: this hook runs on every commit, so a per-commit backup
    # branch would accumulate forever; drop it if you'd rather have one.
-   "$SCRIPT" --no-confirm --no-backup --current-branch HEAD
+   # --quiet: silences the per-commit "Anonymizing commit(s): ..." / "Done."
+   # output; drop it (or pass --verbose) if you want that back.
+   "$SCRIPT" --no-confirm --no-backup --quiet --current-branch HEAD
 
    # Optional: show what changed
    echo "Last commit anonymized:"
