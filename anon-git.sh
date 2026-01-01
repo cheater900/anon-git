@@ -87,10 +87,15 @@ Priority (highest to lowest):
   2. Environment variables (ANON_GIT_DATE, ANON_GIT_NAME, ANON_GIT_EMAIL, ANON_GIT_KEEPUSER,
      ANON_GIT_KEEPDATE, ANON_GIT_KEEPYEAR, ANON_GIT_KEEPMONTH, ANON_GIT_KEEPDAY,
      ANON_GIT_ENTIREHISTORY, ANON_GIT_CURRENTBRANCH, ANON_GIT_DRYRUN, ANON_GIT_QUIET)
-  3. Hardcoded defaults (${DEFAULT_NAME} <${DEFAULT_EMAIL}>)
+  3. Repo-local git config (git config anon-git.name, anon-git.email, anon-git.date,
+     anon-git.keepuser, anon-git.keepdate, anon-git.keepyear, anon-git.keepmonth,
+     anon-git.keepday, anon-git.quiet — --entire-history/--current-branch/--dry-run
+     have no config equivalent, flag/envvar only)
+  4. Hardcoded defaults (${DEFAULT_NAME} <${DEFAULT_EMAIL}>)
 
-Note: --verbose has no ANON_GIT_VERBOSE environment variable; it is a
-      CLI-only override that forces informational output back on.
+Note: --verbose has no ANON_GIT_VERBOSE environment variable or config
+      equivalent; it is a CLI-only override that forces informational
+      output back on for one run.
 
 Examples:
     # Anonymize current HEAD with defaults
@@ -116,6 +121,12 @@ Examples:
 
     # Force informational output back on, overriding a quiet default
     ./anon-git.sh --verbose HEAD
+
+    # Pin this repo's own defaults instead of passing flags/envvars every time
+    git config anon-git.name "Anon"
+    git config anon-git.email "anon@localhost"
+    git config anon-git.quiet true
+    ./anon-git.sh HEAD
 
     # Anonymize the last 10 commits using shell expansion (works in bash and zsh)
     ./anon-git.sh HEAD~{0..9}
@@ -399,6 +410,50 @@ safety_checks() {
     fi
 }
 
+# Internal: reads a single boolean repo-local config key (git config
+# anon-git.<key>) and prints it normalized to '1'/'0' (matching the
+# ANON_GIT_* envvar contract), or prints nothing if the key is unset. A value
+# git can't parse as a boolean is treated as a hard error rather than
+# silently ignored, since a typo'd repo config should not fail open.
+read_git_config_bool() {
+    local key="$1" raw
+    raw=$(git config --get "$key" 2>/dev/null || true)
+
+    if [[ -z "$raw" ]]; then
+        printf ''
+        return 0
+    fi
+
+    case "$raw" in
+    true | yes | on | 1) printf '1' ;;
+    false | no | off | 0) printf '0' ;;
+    *)
+        printf 'Error: git config %s has an invalid boolean value "%s" (expected true/false)\n' "$key" "$raw" >&2
+        exit 1
+        ;;
+    esac
+}
+
+# Reads repo-local defaults from `git config anon-git.*` into the GITCONFIG_*
+# globals that merge_args_with_defaults consults between ANON_GIT_* envvars
+# and the hardcoded DEFAULT_* fallbacks (see README's "Repo-local config"
+# section). Deliberately scoped to name/email/date/keep-*/quiet — the
+# settings that make sense to pin per-repo; --entire-history,
+# --current-branch and --dry-run stay flag/envvar-only, since a silently
+# configured default for any of those would be far more destructive than a
+# wrong name or email.
+read_git_config() {
+    GITCONFIG_NAME=$(git config --get anon-git.name 2>/dev/null || true)
+    GITCONFIG_EMAIL=$(git config --get anon-git.email 2>/dev/null || true)
+    GITCONFIG_DATE=$(git config --get anon-git.date 2>/dev/null || true)
+    GITCONFIG_KEEPUSER=$(read_git_config_bool anon-git.keepuser)
+    GITCONFIG_KEEPDATE=$(read_git_config_bool anon-git.keepdate)
+    GITCONFIG_KEEPYEAR=$(read_git_config_bool anon-git.keepyear)
+    GITCONFIG_KEEPMONTH=$(read_git_config_bool anon-git.keepmonth)
+    GITCONFIG_KEEPDAY=$(read_git_config_bool anon-git.keepday)
+    GITCONFIG_QUIET=$(read_git_config_bool anon-git.quiet)
+}
+
 # Internal: parses "$@" into the *_ARG globals RESOLVE ARGS later merges with
 # ANON_GIT_* envvars and the DEFAULT_* fallbacks. Empty string means "not
 # provided via flag" throughout the rest of the script.
@@ -527,23 +582,25 @@ check_incompatible() {
 }
 
 # Rejects mutually-exclusive option combinations regardless of whether each
-# side was provided via CLI flag or its ANON_GIT_* environment variable
-# equivalent — so e.g. `ANON_GIT_KEEP_USER=1 ANON_GIT_NAME=X` is rejected the
-# same way `--keep-user --name X` is, instead of silently letting one win.
-# Must run before RESOLVE ARGS overwrites these env var names with the
-# fully-resolved value (default included), so an unset env var reads as
-# empty and a hardcoded default never counts as "provided". Booleans only
-# count as provided when explicitly '1' (the "0 or 1" contract validate_bool
-# enforces later); string options count as provided whenever non-empty.
+# side was provided via CLI flag, its ANON_GIT_* environment variable
+# equivalent, or repo-local `git config anon-git.*` — so e.g.
+# `ANON_GIT_KEEP_USER=1 ANON_GIT_NAME=X` and a repo with both `anon-git.keepuser`
+# and `anon-git.name` configured are rejected the same way `--keep-user --name X`
+# is, instead of silently letting one win. Must run before RESOLVE ARGS
+# overwrites these env var names with the fully-resolved value (default
+# included), so an unset env var reads as empty and a hardcoded default never
+# counts as "provided". Booleans only count as provided when explicitly '1'
+# (the "0 or 1" contract validate_bool enforces later); string options count
+# as provided whenever non-empty.
 reject_incompatible_options() {
     local date_set name_set email_set
     local keepuser_set keepdate_set keepyear_set keepmonth_set keepday_set
 
     flag_errors=0
 
-    date_set="${DATE_ARG:-${ANON_GIT_DATE:-}}"
-    name_set="${NAME_ARG:-${ANON_GIT_NAME:-}}"
-    email_set="${EMAIL_ARG:-${ANON_GIT_EMAIL:-}}"
+    date_set="${DATE_ARG:-${ANON_GIT_DATE:-${GITCONFIG_DATE:-}}}"
+    name_set="${NAME_ARG:-${ANON_GIT_NAME:-${GITCONFIG_NAME:-}}}"
+    email_set="${EMAIL_ARG:-${ANON_GIT_EMAIL:-${GITCONFIG_EMAIL:-}}}"
     keepuser_set="$KEEPUSER_ARG"
     keepdate_set="$KEEPDATE_ARG"
     keepyear_set="$KEEPYEAR_ARG"
@@ -554,6 +611,11 @@ reject_incompatible_options() {
     [[ "${ANON_GIT_KEEPYEAR:-}" == '1' ]] && keepyear_set='1'
     [[ "${ANON_GIT_KEEPMONTH:-}" == '1' ]] && keepmonth_set='1'
     [[ "${ANON_GIT_KEEPDAY:-}" == '1' ]] && keepday_set='1'
+    [[ "${GITCONFIG_KEEPUSER:-}" == '1' ]] && keepuser_set='1'
+    [[ "${GITCONFIG_KEEPDATE:-}" == '1' ]] && keepdate_set='1'
+    [[ "${GITCONFIG_KEEPYEAR:-}" == '1' ]] && keepyear_set='1'
+    [[ "${GITCONFIG_KEEPMONTH:-}" == '1' ]] && keepmonth_set='1'
+    [[ "${GITCONFIG_KEEPDAY:-}" == '1' ]] && keepday_set='1'
 
     check_incompatible --keep-user "$keepuser_set" --name "$name_set"
     check_incompatible --keep-user "$keepuser_set" --email "$email_set"
@@ -585,21 +647,22 @@ reject_incompatible_options() {
 # the backup/rewrite logic, and the Python commit-callback's environment).
 merge_args_with_defaults() {
     DEFAULT_COMMIT=$(git rev-parse HEAD)
-    ANON_GIT_DATE="${DATE_ARG:-${ANON_GIT_DATE:-${DEFAULT_DATE}}}"
-    ANON_GIT_NAME="${NAME_ARG:-${ANON_GIT_NAME:-${DEFAULT_NAME}}}"
-    ANON_GIT_EMAIL="${EMAIL_ARG:-${ANON_GIT_EMAIL:-${DEFAULT_EMAIL}}}"
-    ANON_GIT_KEEPUSER="${KEEPUSER_ARG:-${ANON_GIT_KEEPUSER:-${DEFAULT_KEEPUSER}}}"
-    ANON_GIT_KEEPDATE="${KEEPDATE_ARG:-${ANON_GIT_KEEPDATE:-${DEFAULT_KEEPDATE}}}"
-    ANON_GIT_KEEPYEAR="${KEEPYEAR_ARG:-${ANON_GIT_KEEPYEAR:-${DEFAULT_KEEPYEAR}}}"
-    ANON_GIT_KEEPMONTH="${KEEPMONTH_ARG:-${ANON_GIT_KEEPMONTH:-${DEFAULT_KEEPMONTH}}}"
-    ANON_GIT_KEEPDAY="${KEEPDAY_ARG:-${ANON_GIT_KEEPDAY:-${DEFAULT_KEEPDAY}}}"
+    ANON_GIT_DATE="${DATE_ARG:-${ANON_GIT_DATE:-${GITCONFIG_DATE:-${DEFAULT_DATE}}}}"
+    ANON_GIT_NAME="${NAME_ARG:-${ANON_GIT_NAME:-${GITCONFIG_NAME:-${DEFAULT_NAME}}}}"
+    ANON_GIT_EMAIL="${EMAIL_ARG:-${ANON_GIT_EMAIL:-${GITCONFIG_EMAIL:-${DEFAULT_EMAIL}}}}"
+    ANON_GIT_KEEPUSER="${KEEPUSER_ARG:-${ANON_GIT_KEEPUSER:-${GITCONFIG_KEEPUSER:-${DEFAULT_KEEPUSER}}}}"
+    ANON_GIT_KEEPDATE="${KEEPDATE_ARG:-${ANON_GIT_KEEPDATE:-${GITCONFIG_KEEPDATE:-${DEFAULT_KEEPDATE}}}}"
+    ANON_GIT_KEEPYEAR="${KEEPYEAR_ARG:-${ANON_GIT_KEEPYEAR:-${GITCONFIG_KEEPYEAR:-${DEFAULT_KEEPYEAR}}}}"
+    ANON_GIT_KEEPMONTH="${KEEPMONTH_ARG:-${ANON_GIT_KEEPMONTH:-${GITCONFIG_KEEPMONTH:-${DEFAULT_KEEPMONTH}}}}"
+    ANON_GIT_KEEPDAY="${KEEPDAY_ARG:-${ANON_GIT_KEEPDAY:-${GITCONFIG_KEEPDAY:-${DEFAULT_KEEPDAY}}}}"
     ANON_GIT_ENTIREHISTORY="${ENTIREHISTORY_ARG:-${ANON_GIT_ENTIREHISTORY:-${DEFAULT_ENTIREHISTORY}}}"
     ANON_GIT_CURRENTBRANCH="${CURRENTBRANCH_ARG:-${ANON_GIT_CURRENTBRANCH:-${DEFAULT_CURRENTBRANCH}}}"
     ANON_GIT_COMMIT="${COMMIT_ARG:-${DEFAULT_COMMIT}}"
     ANON_GIT_DRYRUN="${DRYRUN_ARG:-${ANON_GIT_DRYRUN:-${DEFAULT_DRYRUN}}}"
-    ANON_GIT_QUIET="${QUIET_ARG:-${ANON_GIT_QUIET:-${DEFAULT_QUIET}}}"
+    ANON_GIT_QUIET="${QUIET_ARG:-${ANON_GIT_QUIET:-${GITCONFIG_QUIET:-${DEFAULT_QUIET}}}}"
     # --verbose always wins, regardless of what set ANON_GIT_QUIET above (flag,
-    # envvar, or default): it exists specifically to force output back on.
+    # envvar, repo-local config, or default): it exists specifically to force
+    # output back on.
     if [[ "$VERBOSE_ARG" == '1' ]]; then
         ANON_GIT_QUIET='0'
     fi
@@ -961,6 +1024,7 @@ print_result() {
 main() {
     handle_early_options "$@"
     safety_checks
+    read_git_config
     parse_args "$@"
     reject_incompatible_options
     merge_args_with_defaults

@@ -551,6 +551,220 @@ test_flag_env_vars() {
     record_result "$errors" 'ANON_GIT_* envvars overwrite defaults'
 }
 
+test_gitconfig_defaults() {
+    # git config anon-git.name/email/date must work as priority-3 config
+    # (below flags and ANON_GIT_* envvars, above hardcoded defaults), same as
+    # their --name/--email/--date flags.
+    local cfg_name='Barbara McClintock' cfg_email='barbara.mcclintock@example.com'
+    local cfg_date='2018-08-08 00:00:00 +0000'
+    local exit_status commit_info errors=0
+
+    git config --local anon-git.name "$cfg_name"
+    git config --local anon-git.email "$cfg_email"
+    git config --local anon-git.date "$cfg_date"
+
+    ./${SCRIPT_NAME} --no-confirm --no-backup --current-branch HEAD >/dev/null 2>&1
+    exit_status=$?
+    commit_info=$(git show --pretty=fuller --no-patch --date=iso HEAD)
+
+    git config --local --unset anon-git.name
+    git config --local --unset anon-git.email
+    git config --local --unset anon-git.date
+
+    if [[ "$exit_status" -ne 0 ]]; then
+        printf 'Error: git config anon-git.* run exited with status %s\n' "$exit_status"
+        errors=$((errors + 1))
+    fi
+    if ! grep -q "^Author:\s\+${cfg_name} <${cfg_email}>" <<<"$commit_info"; then
+        printf 'Error: git config anon-git.name/anon-git.email not respected\n'
+        errors=$((errors + 1))
+    fi
+    if ! grep -q "^AuthorDate:\s\+${cfg_date}" <<<"$commit_info"; then
+        printf 'Error: git config anon-git.date not respected\n'
+        errors=$((errors + 1))
+    fi
+
+    record_result "$errors" 'git config anon-git.* provides repo-local defaults'
+}
+
+test_gitconfig_envvar_priority() {
+    # ANON_GIT_NAME (priority 2) must win over anon-git.name config
+    # (priority 3), per the documented priority order.
+    local cfg_name='Config Loses' env_name='Envvar Wins'
+    local exit_status commit_info errors=0
+
+    git config --local anon-git.name "$cfg_name"
+
+    ANON_GIT_NAME="$env_name" ./${SCRIPT_NAME} --no-confirm --no-backup --current-branch HEAD >/dev/null 2>&1
+    exit_status=$?
+    commit_info=$(git show --pretty=fuller --no-patch HEAD)
+
+    git config --local --unset anon-git.name
+
+    if [[ "$exit_status" -ne 0 ]]; then
+        printf 'Error: ANON_GIT_NAME + anon-git.name run exited with status %s\n' "$exit_status"
+        errors=$((errors + 1))
+    fi
+    if ! grep -q "^Author:\s\+${env_name} <" <<<"$commit_info"; then
+        printf 'Error: ANON_GIT_NAME did not take priority over anon-git.name config\n'
+        errors=$((errors + 1))
+    fi
+    grep -qF "$cfg_name" <<<"$commit_info" && {
+        printf 'Error: anon-git.name config leaked through despite ANON_GIT_NAME\n'
+        errors=$((errors + 1))
+    }
+
+    record_result "$errors" 'ANON_GIT_NAME envvar overrides anon-git.name config'
+}
+
+test_gitconfig_flag_priority() {
+    # --name (priority 1) must win over anon-git.name config (priority 3).
+    local cfg_name='Config Loses' flag_name='Flag Wins'
+    local exit_status commit_info errors=0
+
+    git config --local anon-git.name "$cfg_name"
+
+    ./${SCRIPT_NAME} --no-confirm --no-backup --current-branch --name "$flag_name" HEAD >/dev/null 2>&1
+    exit_status=$?
+    commit_info=$(git show --pretty=fuller --no-patch HEAD)
+
+    git config --local --unset anon-git.name
+
+    if [[ "$exit_status" -ne 0 ]]; then
+        printf 'Error: --name + anon-git.name config run exited with status %s\n' "$exit_status"
+        errors=$((errors + 1))
+    fi
+    if ! grep -q "^Author:\s\+${flag_name} <" <<<"$commit_info"; then
+        printf 'Error: --name flag did not take priority over anon-git.name config\n'
+        errors=$((errors + 1))
+    fi
+
+    record_result "$errors" 'flag --name overrides anon-git.name config'
+}
+
+test_gitconfig_keepuser_bool() {
+    # anon-git.keepuser (a boolean config key) must behave like --keep-user:
+    # git config's true/false/yes/no/on/off/1/0 spellings all normalize to
+    # the same '1'/'0' contract as the ANON_GIT_KEEPUSER envvar.
+    local before_author after_author exit_status errors=0
+
+    before_author=$(git show -s --format='%an <%ae>' HEAD)
+    git config --local anon-git.keepuser yes
+
+    ./${SCRIPT_NAME} --no-confirm --no-backup --current-branch HEAD >/dev/null 2>&1
+    exit_status=$?
+    after_author=$(git show -s --format='%an <%ae>' HEAD)
+
+    git config --local --unset anon-git.keepuser
+
+    if [[ "$exit_status" -ne 0 ]]; then
+        printf 'Error: anon-git.keepuser=yes run exited with status %s\n' "$exit_status"
+        errors=$((errors + 1))
+    fi
+    if [[ "$after_author" != "$before_author" ]]; then
+        printf 'Error: anon-git.keepuser=yes did not preserve author identity\n'
+        errors=$((errors + 1))
+    fi
+
+    record_result "$errors" 'anon-git.keepuser config behaves like --keep-user'
+}
+
+test_gitconfig_invalid_bool() {
+    local before after output exit_status errors=0
+
+    before=$(git rev-parse HEAD)
+    git config --local anon-git.keepuser bogus
+
+    output=$(./${SCRIPT_NAME} --no-confirm --no-backup HEAD 2>&1)
+    exit_status=$?
+    after=$(git rev-parse HEAD)
+
+    git config --local --unset anon-git.keepuser
+
+    if [[ "$exit_status" -eq 0 ]]; then
+        printf 'Error: anon-git.keepuser=bogus did not fail as expected\n'
+        errors=$((errors + 1))
+    fi
+    if [[ "$before" != "$after" ]]; then
+        printf 'Error: repository was modified despite invalid anon-git.keepuser value\n'
+        errors=$((errors + 1))
+    fi
+    if ! grep -qi 'invalid boolean value' <<<"$output"; then
+        printf 'Error: expected "invalid boolean value" message not found\n'
+        errors=$((errors + 1))
+    fi
+
+    record_result "$errors" 'anon-git.keepuser with a non-boolean value fails cleanly'
+}
+
+test_gitconfig_catch_incompatible() {
+    # anon-git.keepuser=true + anon-git.email configured together must be
+    # rejected the same way --keep-user --email is, since reject_incompatible_options
+    # folds GITCONFIG_* into the same "_set" checks as flags/envvars.
+    local before after exit_status errors=0
+
+    git config --local anon-git.keepuser true
+    git config --local anon-git.email 'nobody@example.com'
+
+    before=$(git rev-parse HEAD)
+    ./${SCRIPT_NAME} --no-confirm --no-backup HEAD >/dev/null 2>&1
+    exit_status=$?
+    after=$(git rev-parse HEAD)
+
+    git config --local --unset anon-git.keepuser
+    git config --local --unset anon-git.email
+
+    if [[ "$exit_status" -eq 0 ]]; then
+        printf 'Error: anon-git.keepuser=true + anon-git.email did not fail as expected\n'
+        errors=$((errors + 1))
+    fi
+    if [[ "$before" != "$after" ]]; then
+        printf 'Error: repository was modified despite incompatible git config\n'
+        errors=$((errors + 1))
+    fi
+
+    record_result "$errors" 'catch incompatible anon-git.keepuser + anon-git.email config'
+}
+
+test_gitconfig_quiet() {
+    # anon-git.quiet=true must suppress informational output like --quiet,
+    # and --verbose must still override it for one run.
+    local original_branch new_branch_name output exit_status errors=0
+
+    git config --local anon-git.quiet true
+
+    original_branch=$(git branch --show-current)
+    output=$(./${SCRIPT_NAME} --no-confirm --name 'Grace Hopper Quiet' HEAD 2>&1)
+    exit_status=$?
+
+    new_branch_name=$(git branch --format='%(refname:short)' | grep "^${original_branch}_anonymized_" | tail -1)
+    git switch "$original_branch" >/dev/null 2>&1
+    [[ -n "$new_branch_name" ]] && git branch -D "$new_branch_name" >/dev/null 2>&1
+
+    if [[ "$exit_status" -ne 0 ]]; then
+        printf 'Error: anon-git.quiet=true run exited with status %s\n' "$exit_status"
+        errors=$((errors + 1))
+    fi
+    if [[ -n "$output" ]]; then
+        printf 'Error: anon-git.quiet=true produced output: %s\n' "$output"
+        errors=$((errors + 1))
+    fi
+
+    output=$(./${SCRIPT_NAME} --no-confirm --verbose --name 'Grace Hopper Verbose' HEAD 2>&1)
+    new_branch_name=$(git branch --format='%(refname:short)' | grep "^${original_branch}_anonymized_" | tail -1)
+    git switch "$original_branch" >/dev/null 2>&1
+    [[ -n "$new_branch_name" ]] && git branch -D "$new_branch_name" >/dev/null 2>&1
+
+    git config --local --unset anon-git.quiet
+
+    if ! grep -q 'Anonymizing commit' <<<"$output"; then
+        printf 'Error: --verbose did not override anon-git.quiet=true\n'
+        errors=$((errors + 1))
+    fi
+
+    record_result "$errors" 'anon-git.quiet config suppresses output; --verbose overrides it'
+}
+
 test_flag_env_var_entirehistory() {
     # ANON_GIT_ENTIREHISTORY=1 must behave like --entire-history even
     # without the flag (isolates the env-var path from the flag path
@@ -1808,6 +2022,13 @@ main() {
     test_flag_current_branch_backup
     test_flag_dry_run
     test_flag_env_vars
+    test_gitconfig_defaults
+    test_gitconfig_envvar_priority
+    test_gitconfig_flag_priority
+    test_gitconfig_keepuser_bool
+    test_gitconfig_invalid_bool
+    test_gitconfig_catch_incompatible
+    test_gitconfig_quiet
     test_flag_env_var_entirehistory
     test_flag_env_var_currentbranch
     test_flag_env_var_dryrun

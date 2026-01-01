@@ -135,14 +135,37 @@ required — pass `HEAD` explicitly to anonymize the last commit.
 
 1. Command-line flags
 2. Environment variables (`ANON_GIT_DATE`, `ANON_GIT_NAME`, `ANON_GIT_EMAIL`, `ANON_GIT_KEEPUSER`, `ANON_GIT_KEEPDATE`, `ANON_GIT_KEEPYEAR`, `ANON_GIT_KEEPMONTH`, `ANON_GIT_KEEPDAY`, `ANON_GIT_ENTIREHISTORY`, `ANON_GIT_CURRENTBRANCH`, `ANON_GIT_DRYRUN`, `ANON_GIT_QUIET`)
-3. Hardcoded defaults
+3. Repo-local git config (`git config anon-git.name`, `anon-git.email`, `anon-git.date`, `anon-git.keepuser`, `anon-git.keepdate`, `anon-git.keepyear`, `anon-git.keepmonth`, `anon-git.keepday`, `anon-git.quiet` — see [Repo-local config](#repo-local-config) below; `--entire-history`/`--current-branch`/`--dry-run` have no config equivalent, flag/envvar only)
+4. Hardcoded defaults
 
-`--verbose` has no `ANON_GIT_VERBOSE` environment variable equivalent; it's a CLI-only override that forces informational output back on for one run, regardless of what set `ANON_GIT_QUIET` (flag, envvar, or a repo-local quiet config).
+`--verbose` has no `ANON_GIT_VERBOSE` environment variable or config equivalent; it's a CLI-only override that forces informational output back on for one run, regardless of what set `ANON_GIT_QUIET` (flag, envvar, or repo-local config).
 
 > [!WARNING]
 > `--name`, `--email` and `--date` (and their `ANON_GIT_*` environment variable
 > equivalents) are not meant to carry untrusted input — don't wire user-controlled
 > values (e.g. from CI variables or another service) into them.
+
+### Repo-local config
+
+A repository can pin its own defaults instead of every invocation needing flags or exported envvars:
+
+```bash
+git config anon-git.name "Anon"
+git config anon-git.email "anon@localhost"
+git config anon-git.date "2008-10-31 00:00:00 +0000"
+git config anon-git.keepuser true
+git config anon-git.keepdate true
+git config anon-git.keepyear true
+git config anon-git.keepmonth true
+git config anon-git.keepday true
+git config anon-git.quiet true
+```
+
+Booleans accept anything `git config --bool` does (`true`/`false`, `yes`/`no`, `on`/`off`, `1`/`0`); anything else is a hard error rather than silently ignored, since a typo'd repo config shouldn't fail open. `git config` writes to `.git/config` (local to your clone) by default — use `git config --global` instead if you want the same defaults across every repo.
+
+Deliberately scoped to `name`/`email`/`date`/`keep-*`/`quiet` — the settings that make sense to pin per-repo. `--entire-history`, `--current-branch` and `--dry-run` stay flag/envvar-only: a silently-configured default for any of those would be far more destructive than a wrong name or email (e.g. every invocation silently rewriting the entire history instead of one commit).
+
+Incompatible combinations (e.g. `anon-git.keepuser=true` with `anon-git.email` also set) are rejected the same way the equivalent flags/envvars are, regardless of where each side came from.
 
 ### Examples
 
