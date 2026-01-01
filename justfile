@@ -1,8 +1,6 @@
 SCRIPT := "anon-git.sh"
-TEST_SCRIPT := "tests/test_anon_git.sh"
-TEST_LIB_FILES := "tests/lib/common.sh tests/cases/core.sh tests/cases/validation.sh tests/cases/config_priority.sh tests/cases/install.sh tests/cases/flags.sh tests/cases/help.sh tests/cases/regression.sh tests/cases/random_dates.sh"
-TEST_COMPLETION_SCRIPT := "tests/test_anon_git_completion.sh"
-TEST_MANUAL_SCRIPT := "tests/test_manually.sh"
+TEST_BASH_FILES := "tests/setup_suite.bash tests/test_helper.bash tests/test_manually.sh"
+TEST_BATS_FILES := "tests/*.bats"
 README := "README.md"
 
 default:
@@ -15,25 +13,26 @@ all:
 
 # Run the test suite
 test:
-    ./{{TEST_SCRIPT}}
-    ./{{TEST_COMPLETION_SCRIPT}}
+    bats tests/
 
 # Run only the shell-completion tests (bash/zsh/fish, via expect)
 test-completion:
-    ./{{TEST_COMPLETION_SCRIPT}}
+    bats tests/completion.bats
 
 # Check shell syntax and run shellcheck
 lint:
-    bash -n {{SCRIPT}} {{TEST_SCRIPT}} {{TEST_LIB_FILES}} {{TEST_COMPLETION_SCRIPT}} {{TEST_MANUAL_SCRIPT}}
-    shellcheck -x {{SCRIPT}} {{TEST_SCRIPT}} {{TEST_LIB_FILES}} {{TEST_COMPLETION_SCRIPT}} {{TEST_MANUAL_SCRIPT}}
+    bash -n {{SCRIPT}} {{TEST_BASH_FILES}}
+    shellcheck -x {{SCRIPT}} {{TEST_BASH_FILES}} {{TEST_BATS_FILES}}
 
 # Format the scripts in place with shfmt
 format:
-    shfmt -w -ln bash -i 4 {{SCRIPT}} {{TEST_SCRIPT}} {{TEST_LIB_FILES}} {{TEST_COMPLETION_SCRIPT}} {{TEST_MANUAL_SCRIPT}}
+    shfmt -w -ln bash -i 4 {{SCRIPT}} {{TEST_BASH_FILES}}
+    shfmt -w -ln bats -i 4 {{TEST_BATS_FILES}}
 
 # Check formatting without writing (used by CI; `just format` to fix)
 format-check:
-    shfmt -d -ln bash -i 4 {{SCRIPT}} {{TEST_SCRIPT}} {{TEST_LIB_FILES}} {{TEST_COMPLETION_SCRIPT}} {{TEST_MANUAL_SCRIPT}}
+    shfmt -d -ln bash -i 4 {{SCRIPT}} {{TEST_BASH_FILES}}
+    shfmt -d -ln bats -i 4 {{TEST_BATS_FILES}}
 
 # Run the CI workflow locally via `act` (https://github.com/nektos/act); only ubuntu-latest, act can't run the macos-latest job
 ci-local:

@@ -48,6 +48,17 @@ jobs:
           curl -fsSL "https://github.com/mvdan/sh/releases/download/${SHFMT_VERSION}/shfmt_${SHFMT_VERSION}_${os}_${arch}" -o "$HOME/.local/bin/shfmt"
           chmod +x "$HOME/.local/bin/shfmt"
 
+      # Libs under runner.temp: the action's /usr/lib defaults aren't
+      # writable on macOS runners.
+      - name: Install bats, bats-support, bats-assert, bats-file
+        id: setup-bats
+        uses: bats-core/bats-action@4.0.0
+        with:
+          detik-install: false
+          support-path: ${{ runner.temp }}/bats-libs/bats-support
+          assert-path: ${{ runner.temp }}/bats-libs/bats-assert
+          file-path: ${{ runner.temp }}/bats-libs/bats-file
+
       - name: Install just
         run: curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to "$HOME/.local/bin"
 
@@ -58,4 +69,6 @@ jobs:
         run: just format-check
 
       - name: just test
+        env:
+          BATS_LIB_PATH: ${{ runner.temp }}/bats-libs
         run: just test

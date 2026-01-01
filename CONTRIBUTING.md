@@ -5,6 +5,7 @@
 - `bash` (the script and test suite are bash, not POSIX `sh`)
 - [`git-filter-repo`](README.md#pre-requisites) — required to actually run `anon-git.sh`, and by the test suite
 - `python3` — one test compiles the embedded commit-callback to check it's valid Python
+- [`bats-core`](https://github.com/bats-core/bats-core) ≥ 1.5 with [`bats-support`](https://github.com/bats-core/bats-support), [`bats-assert`](https://github.com/bats-core/bats-assert), [`bats-file`](https://github.com/bats-core/bats-file) — runs the test suite; libs are found via `BATS_LIB_PATH` (default `/usr/lib/bats`, e.g. Arch `pacman -S bats bats-support bats-assert bats-file`)
 - [`just`](https://github.com/casey/just) — runs the recipes below
 - [`shellcheck`](https://www.shellcheck.net/) — used by `just lint`
 - [`shfmt`](https://github.com/mvdan/sh) — used by `just format`
@@ -15,8 +16,8 @@
 ```bash
 just lint             # bash -n + shellcheck
 just format           # shfmt -w, 4-space indent
-just test             # tests/test_anon_git.sh + tests/test_anon_git_completion.sh
-just test-completion  # just the completion tests
+just test             # bats tests/
+just test-completion  # bats tests/completion.bats
 just all              # lint, format, test, in order
 just sync-docs        # regenerate README's ### Options block from `anon-git.sh --help`
 ```
@@ -31,7 +32,7 @@ If you change `show_help()`'s `Options:` section (new/renamed/reworded flag), ru
 
 - Match the existing style: 4-space indent (`shfmt -i 4`), `snake_case` function names, `local` for anything not meant to leak out of a function.
 - `anon-git.sh` is organized as small, single-purpose functions (`parse_args`, `merge_args_with_defaults`, `reject_incompatible_options`, `backup_branch`, ...) called in sequence from `main()` at the bottom. Keep new logic in a similarly-scoped function rather than adding to `main()` directly or to an existing function's unrelated concern.
-- One exception: the `python_commit_callback` string assignment must stay an unindented, top-level `python_commit_callback="..."` (opening) / `"` (closing) pair — `tests/test_anon_git.sh` locates it with a `sed` line-anchor regex to check it's valid Python. Don't nest it inside a function.
+- One exception: the `python_commit_callback` string assignment must stay an unindented, top-level `python_commit_callback="..."` (opening) / `"` (closing) pair — `tests/test_helper.bash`'s `extract_script_block` locates it with a `sed` line-anchor regex to check it's valid Python. Don't nest it inside a function.
 - Comments explain *why*, not *what* — see the existing header comments on each function for the expected tone.
 
 ## Adding or changing a flag
@@ -45,13 +46,13 @@ A new flag touches several places; grep for an existing similar flag (e.g. `--dr
    hand-maintained, since they carry per-flag descriptions that `--_list-flags`
    can't express. `completions/anon-git.bash` needs no change; it calls
    `--_list-flags` dynamically.
-3. `tests/test_anon_git_completion.sh`'s `test_completion_flags` will fail if
+3. `tests/completion.bats`'s "zsh/fish completions list all flags" will fail if
    zsh/fish drift from `--_list-flags` — that's the tripwire for step 2.
 4. `README.md`: the `### Options` block, and an example if the flag isn't
    obvious from its description.
-5. `tests/test_anon_git.sh`: at least one test exercising the new flag, plus
+5. `tests/*.bats`: at least one `@test` exercising the new flag, plus
    incompatibility tests if it conflicts with existing flags (see
-   `test_catch_incompatible` and its call sites in `main()`).
+   `assert_incompatible` and its call sites in `tests/validation.bats`).
 6. If the flag has an `ANON_GIT_*` environment variable equivalent, it needs a
    spot in `merge_args_with_defaults()`'s three-tier
    `${FLAG_ARG:-${ANON_GIT_X:-${DEFAULT_X}}}` fallback (four-tier —
@@ -65,17 +66,23 @@ A new flag touches several places; grep for an existing similar flag (e.g. `--dr
 
 ## Testing
 
-Run the main test:
-
 ```bash
-./tests/test_anon_git.sh
+bats tests/                                   # whole suite (= just test)
+bats tests/flags.bats                         # one file
+bats -f 'keep-date' tests/                    # tests whose name matches
+TEST_RANDOM_INDEX=3 bats tests/core.bats      # replay a random HEAD~N target
 ```
 
-Spins up a disposable git repository in `/tmp`, runs the script against it
-through a range of flags and edge cases (defaults, `--keep-*`, `--dry-run`,
-`--entire-history`, `--current-branch`, invalid input, incompatible combinations
-— flags, `ANON_GIT_*` envvars, and mixes of both -- the uncommitted-changes
-guard, ...), and prints a pass/fail summary. It cleans up the temp repo on exit.
+| Path                     | Purpose                                                                                                          |
+|--------------------------|------------------------------------------------------------------------------------------------------------------|
+| `tests/setup_suite.bash` | once per run: builds the template repo (20 commits), reads the script's `DEFAULT_*` values                       |
+| `tests/test_helper.bash` | loaded by every file: per-test fresh repo copy in `setup()`, shared assert helpers                               |
+| `tests/*.bats`           | tests by category: core, validation, config_priority, flags, help, install, random_dates, regression, completion |
+
+Every test runs in its own copy of the template repo under `$BATS_TEST_TMPDIR`,
+so no test sees another's leftovers; bats deletes it afterwards. Bats prints a
+test's output only when it fails, including the `target HEAD~N` line from tests
+that pick a random commit.
 
 The test `tests/test_manually.sh` creates a disposable repo with sample commits
 and drops you into it, for manual/interactive poking at the script.
