@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Sourced by test_anon_git.sh — not meant to be run directly.
-# CORE / INTEGRATION TESTS: rewriting multiple commits or the entire history in one run.
+# CORE / INTEGRATION TESTS: multiple commits or entire history in one run.
 
 test_multiple_commits() {
     local h1 h2 exit_status a1 a2 errors=0

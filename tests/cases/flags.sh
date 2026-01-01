@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 
 # Sourced by test_anon_git.sh — not meant to be run directly.
-# FLAG TESTS: individual CLI flags governing how a run behaves\n# (branching, backups, dry-run, quiet/verbose, timezone, confirmation).
+# FLAG TESTS: individual CLI flags governing how a run behaves
+# (branching, backups, dry-run, quiet/verbose, timezone, confirmation).
 
 test_flag_current_branch_backup() {
     local before_head after_head exit_status backup_branch errors=0
@@ -58,7 +59,7 @@ test_flag_dry_run() {
 }
 
 test_flag_keep_partial() {
-    # @param $1  flag under test: --keep-year | --keep-month | --keep-day
+    # $1: --keep-year | --keep-month | --keep-day
     local flag="$1" random_index commit_hash old_year old_month old_day
     local new_commit_hash new_year new_month new_day exit_status errors=0
 
@@ -101,9 +102,8 @@ test_flag_keep_partial() {
 }
 
 test_flag_new_branch() {
-    # Exercises the default (no --current-branch) code path: a fresh
-    # "<branch>_anonymized_<timestamp>" branch must be created and the
-    # original branch/HEAD must be left untouched.
+    # Default (no --current-branch): a fresh "<branch>_anonymized_<timestamp>"
+    # branch is created; the original branch/HEAD stays untouched.
     local original_branch before_head exit_status new_branch_name errors=0
 
     original_branch=$(git branch --show-current)
@@ -135,9 +135,8 @@ test_flag_new_branch() {
 }
 
 test_flag_no_backup() {
-    # Compare backup-branch counts before/after, rather than asserting zero,
-    # since an earlier test (--current-branch without --no-backup) may have
-    # already left a backup branch lying around in the shared test repo.
+    # Compares counts rather than asserting zero: an earlier test may have
+    # already left a backup branch in the shared test repo.
     local before_head after_head exit_status before_count after_count errors=0
 
     before_head=$(git rev-parse HEAD)
@@ -165,12 +164,9 @@ test_flag_no_backup() {
 }
 
 test_flag_quiet() {
-    # --quiet must suppress the informational "Anonymizing commit(s): ..." /
-    # "Created new branch ..." / "Done." output but still rewrite the commit
-    # and exit successfully. Uses the default (new-branch) code path with
-    # --no-backup dropped, since --current-branch --no-backup prints a
-    # "WARNING! Overwriting ... without backup!" safety warning that --quiet
-    # deliberately does not suppress.
+    # Must suppress informational output but still rewrite and exit 0. Uses
+    # the default (new-branch) path, not --current-branch --no-backup, since
+    # that prints a safety warning --quiet deliberately doesn't suppress.
     local original_branch new_branch_name output exit_status errors=0
 
     original_branch=$(git branch --show-current)
@@ -203,10 +199,8 @@ test_flag_quiet() {
 }
 
 test_flag_strip_timezone_alone() {
-    # --strip-timezone with no other CLI flag must not change author identity
-    # or the date/time digits -- only the timezone label changes to +0000,
-    # regardless of the commit's original offset (here +0530, chosen so it's
-    # unambiguously not already UTC).
+    # Alone, must not change author or date/time digits -- only relabel the
+    # offset to +0000 (original is +0530, unambiguously not already UTC).
     local commit_hash old_author old_date_no_tz old_offset exit_status
     local new_commit_hash new_author new_date_no_tz new_offset errors=0
 
@@ -253,11 +247,9 @@ test_flag_strip_timezone_alone() {
 }
 
 test_flag_strip_timezone_with_keep_date() {
-    # --strip-timezone --keep-date (both explicit) is not the "used alone"
-    # case, but --keep-date already preserves the date/time digits and
-    # --strip-timezone must still force the offset to +0000 on top of that.
-    # Author identity is NOT implied kept here (only --keep-date was given,
-    # not --keep-user), so it still falls back to the default identity.
+    # Not the "used alone" case: --keep-date preserves digits, --strip-timezone
+    # still forces +0000. Author identity is NOT implied kept (only
+    # --keep-date given, not --keep-user), so it falls back to the default.
     local old_date_no_tz old_offset exit_status
     local new_author new_date_no_tz new_offset errors=0
 
@@ -301,9 +293,7 @@ test_flag_strip_timezone_with_keep_date() {
 }
 
 test_flag_strip_timezone_with_date_arg() {
-    # --strip-timezone combined with an explicit --date must use the
-    # date/time digits given by --date, but force the offset to +0000
-    # regardless of the offset given in --date itself.
+    # Must use --date's digits but force +0000, ignoring --date's own offset.
     local exit_status new_date errors=0
 
     ./"${SCRIPT_NAME}" --no-confirm --no-backup --current-branch \
@@ -325,10 +315,9 @@ test_flag_strip_timezone_with_date_arg() {
 }
 
 test_flag_strip_timezone_not_alone_resets_date() {
-    # Any other CLI flag alongside --strip-timezone (here --name) means the
-    # "used alone" contract no longer applies: the date/time is NOT
-    # implicitly preserved and falls through to the normal default-date path
-    # (already +0000, so --strip-timezone has nothing extra to change there).
+    # Any other flag alongside --strip-timezone (here --name) breaks the
+    # "used alone" contract: date is NOT implicitly preserved, falls through
+    # to the default-date path (already +0000).
     local exit_status new_author new_date errors=0
 
     ./"${SCRIPT_NAME}" --no-confirm --no-backup --current-branch \
@@ -355,8 +344,7 @@ test_flag_strip_timezone_not_alone_resets_date() {
 }
 
 test_flag_no_confirm() {
-    # Without --no-confirm the script must prompt for confirmation:
-    # declining (n) must abort with no changes, accepting (y) must proceed.
+    # Without it, declining (n) must abort with no changes, accepting (y) must proceed.
     local before after exit_status errors=0
 
     before=$(git rev-parse HEAD)
@@ -391,13 +379,10 @@ test_flag_no_confirm() {
 }
 
 test_noconfirm_executes_first() {
-    # Regression test: confirm() must run before backup_branch() in main().
-    # backup_branch() creates/switches to a new branch pointing at the same
-    # commit, so checking only `git rev-parse HEAD` (as test_flag_no_confirm
-    # does) can't tell a decline-with-no-branch-created apart from a
-    # decline-after-the-branch-was-already-created-and-switched-to — both
-    # leave HEAD's commit hash unchanged. Assert on the checked-out branch
-    # name instead, which the earlier ordering bug did change.
+    # Regression: confirm() must run before backup_branch() in main().
+    # backup_branch() switches to a new branch at the same commit, so
+    # checking only `git rev-parse HEAD` can't distinguish a clean decline
+    # from a decline-after-branch-switch. Assert on the branch name instead.
     local branch_before branch_after branch_count_before branch_count_after errors=0
 
     branch_before=$(git branch --show-current)
@@ -423,9 +408,8 @@ test_noconfirm_executes_first() {
 }
 
 test_flag_keep_user_keep_date_verbose_message() {
-    # --keep-user / --keep-date don't overwrite the author or date at all, so
-    # the informational output must say so rather than claiming the
-    # (unused) default/env identity or date is "in use".
+    # Output must say author/date aren't overwritten, not claim the unused
+    # default/env identity or date is "in use".
     local output exit_status errors=0
 
     output=$(./"${SCRIPT_NAME}" --no-confirm --no-backup --current-branch --keep-user --keep-date HEAD 2>&1)

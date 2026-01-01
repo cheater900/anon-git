@@ -22,9 +22,8 @@ test_show_help() {
 }
 
 test_show_version() {
-    # --version/-v are handled in handle_early_options, before any git-repo
-    # safety checks, so they must work even outside a repository (same as
-    # --help) and must print a non-empty version string.
+    # Handled in handle_early_options, before safety checks, so it must work
+    # even outside a repository and print a version string.
     local no_repo_dir output exit_status errors=0
 
     output=$(./"${SCRIPT_NAME}" --version 2>&1)
@@ -49,7 +48,7 @@ test_show_version() {
         errors=$((errors + 1))
     fi
 
-    # Must not require a git repository (mirrors test_match_outside_git_repo).
+    # Mirrors test_match_outside_git_repo.
     no_repo_dir=$(mktemp -d /tmp/anon_git_test_version_norepo.XXXXXX)
     cp "$SCRIPT" "$no_repo_dir/"
     chmod +x "${no_repo_dir}/${SCRIPT_NAME}"
@@ -65,13 +64,10 @@ test_show_version() {
 }
 
 test_show_help_inside_dirty_repo() {
-    # A bare invocation (no args) should show help unconditionally, before
-    # any safety checks run — an unstaged change to a tracked file should
-    # not turn it into a hard failure, since there's nothing here for the
-    # script to do or lose. Modifies an existing tracked file (rather than
-    # adding an untracked one) since the uncommitted-changes guard this is
-    # meant to bypass only looks at diff-index/diff-files, not untracked
-    # files.
+    # A bare invocation shows help before safety checks run, so an unstaged
+    # change shouldn't be a hard failure. Modifies a tracked file (not an
+    # untracked one) since the guard being bypassed only checks
+    # diff-index/diff-files.
     local tracked_file before after output exit_status errors=0
 
     tracked_file='file_1.txt'
@@ -101,8 +97,8 @@ test_show_help_inside_dirty_repo() {
 }
 
 test_match_default_shows_help() {
-    # Default behavior: without an explicit commit target or --entire-history,
-    # the script shows help instead of silently defaulting to HEAD.
+    # Without a commit target or --entire-history, shows help instead of
+    # defaulting to HEAD.
     local before after output exit_status errors=0
 
     before=$(git rev-parse HEAD)
@@ -127,9 +123,7 @@ test_match_default_shows_help() {
 }
 
 test_match_dry_run_without_target_shows_help() {
-    # --dry-run alone doesn't count as a target; without an explicit commit or
-    # --entire-history it must still fall through to the help text, not
-    # silently preview HEAD.
+    # --dry-run alone isn't a target; must fall through to help, not preview HEAD.
     local before after output exit_status errors=0
 
     before=$(git rev-parse HEAD)

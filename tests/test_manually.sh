@@ -8,7 +8,6 @@ set -euo pipefail
 
 SCRIPT_DIR=$(realpath "$(dirname "$0")/..")
 
-# Creates a temp directory to work on
 TMP_DIR=$(mktemp -d /tmp/anon_git_test.XXXXXX)
 
 cleanup() {
@@ -19,19 +18,15 @@ trap cleanup EXIT
 
 cd "$TMP_DIR"
 
-# copy scripts and make them executable
 cp "$SCRIPT_DIR"/*.sh "$TMP_DIR"/
 chmod +x "$TMP_DIR"/*.sh
 
-# init git repo
 git init >/dev/null
 git config --local user.name "Test User"
 git config --local user.email "test@example.com"
 
-# Commits are spread ~31 days apart (using raw "<epoch> <tz>" author/committer
-# dates, so this works the same on GNU and BSD without shelling out to `date`)
-# so --keep-year/--keep-month/--keep-day have distinct years/months/days to
-# preserve and compare against.
+# ~31 days apart (raw "<epoch> <tz>" dates, portable across GNU/BSD) so
+# --keep-year/--keep-month/--keep-day have distinct values to compare.
 COMMIT_COUNT=20
 BASE_EPOCH=1420070400 # 2015-01-01T00:00:00Z
 for i in $(seq 1 "$COMMIT_COUNT"); do
@@ -43,8 +38,7 @@ for i in $(seq 1 "$COMMIT_COUNT"); do
     git commit -m "Add file $filename" >/dev/null
 done
 
-# A couple of commits from different authors, so --keep-user (and filtering
-# commits by author) has something to show.
+# Different authors, so --keep-user (and author-filtering) has something to show.
 echo 'feature work' >feature_file.txt
 git add feature_file.txt >/dev/null
 GIT_AUTHOR_NAME='Feature Dev' GIT_AUTHOR_EMAIL='feature.dev@example.com' \

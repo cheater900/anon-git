@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
 
 # Sourced by test_anon_git.sh — not meant to be run directly.
-# VALIDATION TESTS: rejecting bad input (incompatible flags, invalid commit refs,\n# a dirty tree, malformed dates) and the python-callback syntax sanity check.
+# VALIDATION TESTS: rejecting bad input (incompatible flags, invalid commit
+# refs, a dirty tree, malformed dates) and the python-callback syntax check.
 
 test_python_callback_syntax() {
-    # anon-git.sh assigns the git-filter-repo commit callback to a shell
-    # variable, python_commit_callback="...". Extract its contents (via a
-    # regex address range, since the value spans many lines) and check that
-    # it's syntactically valid Python. The body uses bare `return` statements,
-    # which are only legal inside a function, so wrap it in a dummy one before
-    # compiling — matching how git-filter-repo itself embeds the callback.
+    # Extracts python_commit_callback's contents and checks they're valid
+    # Python. Wrapped in a dummy function before compiling since the body
+    # uses bare `return`, only legal inside a function -- matching how
+    # git-filter-repo itself embeds the callback.
     local raw_block python_code check_file output exit_status errors=0
 
     raw_block=$(sed -n '/^python_commit_callback="$/,/^"$/p' "$SCRIPT")
@@ -38,16 +37,11 @@ test_python_callback_syntax() {
 }
 
 test_catch_incompatible() {
-    # @param $@  the incompatible combination to reject: CLI flags/args
-    #            (--foo, HEAD, ...) and/or ANON_GIT_*=value envvar
-    #            assignments, in any mix. Each envvar assignment must be a
-    #            single "ANON_GIT_NAME=value" argument (not split across
-    #            two), since it's routed to `env` rather than the script.
-    #            This covers flag-vs-flag (the classic case), envvar-vs-
-    #            envvar, and mixed flag-vs-envvar conflicts with one
-    #            function, since anon-git.sh is meant to reject an
-    #            incompatible combination the same way regardless of
-    #            whether each side came from a flag or its env var.
+    # $@: the incompatible combination to reject -- CLI flags/args and/or
+    # single "ANON_GIT_NAME=value" envvar assignments (routed to `env`), in
+    # any mix. Covers flag-vs-flag, envvar-vs-envvar, and mixed conflicts
+    # with one function, since a conflict must be rejected the same way
+    # regardless of which side came from a flag vs. its envvar.
     local before after exit_status errors=0 envvars=() cli_args=() arg label
 
     for arg in "$@"; do
@@ -126,7 +120,7 @@ test_catch_uncommitted_changes() {
 }
 
 test_flag_missing_value() {
-    # @param $1  flag under test: --date | --name | --email
+    # $1: --date | --name | --email
     local flag="$1" before after output exit_status errors=0
 
     before=$(git rev-parse HEAD)

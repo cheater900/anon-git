@@ -5,28 +5,24 @@
 # precomputed-random-timestamp mechanism (python_compute_random_dates) that
 # backs them, and the flags/callback that consume it.
 
-# Internal: extracts python_compute_random_dates's Python source from the
-# script, the same way test_python_callback_syntax (validation.sh) extracts
-# python_commit_callback -- by its exact, unindented
-# `python_compute_random_dates="` ... `"` line anchors.
+# Extracts python_compute_random_dates's source, the same way
+# test_python_callback_syntax (validation.sh) extracts python_commit_callback.
 extract_random_dates_script() {
     local raw_block
     raw_block=$(sed -n '/^python_compute_random_dates="$/,/^"$/p' "$SCRIPT")
     sed -e '1d' -e '$d' <<<"$raw_block"
 }
 
-# Internal: runs python_compute_random_dates directly (bypassing git and
-# git-filter-repo entirely) against synthetic "<hash> <epoch>" stdin input,
-# so its ordering guarantee (including neighbor-bounding) can be checked
-# against denser/wider-spanning/sparser input than a real git repo test
-# would want to create commits for.
+# Runs python_compute_random_dates directly against synthetic
+# "<hash> <epoch>" stdin input (bypassing git/git-filter-repo), so its
+# ordering guarantee can be checked against input a real repo test can't
+# easily produce.
 run_random_dates_script() {
-    # @param $1        which granularity envvar to set to '1' (ANON_GIT_RANDOMTIME | ANON_GIT_RANDOMDAY | ANON_GIT_RANDOMMONTH)
-    # @param $2        ANON_GIT_ENTIREHISTORY value to set ('0' or '1')
-    # @param $3        space-separated ANON_GIT_TARGET_COMMITS value (ignored when $2 is '1')
-    # @param stdin     "<hash> <epoch>" lines, oldest to newest -- adjacency in
-    #                  this stream is what the script treats as "real neighbors"
-    # @returns stdout  "<hash> <epoch> <offset>" lines, targets only
+    # $1: granularity envvar to set to '1'. $2: ANON_GIT_ENTIREHISTORY value.
+    # $3: space-separated ANON_GIT_TARGET_COMMITS (ignored when $2 is '1').
+    # stdin: "<hash> <epoch>" lines, oldest to newest; adjacency here is what
+    # the script treats as "real neighbors". stdout: "<hash> <epoch> <offset>",
+    # targets only.
     local granularity_var="$1" entirehistory="$2" target_commits="$3" python_code
     python_code=$(extract_random_dates_script)
     env ANON_GIT_RANDOMTIME=0 ANON_GIT_RANDOMDAY=0 ANON_GIT_RANDOMMONTH=0 "${granularity_var}=1" \
@@ -34,23 +30,17 @@ run_random_dates_script() {
         python3 -c "$python_code"
 }
 
-# Internal: builds $1 synthetic "<hash> <epoch>" lines, $2 seconds apart,
-# starting at a fixed 2020-01-01 UTC epoch -- one per line, oldest to
-# newest, hashes named commit_0, commit_1, ...
+# Builds $1 "<hash> <epoch>" lines, $2 seconds apart, from a fixed
+# 2020-01-01 UTC epoch. Hashes named commit_0, commit_1, ...
 build_synthetic_history() {
-    # @param $1  number of commits
-    # @param $2  seconds between each commit
     local count="$1" spacing="$2" base=1577836800 i
     for ((i = 0; i < count; i++)); do
         printf 'commit_%s %s\n' "$i" "$((base + i * spacing))"
     done
 }
 
-# Internal: extracts the randomized epoch for one hash from
-# run_random_dates_script's output, or prints nothing if that hash isn't in it.
+# $1: hash to look up. stdin: run_random_dates_script's output.
 random_dates_lookup() {
-    # @param $1     hash to look up
-    # @param stdin  run_random_dates_script's output
     awk -v h="$1" '$1 == h { print $2 }'
 }
 
@@ -78,15 +68,11 @@ test_python_random_dates_syntax() {
     record_result "$errors" 'python compute-random-dates script syntax'
 }
 
-# UNIT TEST: feeds python_compute_random_dates a synthetic set of
-# "<hash> <epoch>" commits (all landing in the same bucket for the given
-# granularity, all targets under --entire-history so there are no anchors
-# to bound them) and checks the timestamps it writes back come back in the
-# same relative order as the original epochs -- the guarantee the whole
-# --random-time/day/month feature depends on.
+# UNIT TEST: a synthetic bucket of commits, all targets (--entire-history,
+# no anchors), must come back in the same relative order as the original
+# epochs -- the core guarantee --random-time/day/month depends on.
 test_random_dates_order_within_bucket() {
-    # @param $1  flag name, for the result label: --random-time | --random-day | --random-month
-    # @param $2  matching envvar: ANON_GIT_RANDOMTIME | ANON_GIT_RANDOMDAY | ANON_GIT_RANDOMMONTH
+    # $1: flag name for the result label. $2: matching envvar.
     local flag="$1" granularity_var="$2" errors=0
     local i count=40 history output line_count cur prev=-1
 
@@ -118,18 +104,15 @@ test_random_dates_order_within_bucket() {
     record_result "$errors" "temp file for $flag keeps commits in original chronological order"
 }
 
-# UNIT TEST: two separate single-commit target runs (commit_3 and commit_6),
-# surrounded on all sides by real, untouched commits -- the exact "cover
-# neighbor before and after" scenario. Each target's randomized date must
-# land strictly between its own real neighbors, not just somewhere in the
-# shared calendar bucket, and neither neighbor commit may itself appear in
-# the output (they were never targets, so they're never rewritten).
+# UNIT TEST: two separate single-commit targets (commit_3, commit_6), each
+# surrounded by real untouched neighbors. Each randomized date must land
+# strictly between its own neighbors, not just anywhere in the shared
+# bucket, and neighbor commits must never appear in the output.
 test_random_dates_neighbor_bounds_sparse_targets() {
     local errors=0 history output lo3 hi3 lo6 hi6 got3 got6 line_count
 
-    # 10 commits, 1 day apart, all in the same month -- --random-day's
-    # bucket is a full month, so without neighbor-bounding a target's random
-    # pick could legally land anywhere in that month, past a real neighbor.
+    # 1 day apart, same month: --random-day's bucket is a full month, so
+    # without neighbor-bounding a pick could land past a real neighbor.
     history=$(build_synthetic_history 10 86400)
 
     output=$(printf '%s\n' "$history" | run_random_dates_script ANON_GIT_RANDOMDAY 0 'commit_3 commit_6')
@@ -168,10 +151,9 @@ test_random_dates_neighbor_bounds_sparse_targets() {
     record_result "$errors" 'random dates: sparse target runs are bounded by their real neighbors'
 }
 
-# UNIT TEST: a contiguous run of target commits (commit_3, commit_4,
-# commit_5) sandwiched between two real, untouched neighbors. The whole run
-# must land strictly inside (commit_2, commit_6) and stay internally
-# ordered among itself.
+# UNIT TEST: a contiguous target run (commit_3-5) between two real
+# neighbors must land strictly inside (commit_2, commit_6), staying
+# internally ordered.
 test_random_dates_neighbor_bounds_contiguous_run() {
     local errors=0 history output lo hi got3 got4 got5
 
@@ -197,10 +179,8 @@ test_random_dates_neighbor_bounds_contiguous_run() {
     record_result "$errors" 'random dates: a contiguous target run is bounded by its real neighbors and stays internally ordered'
 }
 
-# UNIT TEST: the target run starts at the very first commit in history
-# (commit_0), so there is no "before" neighbor to bound it with -- the
-# lower bound must fall back to the bucket's own calendar start rather than
-# the script inventing or crashing on a nonexistent neighbor.
+# UNIT TEST: a run starting at the first commit has no "before" neighbor --
+# the lower bound must fall back to the bucket's calendar start.
 test_random_dates_no_lower_neighbor_at_history_start() {
     local errors=0 history output hi got0 got1
 
@@ -224,9 +204,8 @@ test_random_dates_no_lower_neighbor_at_history_start() {
     record_result "$errors" 'random dates: a run starting at the very first commit needs no fabricated lower neighbor'
 }
 
-# UNIT TEST: mirror of the above at the other end -- the target run ends at
-# the very last commit in history (commit_9), so there is no "after"
-# neighbor; the upper bound must fall back to the bucket's calendar end.
+# UNIT TEST: mirror of the above -- a run ending at the last commit has no
+# "after" neighbor; the upper bound must fall back to the bucket's calendar end.
 test_random_dates_no_upper_neighbor_at_history_end() {
     local errors=0 history output lo got8 got9
 
@@ -250,12 +229,11 @@ test_random_dates_no_upper_neighbor_at_history_end() {
     record_result "$errors" 'random dates: a run ending at the very last commit needs no fabricated upper neighbor'
 }
 
-# INTEGRATION TEST: same shape as test_flag_keep_partial (flags.sh), but for
-# the random-* trio -- only the calendar fields the flag keeps are asserted
-# unchanged (never asserting a change happened, since randomness could
-# legitimately reproduce the original value).
+# INTEGRATION TEST: same shape as test_flag_keep_partial (flags.sh), for the
+# random-* trio -- only kept calendar fields are asserted unchanged (never
+# asserting a change happened, since randomness could reproduce the original).
 test_flag_random_partial() {
-    # @param $1  flag under test: --random-time | --random-day | --random-month
+    # $1: --random-time | --random-day | --random-month
     local flag="$1" random_index commit_hash old_year old_month
     local new_commit_hash new_year new_month exit_status errors=0
 
@@ -288,8 +266,7 @@ test_flag_random_partial() {
 }
 
 # INTEGRATION TEST: mirrors test_multiple_commits (core.sh) -- only the
-# explicitly targeted commits should change; everything else in the shared
-# fixture repo must be left alone.
+# targeted commits should change.
 test_random_day_multiple_commits() {
     local h1 h2 exit_status old_month1 old_month2 new_month1 new_month2 errors=0
 
@@ -321,13 +298,10 @@ test_random_day_multiple_commits() {
     record_result "$errors" 'flag --random-day with multiple explicit target commits'
 }
 
-# INTEGRATION TEST: a dedicated repo with commits pinned a few days apart
-# within a single month, so --random-day's bucket (a whole month) is wider
-# than the gaps between commits. Only two non-adjacent commits are
-# targeted; the rest are real, untouched neighbors. Asserts the *entire*
-# log stays in chronological order afterward, not just that the targets'
-# own year/month didn't change -- the neighbor-bounding guarantee, exercised
-# end to end through git-filter-repo rather than the script directly.
+# INTEGRATION TEST: commits a few days apart within one month (--random-day's
+# bucket), only two non-adjacent ones targeted. Asserts the *entire* log
+# stays chronological afterward -- the neighbor-bounding guarantee, exercised
+# end to end through git-filter-repo.
 test_random_day_preserves_neighbor_order_real_repo() {
     local repo_dir errors=0 i ts h2 h5 order_ok=1 prev_ts cur_ts
 
@@ -374,10 +348,9 @@ test_random_day_preserves_neighbor_order_real_repo() {
     record_result "$errors" 'flag --random-day keeps the whole log ordered relative to untouched neighboring commits'
 }
 
-# INTEGRATION TEST: a dedicated repo (not the shared COMMIT_COUNT fixture,
-# whose commits are all made "now" within the same real day) with commits
-# spread ~40 days apart across several years, so --random-month --entire-
-# history has more than one calendar-year bucket to keep in relative order.
+# INTEGRATION TEST: a dedicated repo (not the shared same-day fixture) with
+# commits spread ~40 days apart across years, giving --random-month
+# --entire-history more than one calendar-year bucket to keep ordered.
 test_random_month_preserves_order_and_year() {
     local repo_dir errors=0 i ts before_years after_years order_ok=1
     local prev_ts cur_ts

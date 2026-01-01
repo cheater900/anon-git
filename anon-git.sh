@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-# Bumped by hand; no automated release process yet. Not tied to git tags.
+# Bumped by hand; not tied to git tags.
 ANON_GIT_VERSION='0.1.0'
 
 DEFAULT_NAME='Anon'
@@ -22,10 +22,9 @@ DEFAULT_CURRENTBRANCH='0'
 DEFAULT_DRYRUN='0'
 DEFAULT_QUIET='0'
 
-# Scratch files cleaned up by the EXIT trap (cleanup_on_exit) below, so a
-# kill mid-run (Ctrl-C, CI timeout, ...) can't leave them behind, not just
-# the normal success/failure exit paths. Declared here (empty) so the trap
-# can safely run even before setup_dryrun/run_filter_repo populate them.
+# Scratch files removed by the EXIT trap (cleanup_on_exit) so a kill mid-run
+# doesn't leave them behind. Declared empty so the trap is safe before
+# setup_dryrun/run_filter_repo populate them.
 dryrun_file=''
 filter_repo_log=''
 random_dates_file=''
@@ -46,9 +45,8 @@ trap cleanup_on_exit EXIT
 # ──────────────────────────────────────────────────────────────────────
 # HELP
 #
-# Defined and handled first so `--help` works even outside a git repository
-# or with a dirty working tree; the safety checks that follow this block
-# are unchanged, just moved below the help handling.
+# Defined first so `--help` works even outside a git repo or with a dirty
+# working tree.
 
 show_help() {
     cat <<EOF
@@ -206,9 +204,9 @@ show_version() {
     exit 0
 }
 
-# Internal/undocumented: prints one flag per line (value-taking flags end in
-# "="), so shell completion scripts have a single source of truth for the
-# flag list instead of hardcoding it (and silently drifting out of sync).
+# Internal/undocumented: single source of truth for the flag list, so
+# completion scripts don't hardcode it and drift out of sync. Value-taking
+# flags end in "=".
 list_flags() {
     cat <<'EOF'
 -h
@@ -244,10 +242,9 @@ EOF
     exit 0
 }
 
-# Internal: prints the requested shell's completion script to stdout and
-# exits. The completion scripts are static files shipped next to this
-# script (see completions/), not generated, so this is just a convenience
-# `cat` with shell-name resolution (defaulting to $SHELL) and validation.
+# Internal: completion scripts are static files shipped in completions/,
+# not generated; this resolves the shell name (defaulting to $SHELL) and
+# cats the matching file.
 print_completion() {
     local shell="$1" script_dir completion_file
 
@@ -273,18 +270,16 @@ print_completion() {
     exit 0
 }
 
-# Internal: absolute path to this script itself, so the install functions
-# below can copy it regardless of the relative path (./anon-git.sh, a
-# $PATH lookup, ...) it was invoked with.
+# Internal: resolves to an absolute path regardless of how the script was
+# invoked (./anon-git.sh, a $PATH lookup, ...), for the install functions below.
 script_path() {
     local script_dir
     script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")" && pwd)
     printf '%s/%s\n' "$script_dir" "$(basename -- "${BASH_SOURCE[0]:-$0}")"
 }
 
-# Internal: copies $1 (this script) to $2/anon-git, then warns if $2 is
-# not on $PATH. Prints what it did/failed and returns non-zero on failure
-# instead of exiting, so install_user can attempt every candidate directory.
+# Internal: copies $1 to $2/anon-git, warns if $2 isn't on $PATH. Returns
+# non-zero instead of exiting, so install_user can try every candidate dir.
 install_copy() {
     local src="$1" dir="$2" target="${2}/anon-git"
 
@@ -311,9 +306,8 @@ install_copy() {
     return 0
 }
 
-# --install: copies this script to ~/.local/bin and/or ~/.bin, whichever of
-# the two already exist (neither is created), and warns per-directory if it
-# isn't on $PATH.
+# --install: copies to ~/.local/bin and/or ~/.bin, whichever already exist
+# (neither is created).
 install_user() {
     local src candidates=("${HOME}/.local/bin" "${HOME}/.bin") dir found=0 failures=0
 
@@ -336,8 +330,6 @@ install_user() {
     exit 1
 }
 
-# --install-system: copies this script to /usr/bin via sudo, for a
-# system-wide install available to every user/shell.
 install_system() {
     local src target='/usr/bin/anon-git'
 
@@ -363,23 +355,14 @@ install_system() {
     exit 0
 }
 
-# Internal: marker embedded in the generated post-commit hook so install_hook
-# can recognize (and safely refresh) a hook it created, without clobbering a
-# hook the user wrote themselves.
+# Marks hooks this script generated, so install_hook can refresh them
+# without clobbering a hook the user wrote themselves.
 HOOK_MARKER='# Installed by anon-git --install-hook'
 
-# --install-hook: installs a post-commit hook in the current repository's
-# .git/hooks/ that re-anonymizes HEAD (the commit that was just made) after
-# every `git commit`, using --current-branch so it rewrites in place instead
-# of creating a new branch on every commit. Also passes --no-backup: a
-# per-commit backup branch would otherwise accumulate one extra branch per
-# commit forever (this fires on *every* commit, unlike a manual run); `git
-# reflog`/`git reset` still recover the pre-hook state if something goes
-# wrong, per the README. Also passes --quiet: without it, every `git commit`
-# would print "Anonymizing commit(s): ..." / "Done." on top of git's own
-# commit summary. Warns (but still installs) if core.hooksPath is set, since
-# git would look there instead of <git-dir>/hooks and the installed hook
-# would otherwise silently never fire.
+# --install-hook: installs a post-commit hook that re-anonymizes HEAD in
+# place after every commit, with --no-backup (would accumulate one branch
+# per commit) and --quiet. Warns but still installs if core.hooksPath is
+# set, since git would look there instead and the hook would never fire.
 install_hook() {
     local git_dir hooks_dir hook_file src hooks_path
 
@@ -397,11 +380,8 @@ install_hook() {
         exit 1
     fi
 
-    # git honors core.hooksPath (common with husky/pre-commit/lefthook) over
-    # <git-dir>/hooks when set, so a hook written there would silently never
-    # fire. Warn rather than silently installing somewhere git won't look;
-    # still install at the standard location below so `--install-hook` stays
-    # idempotent/regenerable and the file is there for manual relocation.
+    # Still installs at the standard location so it stays idempotent and the
+    # file is there for manual relocation.
     hooks_path=$(git config --get core.hooksPath 2>/dev/null || true)
     if [[ -n "$hooks_path" ]]; then
         printf 'Warning: core.hooksPath is set to "%s"; git looks there for hooks, not %s.\n' "$hooks_path" "$hooks_dir" >&2
@@ -416,11 +396,9 @@ install_hook() {
 $HOOK_MARKER
 #
 # Anonymizes the just-created commit (HEAD) after every \`git commit\`.
-# --no-backup: this runs on every commit, so a per-commit backup branch
-# would accumulate forever; use \`git reflog\`/\`git reset\` to recover if
-# needed. --quiet: silences the per-commit "Anonymizing commit(s): ..." /
-# "Done." output; drop it (or pass --verbose) if you want that back.
-# Regenerate with: $src --install-hook
+# --no-backup avoids accumulating a branch per commit (use \`git reflog\`/
+# \`git reset\` to recover). --quiet drops the per-commit output; pass
+# --verbose to bring it back. Regenerate with: $src --install-hook
 
 set -e
 "$src" --no-confirm --no-backup --quiet --current-branch HEAD
@@ -430,10 +408,8 @@ EOF
     exit 0
 }
 
-# Internal: removes $1/anon-git if present, printing what it did. Unlike
-# install_copy, a target that isn't there is not a failure: uninstalling is
-# idempotent, so uninstall_all can call this for every candidate directory
-# regardless of which ones actually have a copy.
+# Internal: removes $1/anon-git if present. Unlike install_copy, a missing
+# target is not a failure -- uninstalling is idempotent.
 uninstall_copy() {
     local dir="$1" target="${1}/anon-git"
 
@@ -450,10 +426,8 @@ uninstall_copy() {
 }
 
 # --uninstall: removes this script from every location --install/
-# --install-system may have copied it to (~/.local/bin, ~/.bin, and
-# /usr/bin via sudo), skipping whichever don't have a copy. Finding nothing
-# installed anywhere is not an error (the desired end state is already
-# reached); only an actual removal failure is.
+# --install-system may have copied it to. Finding nothing installed is not
+# an error; only an actual removal failure is.
 uninstall_all() {
     local candidates=("${HOME}/.local/bin" "${HOME}/.bin") dir found=0 failures=0
     local system_target='/usr/bin/anon-git'
@@ -487,9 +461,8 @@ uninstall_all() {
     exit 1
 }
 
-# --uninstall-hook: removes the post-commit hook installed by --install-hook,
-# if any, guarded by the same HOOK_MARKER check install_hook uses so a hook
-# this script didn't create is never touched.
+# --uninstall-hook: guarded by the same HOOK_MARKER check install_hook uses,
+# so a hook this script didn't create is never touched.
 uninstall_hook() {
     local git_dir hooks_dir hook_file
 
@@ -523,9 +496,8 @@ uninstall_hook() {
 # ──────────────────────────────────────────────
 # EARLY OPTIONS
 #
-# Handled before any git-repo/safety checks, so --help, --print-completion
-# and the --install* flags work even outside a git repository or with a
-# dirty working tree.
+# Handled before any git-repo/safety checks, so these work even outside a
+# git repository or with a dirty working tree.
 handle_early_options() {
     [[ $# -eq 0 ]] && show_help
 
@@ -545,9 +517,8 @@ handle_early_options() {
     done
 }
 
-# Internal: dies with a clear message unless run inside a git repository
-# with a clean working tree and git-filter-repo available. Split out from
-# parse/resolve/rewrite so those can assume a usable repo from this point on.
+# Internal: dies unless inside a git repo with a clean working tree and
+# git-filter-repo available. Everything after this can assume a usable repo.
 safety_checks() {
     if ! git rev-parse --git-dir >/dev/null 2>&1; then
         printf 'AnonGit must be run inside a git repository.\n'
@@ -565,11 +536,9 @@ safety_checks() {
     fi
 }
 
-# Internal: reads a single boolean repo-local config key (git config
-# anon-git.<key>) and prints it normalized to '1'/'0' (matching the
-# ANON_GIT_* envvar contract), or prints nothing if the key is unset. A value
-# git can't parse as a boolean is treated as a hard error rather than
-# silently ignored, since a typo'd repo config should not fail open.
+# Internal: reads git config anon-git.<key>, normalized to '1'/'0', or
+# prints nothing if unset. An unparseable value is a hard error rather than
+# silently ignored, since a typo'd config shouldn't fail open.
 read_git_config_bool() {
     local key="$1" raw
     raw=$(git config --get "$key" 2>/dev/null || true)
@@ -589,15 +558,9 @@ read_git_config_bool() {
     esac
 }
 
-# Reads repo-local defaults from `git config anon-git.*` into the GITCONFIG_*
-# globals that merge_args_with_defaults consults above ANON_GIT_* envvars
-# (repo config wins over an inherited/exported envvar) and below CLI flags
-# (see README's "Repo-local config" section). Deliberately scoped to
-# name/email/date/keep-*/random-*/striptimezone/quiet, the
-# settings that make sense to pin per-repo; --entire-history,
-# --current-branch and --dry-run stay flag/envvar-only, since a silently
-# configured default for any of those would be far more destructive than a
-# wrong name or email.
+# Reads `git config anon-git.*` into the GITCONFIG_* globals, ranked above
+# envvars and below flags. Excludes --entire-history/--current-branch/
+# --dry-run: a silent default for those would be too destructive.
 read_git_config() {
     GITCONFIG_NAME=$(git config --get anon-git.name 2>/dev/null || true)
     GITCONFIG_EMAIL=$(git config --get anon-git.email 2>/dev/null || true)
@@ -614,9 +577,8 @@ read_git_config() {
     GITCONFIG_QUIET=$(read_git_config_bool anon-git.quiet)
 }
 
-# Internal: parses "$@" into the *_ARG globals RESOLVE ARGS later merges with
-# ANON_GIT_* envvars and the DEFAULT_* fallbacks. Empty string means "not
-# provided via flag" throughout the rest of the script.
+# Internal: parses "$@" into the *_ARG globals, later merged with ANON_GIT_*
+# envvars and DEFAULT_* fallbacks. Empty string means "not provided via flag".
 parse_args() {
     DATE_ARG=""
     NAME_ARG=""
@@ -748,8 +710,6 @@ parse_args() {
     done
 }
 
-# Internal: shared by reject_incompatible_options below to reject a pair of
-# mutually-exclusive options once both are non-empty.
 check_incompatible() {
     local flag1="$1"
     local flag2="$3"
@@ -761,17 +721,10 @@ check_incompatible() {
     fi
 }
 
-# Rejects mutually-exclusive option combinations regardless of whether each
-# side was provided via CLI flag, repo-local `git config anon-git.*`, or its
-# ANON_GIT_* environment variable equivalent, so e.g.
-# `ANON_GIT_KEEP_USER=1 ANON_GIT_NAME=X` and a repo with both `anon-git.keepuser`
-# and `anon-git.name` configured are rejected the same way `--keep-user --name X`
-# is, instead of silently letting one win. Must run before RESOLVE ARGS
-# overwrites these env var names with the fully-resolved value (default
-# included), so an unset env var reads as empty and a hardcoded default never
-# counts as "provided". Booleans only count as provided when explicitly '1'
-# (the "0 or 1" contract validate_bool enforces later); string options count
-# as provided whenever non-empty.
+# Rejects mutually-exclusive options regardless of whether each side came
+# from a CLI flag, repo-local config, or its envvar. Must run before
+# merge_args_with_defaults overwrites these envvar names with the
+# fully-resolved value, so an unset envvar still reads as empty.
 reject_incompatible_options() {
     local date_set name_set email_set
     local keepuser_set keepdate_set keepyear_set keepmonth_set keepday_set
@@ -825,11 +778,8 @@ reject_incompatible_options() {
     check_incompatible --keep-year "$keepyear_set" --keep-month "$keepmonth_set"
     check_incompatible --keep-year "$keepyear_set" --keep-day "$keepday_set"
     check_incompatible --keep-month "$keepmonth_set" --keep-day "$keepday_set"
-    # random-* and keep-year/keep-month/keep-day both dictate a fill strategy
-    # (zero vs. random) for whichever of month/day/time isn't kept, so any
-    # cross-pairing between the two families is a genuine conflict, not just
-    # redundancy -- same reasoning as the keep-year/keep-month/keep-day
-    # pairs above, just across both families instead of within one.
+    # random-* and keep-year/-month/-day both dictate a fill strategy (zero
+    # vs. random) for the unkept fields, so cross-pairing is a real conflict.
     check_incompatible --keep-year "$keepyear_set" --random-time "$randomtime_set"
     check_incompatible --keep-year "$keepyear_set" --random-day "$randomday_set"
     check_incompatible --keep-year "$keepyear_set" --random-month "$randommonth_set"
@@ -839,18 +789,14 @@ reject_incompatible_options() {
     check_incompatible --keep-day "$keepday_set" --random-time "$randomtime_set"
     check_incompatible --keep-day "$keepday_set" --random-day "$randomday_set"
     check_incompatible --keep-day "$keepday_set" --random-month "$randommonth_set"
-    # random-time/random-day/random-month are three granularities of the same
-    # thing (mirroring keep-year/keep-month/keep-day above): only one at a time.
+    # Three granularities of the same thing: only one at a time.
     check_incompatible --random-time "$randomtime_set" --random-day "$randomday_set"
     check_incompatible --random-time "$randomtime_set" --random-month "$randommonth_set"
     check_incompatible --random-day "$randomday_set" --random-month "$randommonth_set"
-    # The commit(s) argument is CLI-only (there is no ANON_GIT_COMMIT env var
-    # users are meant to set), so this one stays flag-vs-flag.
+    # CLI-only: no ANON_GIT_COMMIT envvar exists.
     check_incompatible "commit(s) argument" "$COMMIT_ARG" --entire-history "$ENTIREHISTORY_ARG"
-    # --verbose is a CLI-only override for ANON_GIT_QUIET/a repo-local quiet
-    # config (see merge_args_with_defaults), so this stays flag-vs-flag too:
-    # `ANON_GIT_QUIET=1 --verbose` is the intended way to un-silence a quiet
-    # default for one run, not a conflict to reject.
+    # Not a real conflict: `ANON_GIT_QUIET=1 --verbose` is the intended way to
+    # un-silence a quiet default for one run.
     check_incompatible --quiet "$QUIET_ARG" --verbose "$VERBOSE_ARG"
 
     [[ "$flag_errors" -ne 0 ]] && exit 1
@@ -858,9 +804,7 @@ reject_incompatible_options() {
 }
 
 # Internal: merges flags > repo-local git config > ANON_GIT_* envvars >
-# DEFAULT_* fallbacks into the final ANON_GIT_* globals used by everything
-# from here on (verbose output, the backup/rewrite logic, and the Python
-# commit-callback's environment).
+# DEFAULT_* fallbacks into the final ANON_GIT_* globals used from here on.
 merge_args_with_defaults() {
     DEFAULT_COMMIT=$(git rev-parse HEAD)
     ANON_GIT_DATE="${DATE_ARG:-${GITCONFIG_DATE:-${ANON_GIT_DATE:-${DEFAULT_DATE}}}}"
@@ -880,24 +824,16 @@ merge_args_with_defaults() {
     ANON_GIT_COMMIT="${COMMIT_ARG:-${DEFAULT_COMMIT}}"
     ANON_GIT_DRYRUN="${DRYRUN_ARG:-${ANON_GIT_DRYRUN:-${DEFAULT_DRYRUN}}}"
     ANON_GIT_QUIET="${QUIET_ARG:-${GITCONFIG_QUIET:-${ANON_GIT_QUIET:-${DEFAULT_QUIET}}}}"
-    # --verbose always wins, regardless of what set ANON_GIT_QUIET above (flag,
-    # repo-local config, envvar, or default): it exists specifically to force
-    # output back on.
+    # --verbose always wins over whatever set ANON_GIT_QUIET above.
     if [[ "$VERBOSE_ARG" == '1' ]]; then
         ANON_GIT_QUIET='0'
     fi
 }
 
-# Internal: --strip-timezone used with no other CLI flag means "don't touch
-# author or date/time digits, only relabel the offset to +0000", i.e. it
-# implicitly behaves like --keep-user --keep-date for that one run (the
-# python commit-callback still performs the offset rewrite for a kept date,
-# see the `elif striptimezone` branch there). Any other CLI flag (--name,
-# --date, --keep-year, ...) opts back into that flag's normal precedence, per
-# --strip-timezone's documented "unless other CLI options are provided"
-# contract. Repo-local config / ANON_GIT_* envvars don't count as "provided"
-# here since they're background defaults, not this invocation's explicit
-# intent; only the *_ARG (CLI-only) globals are checked.
+# Internal: --strip-timezone alone implicitly behaves like --keep-user
+# --keep-date for that run (the python commit-callback still does the
+# offset rewrite). Any other CLI flag opts back into normal precedence.
+# Only the *_ARG (CLI-only) globals count -- repo config/envvars don't.
 apply_strip_timezone_alone() {
     if [[ "$STRIPTIMEZONE_ARG" == '1' && -z "$DATE_ARG" && -z "$NAME_ARG" && -z "$EMAIL_ARG" &&
         -z "$KEEPUSER_ARG" && -z "$KEEPDATE_ARG" &&
@@ -908,17 +844,14 @@ apply_strip_timezone_alone() {
     fi
 }
 
-# Internal: without an explicit commit target or --entire-history there is
-# nothing to anonymize; show the help text instead of silently defaulting to
-# HEAD (that implicit behavior was surprising, so a target is now required).
+# Internal: without a commit target or --entire-history, show help instead
+# of silently defaulting to HEAD.
 require_target() {
     if [[ -z "$COMMIT_ARG" && "$ANON_GIT_ENTIREHISTORY" != '1' ]]; then
         show_help
     fi
 }
 
-# Internal: shared by validate_final_options below to enforce the "0 or 1" contract
-# every resolved ANON_GIT_* boolean must satisfy, however it was supplied.
 validate_bool() {
     local name="$1" value="$2"
     if [[ "$value" != '0' && "$value" != '1' ]]; then
@@ -927,9 +860,8 @@ validate_bool() {
     fi
 }
 
-# Sanity-checks the fully-resolved ANON_GIT_* booleans (flag, envvar, or
-# default alike could have produced a bogus value if a stray envvar leaked
-# in) before anything acts on them.
+# Sanity-checks the resolved ANON_GIT_* booleans (a stray envvar could have
+# produced a bogus value) before anything acts on them.
 validate_final_options() {
     validate_bool ANON_GIT_KEEPUSER "$ANON_GIT_KEEPUSER"
     validate_bool ANON_GIT_KEEPDATE "$ANON_GIT_KEEPDATE"
@@ -946,10 +878,9 @@ validate_final_options() {
     validate_bool ANON_GIT_QUIET "$ANON_GIT_QUIET"
 }
 
-# Prints a short summary of what's about to happen, gated on which flags
-# were explicitly passed on the CLI (not the resolved envvar/default value),
-# so setting e.g. ANON_GIT_KEEPUSER in your shell profile doesn't spam this
-# on every run.
+# Prints a summary, gated on flags explicitly passed on the CLI (not the
+# resolved envvar/default), so e.g. ANON_GIT_KEEPUSER in a shell profile
+# doesn't spam this on every run.
 verbose_info() {
     if [[ "$ANON_GIT_QUIET" == '1' ]]; then
         return
@@ -993,8 +924,8 @@ verbose_info() {
 }
 
 # Creates a new branch (default) or a backup branch (--current-branch,
-# unless --no-backup) before rewriting, so the pre-rewrite history stays
-# reachable. No-op under --dry-run, since nothing is rewritten.
+# unless --no-backup) so pre-rewrite history stays reachable. No-op under
+# --dry-run.
 backup_branch() {
     local current_branch branch_label timestamp new_branch backup_branch_name switch_target
 
@@ -1004,11 +935,8 @@ backup_branch() {
         exit 1
     fi
     branch_label="${current_branch:-detached-$(git rev-parse --short HEAD)}"
-    # Colon-free timestamp: git ref names may not contain ":" (see
-    # git-check-ref-format). Suffixed with PID + $RANDOM rather than
-    # sub-second precision (e.g. GNU date's %N) for uniqueness across
-    # back-to-back runs within the same second: %N is a GNU coreutils
-    # extension stock BSD/macOS date doesn't support, so this stays portable.
+    # Colon-free (git ref names disallow ":"); PID + $RANDOM suffix for
+    # uniqueness within the same second, avoiding GNU-only date %N.
     timestamp="$(date +%Y%m%d_%H%M%S)_$$_${RANDOM}"
 
     if [[ "$ANON_GIT_DRYRUN" != '1' ]]; then
@@ -1047,8 +975,7 @@ backup_branch() {
     fi
 }
 
-# Prompts for confirmation unless --no-confirm or --dry-run (a dry run
-# doesn't touch anything, so there's nothing to confirm).
+# Skipped for --no-confirm or --dry-run (nothing is touched either way).
 confirm() {
     if [[ "$NOCONFIRM_ARG" != '1' && "$ANON_GIT_DRYRUN" != '1' ]]; then
         read -p "Continue? (y/N) " -n 1 -r
@@ -1057,19 +984,9 @@ confirm() {
     fi
 }
 
-# git-filter-repo stores metadata in .git/filter-repo/ after the first run (to
-# speed up certain operations and support things like incremental/incremental
-# filtering). When you run it again, it tries to reuse that metadata, but under
-# some conditions (particularly if the previous filtering pruned certain
-# refs/objects or if the repo state changed in subtle ways), the assumption in the
-# code breaks and it hits this assertion.
-#
-# This a known bug in git-filter-repo that can occur when you run the tool multiple
-# times on the same repository (especially if you ran it once successfully, then
-# tried again or with slightly different options).
-#
-# To avoid this bug, we remove cached metadata, which may cause trouble while
-# anonymizing the git history, for example, when using the script as git hook.
+# git-filter-repo caches metadata in .git/filter-repo/ to reuse across runs,
+# but reusing it after certain repo state changes hits a known assertion bug
+# in the tool. Removing it forces a clean run each time.
 clean_cache() {
     if [[ -d "$PWD/.git/filter-repo" ]]; then
         rm -rf "$PWD/.git/filter-repo"
@@ -1077,9 +994,8 @@ clean_cache() {
 }
 
 # Internal: creates the scratch file the Python commit-callback writes its
-# preview to under --dry-run, so run_filter_repo/print_result can share it
-# via the ANON_GIT_DRYRUN_FILE envvar. Left empty (no file) otherwise.
-# dryrun_file is the global the EXIT trap (cleanup_on_exit) removes.
+# --dry-run preview to (shared via ANON_GIT_DRYRUN_FILE). Removed by the
+# EXIT trap (cleanup_on_exit).
 setup_dryrun() {
     if [[ "${ANON_GIT_DRYRUN}" -eq 1 ]]; then
         dryrun_file=$(mktemp)
@@ -1089,10 +1005,9 @@ setup_dryrun() {
 # ──────────────────────────────────────────────────────────────────────
 # REWRITE LOGIC
 
-# Values are passed to the Python commit-callback via the environment (not
-# string-interpolated into the generated source) so that a name, email, or
-# date containing a quote or other Python-special character cannot break out
-# of a string literal and inject code into the callback.
+# Passed via environment rather than string-interpolated into the generated
+# source, so a name/email/date with a quote or other Python-special
+# character can't break out of a string literal and inject code.
 export_rewrite_env() {
     export ANON_GIT_NAME ANON_GIT_EMAIL ANON_GIT_DATE ANON_GIT_COMMIT
     export ANON_GIT_KEEPUSER ANON_GIT_KEEPDATE ANON_GIT_KEEPYEAR ANON_GIT_KEEPMONTH ANON_GIT_KEEPDAY
@@ -1104,50 +1019,13 @@ export_rewrite_env() {
     export TZ=UTC
 }
 
-# Precomputes one random timestamp per target commit for --random-time/
-# --random-day/--random-month, run once (by setup_random_dates, as its own
-# `python3 -c` process, not inside git-filter-repo) before git-filter-repo
-# starts, so it can consider every commit at once instead of one at a time.
-#
-# Reads the FULL reachable history (oldest to newest, one "<hash> <epoch>"
-# line per commit -- not just the target commits) from stdin, plus which
-# commits are actual targets via ANON_GIT_ENTIREHISTORY/ANON_GIT_TARGET_COMMITS,
-# and tags every commit with a role:
-#   - 'target': one of the commits actually being rewritten.
-#   - 'anchor': not a target itself, but the one real commit immediately
-#     before or after a run of target commits in the full history -- kept
-#     at its own real date (never rewritten, never printed), used only to
-#     bound that run's random range so it can't cross into the anchor's
-#     side of history. A run at the very start/end of history simply has no
-#     anchor on that side (there's nothing there to bound it), same as
-#     --entire-history (where every commit is a target and no anchors exist
-#     at all).
-#   - everything else: irrelevant to any target's ordering, ignored.
-#
-# Commits are then grouped into buckets by whichever calendar unit stays
-# fixed (year for --random-month, year+month for --random-day, the exact
-# day for --random-time). Within a bucket, its members are walked in
-# original chronological order and split into maximal runs of consecutive
-# targets; each run draws that many random timestamps -- bounded by the
-# nearest in-bucket anchor's real epoch on either side, or the bucket's own
-# calendar edge where there's no closer anchor -- sorts them, and hands them
-# back to the run's commits in their original relative order. This is why
-# two target commits (in the same bucket, or in different ones -- the year,
-# and depending on flag month/day, is never touched, so an earlier bucket's
-# span never overlaps a later one's) always keep their original relative
-# order, and why a target run never sorts past a real, untouched neighbor
-# commit just outside the commits being rewritten in this run.
-#
-# Prints "<hash> <epoch> +0000" lines to stdout, targets only, for
-# python_commit_callback to look up by commit hash. Offset is always
-# +0000, matching how --keep-year/--keep-month/--keep-day already hardcode
-# +0000 for the parts they don't preserve, rather than leaking the original
-# timezone.
-#
-# Kept as a plain top-level assignment (not nested in a function), same as
-# python_commit_callback below: the test suite locates it by its exact,
-# unindented `python_compute_random_dates="` ... `"` line anchors to check
-# it's valid Python.
+# Precomputes one random timestamp per target commit for --random-time/-day/
+# -month: reads full history from stdin (oldest to newest), tags each commit
+# target/anchor/ignored, buckets by the fixed calendar unit, and assigns each
+# bucket's runs random timestamps bounded by their nearest anchor, preserving
+# relative order. Prints "<hash> <epoch> +0000" lines, targets only. Kept as
+# a plain top-level assignment: the test suite locates it by its exact,
+# unindented `python_compute_random_dates="` ... `"` line anchors.
 python_compute_random_dates="
 import os
 import random
@@ -1165,8 +1043,7 @@ entirehistory = os.environ.get('ANON_GIT_ENTIREHISTORY') == '1'
 target_hashes = set(os.environ.get('ANON_GIT_TARGET_COMMITS', '').split())
 
 def bucket_bounds(dt):
-    # @param   <datetime.datetime>  UTC-aware original commit date
-    # @returns <tuple>              (bucket key, bucket start epoch, bucket end epoch)
+    # dt: UTC-aware original commit date. Returns (bucket key, start epoch, end epoch).
     if granularity == 'month':
         key = (dt.year,)
         start = datetime(dt.year, 1, 1, tzinfo=timezone.utc)
@@ -1237,11 +1114,9 @@ for key, members in buckets.items():
         count = len(run)
         span = upper - lower
         if span < 0:
-            # The bounding anchors leave no room at all (e.g. two real
-            # commits one second apart with a target sandwiched between
-            # them). Fall back to a shared timestamp so relative order still
-            # holds (git accepts identical author dates on separate
-            # commits), even though true randomness isn't achievable here.
+            # No room between anchors (e.g. two real commits one second
+            # apart with a target sandwiched between). Fall back to a shared
+            # timestamp -- git allows identical author dates.
             picks = [lower] * count
         elif count <= span + 1:
             picks = sorted(random.sample(range(lower, upper + 1), count))
@@ -1251,15 +1126,10 @@ for key, members in buckets.items():
             print('%s %d +0000' % (member_hash, new_epoch))
 "
 
-# Internal: only runs when one of --random-time/--random-day/--random-month
-# is active. Feeds python_compute_random_dates the full history reachable
-# from HEAD (oldest to newest, one "<hash> <epoch>" line per commit -- the
-# same set git-filter-repo will walk via --refs HEAD) plus which of those
-# are actual targets, so it can bound each target run by its real
-# neighboring commit(s) and not just the target set in isolation. Produces
-# the "<hash> <epoch> +0000" lookup file python_commit_callback reads from
-# (see ANON_GIT_RANDOM_DATES_FILE in export_rewrite_env). random_dates_file
-# is the global the EXIT trap (cleanup_on_exit) removes.
+# Internal: only runs for --random-time/-day/-month. Feeds
+# python_compute_random_dates the full history plus which commits are
+# targets, producing the lookup file python_commit_callback reads
+# (ANON_GIT_RANDOM_DATES_FILE). Removed by the EXIT trap (cleanup_on_exit).
 setup_random_dates() {
     if [[ "$ANON_GIT_RANDOMTIME" != '1' && "$ANON_GIT_RANDOMDAY" != '1' && "$ANON_GIT_RANDOMMONTH" != '1' ]]; then
         return
@@ -1302,10 +1172,8 @@ entirehistory = os.environ['ANON_GIT_ENTIREHISTORY'] == '1'
 dryrun = os.environ['ANON_GIT_DRYRUN'] == '1'
 dryrun_file = os.environ.get('ANON_GIT_DRYRUN_FILE', '')
 
-# Loaded once (module-level state persists across every commit-callback
-# invocation within this single git-filter-repo run) rather than re-read on
-# every commit, since setup_random_dates already precomputed the whole
-# lookup ahead of time.
+# Loaded once: module-level state persists across every commit-callback
+# invocation within this filter-repo run, so no need to re-read per commit.
 if 'RANDOM_DATES' not in globals():
     RANDOM_DATES = {}
     random_dates_file = os.environ.get('ANON_GIT_RANDOM_DATES_FILE', '')
@@ -1327,9 +1195,6 @@ if not entirehistory and commit.original_id not in target_commits:
     return
 
 def parse_git_date(date_bytes):
-    # @param   <bytes>              Git date (timestamp followed by timezone, i.e 1770000000 +0000)
-    # @returns <datetime.datetime>  Date object
-
     unix_ts, offset = date_bytes.decode().split()
     sign = 1 if offset.startswith('+') else -1
     offset = offset.replace('+', '').replace('-', '')
@@ -1350,10 +1215,8 @@ def parse_git_date(date_bytes):
     return dt
 
 def parse_target_date(date_str):
-    # Accept both 'YYYY-MM-DD HH:MM:SS +ZZZZ' and ISO 8601 compact form
-    # with a 'T' separator and/or a 'Z'/'+HH:MM' offset with no space
-    # before it (e.g. '2025-06-15T14:20:00Z'), normalizing to the
-    # space-separated, 4-digit-offset form '%z' below expects.
+    # Also accepts ISO 8601 compact form (e.g. '2025-06-15T14:20:00Z'),
+    # normalized to the space-separated, 4-digit-offset form '%z' expects.
     normalized = date_str.strip()
     if 'T' in normalized:
         normalized = normalized.replace('T', ' ', 1)
@@ -1372,11 +1235,8 @@ if not keepuser:
 
 if not keepdate:
     if randomtime or randomday or randommonth:
-        # setup_random_dates already computed this commit's randomized date
-        # (bytes in the same epoch-then-offset shape parse_git_date expects),
-        # honoring the original relative order of every target commit within
-        # whatever calendar unit stays fixed (year/month/day depending on
-        # which of the three flags is set); just look it up by commit hash.
+        # setup_random_dates already computed this commit's randomized date;
+        # just look it up by commit hash.
         random_date = RANDOM_DATES.get(commit.original_id)
         if random_date is None:
             raise SystemExit(
@@ -1386,9 +1246,9 @@ if not keepdate:
         ts = int(dt.timestamp())
         offset = '+0000'
     elif keepyear or keepmonth or keepday:
-        # Strip the timezone (keeping the calendar date as the committer saw
-        # it) and re-anchor to midnight UTC, so only the anonymized fields
-        # (time, tz) leak; TZ=UTC above makes naive dt.timestamp() below UTC.
+        # Strip the timezone (keeping the calendar date as seen) and
+        # re-anchor to midnight UTC, so only time/tz leak. TZ=UTC above
+        # makes the naive dt.timestamp() below UTC.
         dt = parse_git_date(commit.author_date)
         dt = dt.replace(tzinfo=None, hour=0, minute=0, second=0, microsecond=0)
         if keepyear or keepmonth:
@@ -1398,10 +1258,9 @@ if not keepdate:
         ts = dt.timestamp()
         offset = '+0000'
     elif striptimezone:
-        # Keep the date/time digits given by --date (or its default), but
-        # relabel (not convert) the offset to +0000: same tzinfo=None ->
-        # reinterpret-as-UTC strategy as the keepyear/month/day branch above,
-        # just without zeroing out the smaller fields.
+        # Keep the date/time digits from --date, relabel (not convert) the
+        # offset to +0000 -- same reinterpret-as-UTC trick as above, without
+        # zeroing the smaller fields.
         dt = parse_target_date(date)
         dt = dt.replace(tzinfo=None)
         ts = dt.timestamp()
@@ -1423,17 +1282,14 @@ if not keepdate:
     author_date = date_encoded
     committer_date = date_encoded
 elif striptimezone:
-    # --keep-date (explicit, or implied by --strip-timezone used with no
-    # other option) leaves the date/time digits untouched per field, but
-    # --strip-timezone still relabels each field's offset to +0000, computed
-    # per author/committer independently (they can differ, e.g. after a
-    # rebase), unlike the shared date_encoded used above.
+    # --keep-date leaves digits untouched, but --strip-timezone still relabels
+    # each field's offset to +0000, computed per author/committer
+    # independently (they can differ, e.g. after a rebase).
     author_dt = parse_git_date(commit.author_date).replace(tzinfo=None)
     author_date = b'%d +0000' % (int(author_dt.timestamp()),)
     committer_dt = parse_git_date(commit.committer_date).replace(tzinfo=None)
     committer_date = b'%d +0000' % (int(committer_dt.timestamp()),)
 
-# don't rewrite history, just pretend
 if dryrun:
     f = open(dryrun_file, 'a')
     f.write('Commit:')
@@ -1467,7 +1323,6 @@ if dryrun:
     f.close()
     return
 
-# actually rewrite history
 commit.author_name = author_name
 commit.author_email = author_email
 commit.author_date = author_date
@@ -1476,9 +1331,7 @@ commit.committer_email = committer_email
 commit.committer_date = committer_date
 "
 
-# Runs git-filter-repo with the callback above. filter_repo_log (like
-# dryrun_file) is a global the EXIT trap (cleanup_on_exit) removes, on this
-# function's failure exit or any later one.
+# filter_repo_log is a global the EXIT trap (cleanup_on_exit) removes.
 run_filter_repo() {
     filter_repo_log=$(mktemp)
     if ! git filter-repo --force --commit-callback "$python_commit_callback" --refs HEAD >"$filter_repo_log" 2>&1; then
@@ -1488,9 +1341,7 @@ run_filter_repo() {
     fi
 }
 
-# Prints the dry-run preview (via $PAGER, falling back to cat) or the final
-# success message. dryrun_file itself is removed by the EXIT trap
-# (cleanup_on_exit), not here.
+# dryrun_file is removed by the EXIT trap (cleanup_on_exit), not here.
 print_result() {
     if [[ "$ANON_GIT_DRYRUN" == '1' && -f "$dryrun_file" ]]; then
         local pager=${PAGER:-cat}

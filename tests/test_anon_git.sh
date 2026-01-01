@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
 
-# Runs the anon-git.sh test suite. The suite is split into lib/common.sh
-# (shared setup, globals, and helper functions) and cases/*.sh (test_*
-# functions grouped by category). Both are sourced here so every test
-# function ends up in this shell, sharing $TMP_DIR, $SCRIPT, and the
-# pass/fail counters defined in lib/common.sh.
+# Runs the anon-git.sh test suite: lib/common.sh (shared setup/helpers) and
+# cases/*.sh (test_* functions by category), sourced here so every test
+# function shares $TMP_DIR, $SCRIPT, and lib/common.sh's pass/fail counters.
 
 TESTS_DIR=$(cd "$(dirname "$0")" && pwd)
 
@@ -61,11 +59,8 @@ main() {
     test_catch_incompatible --keep-year --keep-day
     test_catch_incompatible --keep-month --keep-day
     test_catch_incompatible --entire-history HEAD
-    # random-time/random-day/random-month are mutually exclusive with each
-    # other (only one granularity at a time, same as keep-year/month/day
-    # above), with --keep-date/--keep-year/--keep-month/--keep-day (both
-    # families dictate a fill strategy for the same fields), and with an
-    # explicit --date (a hardcoded target date leaves nothing to randomize).
+    # random-time/day/month: only one at a time, none with --keep-*
+    # (both families dictate a fill strategy), none with an explicit --date.
     test_catch_incompatible --random-day --keep-day
     test_catch_incompatible --random-time --keep-year
     test_catch_incompatible --random-month --keep-month
@@ -74,9 +69,8 @@ main() {
     test_catch_incompatible --random-day --random-month
     test_catch_incompatible --random-time --random-month
     test_catch_incompatible --date '2020-01-01 00:00:00 +0000' --random-month
-    # Same combinations, provided via their ANON_GIT_* envvar equivalents
-    # instead of flags (--entire-history has none: there is no ANON_GIT_COMMIT
-    # envvar users are meant to set, so it's flag-only and not repeated here).
+    # Same combinations via their ANON_GIT_* envvar equivalents (--entire-history
+    # has none: no ANON_GIT_COMMIT envvar exists, so it's flag-only).
     test_catch_incompatible 'ANON_GIT_DATE=2020-01-01 00:00:00 +0000' ANON_GIT_KEEPDATE=1
     test_catch_incompatible 'ANON_GIT_DATE=2020-01-01 00:00:00 +0000' ANON_GIT_KEEPYEAR=1
     test_catch_incompatible ANON_GIT_KEEPUSER=1 ANON_GIT_NAME=Nobody
@@ -86,8 +80,7 @@ main() {
     test_catch_incompatible ANON_GIT_KEEPMONTH=1 ANON_GIT_KEEPDAY=1
     test_catch_incompatible ANON_GIT_RANDOMDAY=1 ANON_GIT_KEEPDAY=1
     test_catch_incompatible ANON_GIT_RANDOMTIME=1 ANON_GIT_RANDOMMONTH=1
-    # Mixed: one side via flag, the other via envvar — the combination must
-    # still be rejected regardless of where each side came from.
+    # Mixed: one side via flag, the other via envvar.
     test_catch_incompatible --keep-user ANON_GIT_NAME=Nobody
     test_catch_incompatible ANON_GIT_KEEPUSER=1 --name 'Nobody'
     test_catch_invalid_commit

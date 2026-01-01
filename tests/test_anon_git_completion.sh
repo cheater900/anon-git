@@ -2,15 +2,12 @@
 
 # Shell-completion tests for anon-git.sh (bash/zsh/fish), split out from
 # test_anon_git.sh since they drive real interactive shells via `expect`
-# instead of exercising anon-git.sh itself, and depend on tooling
-# (expect, and optionally bash/zsh/fish) that not every environment has.
+# and depend on tooling (expect, bash/zsh/fish) not every environment has.
 
-# Assume anon-git.sh is in the parent directory
 SCRIPT_DIR=$(realpath "$(dirname "$0")/..")
 SCRIPT_NAME=anon-git.sh
 SCRIPT=${SCRIPT_DIR}/${SCRIPT_NAME}
 
-# Create temp dir to work on
 TMP_DIR=$(mktemp -d /tmp/anon_git_test_completion.XXXXXX)
 cd "$TMP_DIR" || exit 1
 cp "$SCRIPT" .
@@ -22,8 +19,6 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Global variables shared among functions
-
 CURRENT_TEST_INDEX=0
 TESTS_PASSED=0
 TESTS_FAILED=0
@@ -32,8 +27,7 @@ TOTAL_ERRORS=0
 # ──────────────────────────────────────────────────────────────────────
 
 record_result() {
-    # @param $1  number of errors found by the caller
-    # @param $2  short label describing the test, for the summary line
+    # $1: error count, $2: label for the summary line
     local errors="$1" label="$2" status
     CURRENT_TEST_INDEX=$((CURRENT_TEST_INDEX + 1))
     if [[ "$errors" -eq 0 ]]; then
@@ -48,14 +42,12 @@ record_result() {
 }
 
 test_completion_flags() {
-    # Zsh and fish completions hand-maintain flag names (so they can attach
-    # per-flag descriptions); regression test that every flag from
-    # --_list-flags (the script's own source of truth) is still mentioned in
-    # both, so a flag added to anon-git.sh can't silently go unmentioned.
-    # Flags are compared by bare name (dashes/= stripped) since fish's
-    # `complete -l <name>` convention omits the leading "--".
-    # The bash completion is dynamic (calls --_list-flags itself at
-    # completion time), so it's only checked for still being wired up.
+    # Zsh and fish hand-maintain flag names (for per-flag descriptions); this
+    # regression-tests that every flag from --_list-flags (the source of
+    # truth) is still mentioned in both, compared by bare name (dashes/=
+    # stripped, since fish's `complete -l` omits the leading "--"). Bash
+    # completion is dynamic (calls --_list-flags itself), so it's only
+    # checked for still being wired up.
     local bash_completion zsh_completion fish_completion
     local flags flag errors=0
 
@@ -85,22 +77,18 @@ test_completion_flags() {
     record_result "$errors" 'zsh/fish completions list every flag'
 }
 
-# Drives a real interactive shell (bash/zsh/fish) via `expect` and checks
-# that TAB actually completes a flag and a ref through the shipped
-# completion scripts, rather than just checking the scripts mention the
-# right strings (that's test_completion_flags above). expect matches
-# "keep-user" / the ref name rather than the flag/ref plus trailing space,
-# since zsh wraps the freshly-inserted text in bold escape codes that split
-# up a literal trailing-space match. Uses a dedicated git tag as the
-# ref-completion target since a real branch name is otherwise the only ref
-# in this repo and there's nothing to make the prefix ambiguous either way,
-# but a tag keeps this independent of how init_repo sets up the repo.
+# Drives a real interactive shell via `expect` and checks TAB actually
+# completes a flag and a ref through the shipped scripts (unlike
+# test_completion_flags above, which only checks the scripts mention the
+# right strings). Matches "keep-user"/the ref name without a trailing space,
+# since zsh wraps freshly-inserted text in bold escape codes that split up a
+# literal trailing-space match. Uses a dedicated git tag as the ref target so
+# this stays independent of how init_repo sets up the repo.
 _completion_expect() {
-    # @param $1  spawn command (e.g. "bash --norc --noprofile")
-    # @param $2  command that sets the prompt to $prompt (shell-specific:
-    #            bash/zsh use PS1=..., fish needs a fish_prompt function)
-    # @param $3  newline-separated setup lines to send once the prompt is set
-    # @param $4  ref marker to complete against
+    # $1: spawn command. $2: command that sets the prompt to $prompt
+    # (shell-specific: bash/zsh use PS1=..., fish needs a fish_prompt
+    # function). $3: newline-separated setup lines sent once the prompt is
+    # set. $4: ref marker to complete against.
     local spawn_cmd="$1" prompt_cmd="$2" setup="$3" ref_marker="$4"
     local prompt='COMPLETION_TEST_PROMPT> '
     local send_setup line
@@ -185,8 +173,7 @@ source ${SCRIPT_DIR}/completions/_anon-git.sh" "$ref_marker"; then
 }
 
 main() {
-    # Ref completion needs a real commit to tag against; the anonymization
-    # logic itself isn't under test here, so an empty commit is enough.
+    # An empty commit is enough: ref completion just needs a commit to tag.
     git init >/dev/null
     git config --local user.name "Jordan Blake"
     git config --local user.email "jordan.blake@example.com"

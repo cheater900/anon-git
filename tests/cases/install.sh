@@ -4,12 +4,8 @@
 # INSTALL / HOOK TESTS: --install and --install-hook.
 
 test_flag_install_local_bin() {
-    # --install must copy the running script into ~/.local/bin when it
-    # exists, mark it executable, and warn (on stderr) if that directory
-    # isn't on $PATH. Uses a disposable $HOME so this never touches the
-    # real ~/.local/bin. --install-system is intentionally not tested here:
-    # it needs sudo and a real /usr/bin, and we don't want to run as root
-    # or mock it.
+    # Uses a disposable $HOME so this never touches the real ~/.local/bin.
+    # --install-system isn't tested: it needs sudo and a real /usr/bin.
     local fake_home target output exit_status errors=0
 
     fake_home=$(mktemp -d "${TMP_DIR}/fake_home.XXXXXX")
@@ -42,7 +38,6 @@ test_flag_install_local_bin() {
 }
 
 test_flag_install_bin_fallback() {
-    # Falls back to ~/.bin when ~/.local/bin doesn't exist.
     local fake_home target exit_status errors=0
 
     fake_home=$(mktemp -d "${TMP_DIR}/fake_home.XXXXXX")
@@ -71,7 +66,6 @@ test_flag_install_bin_fallback() {
 }
 
 test_flag_install_both_dirs() {
-    # Copies to both ~/.local/bin and ~/.bin when both exist.
     local fake_home local_target bin_target exit_status errors=0
 
     fake_home=$(mktemp -d "${TMP_DIR}/fake_home.XXXXXX")
@@ -101,7 +95,6 @@ test_flag_install_both_dirs() {
 }
 
 test_flag_install_path_already_set() {
-    # No $PATH warning when the target directory is already on $PATH.
     local fake_home output exit_status errors=0
 
     fake_home=$(mktemp -d "${TMP_DIR}/fake_home.XXXXXX")
@@ -125,8 +118,7 @@ test_flag_install_path_already_set() {
 }
 
 test_flag_install_no_target_dir() {
-    # Neither ~/.local/bin nor ~/.bin exists: --install must fail cleanly
-    # without creating either directory.
+    # Must fail cleanly without creating either directory.
     local fake_home output exit_status errors=0
 
     fake_home=$(mktemp -d "${TMP_DIR}/fake_home.XXXXXX")
@@ -153,9 +145,8 @@ test_flag_install_no_target_dir() {
 }
 
 test_flag_install_idempotent() {
-    # Running --install again from the just-installed copy (same path, same
-    # inode) should report "Already installed" rather than overwrite it and
-    # re-warn about $PATH.
+    # Re-running from the just-installed copy (same path, same inode) should
+    # report "Already installed" rather than overwrite and re-warn.
     local fake_home target first_exit second_output second_exit errors=0
 
     fake_home=$(mktemp -d "${TMP_DIR}/fake_home.XXXXXX")
@@ -186,9 +177,7 @@ test_flag_install_idempotent() {
 }
 
 test_flag_uninstall_removes_both_dirs() {
-    # --uninstall must remove the script from every candidate directory that
-    # actually has a copy (both ~/.local/bin and ~/.bin here), reporting each
-    # removal, and leave the (now empty) directories themselves alone.
+    # Must report each removal and leave the (now empty) directories alone.
     local fake_home local_target bin_target output exit_status errors=0
 
     fake_home=$(mktemp -d "${TMP_DIR}/fake_home.XXXXXX")
@@ -224,8 +213,7 @@ test_flag_uninstall_removes_both_dirs() {
 }
 
 test_flag_uninstall_skips_missing_dir() {
-    # Only ~/.local/bin has a copy; --uninstall must remove that one and not
-    # treat the absent ~/.bin copy as a failure.
+    # Must not treat the absent ~/.bin copy as a failure.
     local fake_home target exit_status errors=0
 
     fake_home=$(mktemp -d "${TMP_DIR}/fake_home.XXXXXX")
@@ -252,9 +240,7 @@ test_flag_uninstall_skips_missing_dir() {
 }
 
 test_flag_uninstall_nothing_installed() {
-    # Nothing installed anywhere: --uninstall must succeed (the desired end
-    # state is already reached) and say so, rather than treating "not found"
-    # as an error the way --install does for "no target directory".
+    # Must succeed and say so, unlike --install's "no target directory" error.
     local fake_home output exit_status errors=0
 
     fake_home=$(mktemp -d "${TMP_DIR}/fake_home.XXXXXX")
@@ -277,10 +263,8 @@ test_flag_uninstall_nothing_installed() {
 }
 
 new_hook_test_repo() {
-    # Creates an isolated git repo (separate from the shared $TMP_DIR repo
-    # used by the rest of the suite, so hook side effects can't leak into
-    # other tests) with one commit and a copy of the script inside it.
-    # Prints the repo's absolute path.
+    # Isolated from the shared $TMP_DIR repo so hook side effects can't leak
+    # into other tests. Prints the repo's absolute path.
     local repo_dir
 
     repo_dir=$(mktemp -d "${TMP_DIR}/hook_repo.XXXXXX")
@@ -339,11 +323,9 @@ test_flag_install_hook_creates_hook() {
 }
 
 test_flag_install_hook_requires_git_repo() {
-    # Must live outside $TMP_DIR (which is itself a git repo, see init_repo):
-    # `git rev-parse --git-dir` walks up parent directories, so a dir nested
-    # inside $TMP_DIR would be treated as being inside that repo and
-    # --install-hook would (wrongly) succeed there, polluting the shared
-    # suite repo's hooks in the process.
+    # Must live outside $TMP_DIR (itself a git repo): `git rev-parse --git-dir`
+    # walks up parents, so nesting inside it would wrongly succeed and
+    # pollute the shared suite repo's hooks.
     local no_repo_dir output exit_status errors=0
 
     no_repo_dir=$(mktemp -d /tmp/anon_git_test_hook_norepo.XXXXXX)
@@ -398,12 +380,9 @@ test_flag_install_hook_preserves_foreign_hook() {
 }
 
 test_flag_install_hook_warns_on_hookspath() {
-    # Regression test: git honors core.hooksPath over <git-dir>/hooks when
-    # set (common with husky/pre-commit/lefthook), so a hook written to the
-    # standard location would silently never fire. --install-hook must warn
-    # about this rather than installing silently, but should still succeed
-    # (exit 0) and still write the hook file, so it stays regenerable/usable
-    # for manual relocation.
+    # git honors core.hooksPath over <git-dir>/hooks when set, so a hook
+    # written to the standard location would silently never fire. Must warn
+    # but still succeed and write the file, so it stays regenerable.
     local repo_dir hook_file output exit_status errors=0
 
     repo_dir=$(new_hook_test_repo)
@@ -436,9 +415,7 @@ test_flag_install_hook_warns_on_hookspath() {
 }
 
 test_flag_install_hook_no_warning_without_hookspath() {
-    # No core.hooksPath warning when it isn't set (the common case) — a
-    # sibling regression test to the one above, pinning down the non-noisy
-    # default so a future change can't make --install-hook warn on every run.
+    # Sibling to the test above: pins down the non-noisy default.
     local repo_dir output exit_status errors=0
 
     repo_dir=$(new_hook_test_repo)
@@ -490,11 +467,9 @@ test_flag_install_hook_idempotent() {
 }
 
 test_flag_install_hook_anonymizes_next_commit() {
-    # The hook must fire after `git commit` and rewrite only the just-made
-    # commit (HEAD); earlier history must be left untouched. Also a
-    # regression test for the hook accumulating a backup branch per commit
-    # (fixed by passing --no-backup): makes two hooked commits and checks
-    # the branch count never grows, since the hook fires on every commit.
+    # Must rewrite only the just-made commit (HEAD), leaving earlier history
+    # untouched. Also checks two hooked commits don't grow the branch count
+    # (regression for a backup branch accumulating per commit).
     local repo_dir prior_hash prior_commit new_commit errors=0
     local branch_count_before branch_count_after
 
@@ -541,8 +516,7 @@ test_flag_install_hook_anonymizes_next_commit() {
 }
 
 test_flag_install_hook_quiet() {
-    # The generated post-commit hook must pass --quiet, so it doesn't spam
-    # "Anonymizing commit(s): ..." / "Done." on every git commit.
+    # Must not spam output on every git commit.
     local repo_dir hook_file errors=0
 
     repo_dir=$(new_hook_test_repo)
@@ -614,8 +588,7 @@ test_flag_uninstall_hook_requires_git_repo() {
 }
 
 test_flag_uninstall_hook_nothing_installed() {
-    # No hook present: --uninstall-hook must succeed (nothing to do) rather
-    # than treat "not found" as an error.
+    # Must succeed rather than treat "not found" as an error.
     local repo_dir output exit_status errors=0
 
     repo_dir=$(new_hook_test_repo)

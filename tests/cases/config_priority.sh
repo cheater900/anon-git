@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 
 # Sourced by test_anon_git.sh — not meant to be run directly.
-# CONFIG PRIORITY TESTS: precedence among CLI flags, git config anon-git.*,\n# and ANON_GIT_* environment variables.
+# CONFIG PRIORITY TESTS: precedence among CLI flags, git config anon-git.*,
+# and ANON_GIT_* environment variables.
 
 test_combo_dry_run_entire_history() {
     local before after output exit_status preview_count errors=0
@@ -29,15 +30,10 @@ test_combo_dry_run_entire_history() {
 }
 
 test_combo_env_var_dry_run_entire_history() {
-    # ANON_GIT_DRYRUN and ANON_GIT_ENTIREHISTORY are not flagged by
-    # check_incompatible (that only looks at CLI-flag-derived *_ARG
-    # variables, never at env vars) and are not meant to be: --dry-run and
-    # --entire-history are a supported combo (see
-    # test_combo_dry_run_entire_history), so setting both env vars together
-    # must behave the same way, i.e. preview every commit without rewriting
-    # anything. --no-confirm is passed as a flag (not an env var) only to
-    # avoid the separate "zero args at all" early-exit that shows help
-    # before env vars are even read; it does not affect what's under test.
+    # check_incompatible only looks at CLI-flag *_ARG variables, not envvars,
+    # so both env vars together must still preview everything without
+    # rewriting (same as test_combo_dry_run_entire_history). --no-confirm is
+    # passed as a flag only to avoid the "zero args" early-exit to help.
     local before after output exit_status preview_count errors=0
 
     before=$(git rev-parse HEAD)
@@ -63,8 +59,7 @@ test_combo_env_var_dry_run_entire_history() {
 }
 
 test_combo_env_var_flag_priority() {
-    # Command-line flags must win over ANON_GIT_* environment variables
-    # (documented priority: flags > env vars > hardcoded defaults).
+    # Documented priority: flags > envvars > defaults.
     local exit_status commit_info errors=0
     local env_name='Ignored Env Name' flag_name='Flag Wins'
 
@@ -90,8 +85,8 @@ test_combo_env_var_flag_priority() {
 }
 
 test_flag_env_vars() {
-    # ANON_GIT_NAME/EMAIL/DATE must work as priority-3 config (README:
-    # "Environment variables"), same as their --name/--email/--date flags.
+    # ANON_GIT_NAME/EMAIL/DATE work as priority-3 config, same as
+    # --name/--email/--date.
     local random_index new_commit_hash exit_status commit_info errors=0
     local env_name='Grace Murray' env_email='grace.murray@example.com' env_date='2019-05-05 00:00:00 +0000'
 
@@ -121,9 +116,8 @@ test_flag_env_vars() {
 }
 
 test_gitconfig_defaults() {
-    # git config anon-git.name/email/date must work as priority-2 config
-    # (below flags, above ANON_GIT_* envvars and hardcoded defaults), same as
-    # their --name/--email/--date flags.
+    # anon-git.name/email/date work as priority-2 config (below flags, above
+    # envvars and defaults).
     local cfg_name='Barbara McClintock' cfg_email='barbara.mcclintock@example.com'
     local cfg_date='2018-08-08 00:00:00 +0000'
     local exit_status commit_info errors=0
@@ -157,9 +151,7 @@ test_gitconfig_defaults() {
 }
 
 test_gitconfig_beats_envvar() {
-    # anon-git.name config (priority 2) must win over ANON_GIT_NAME
-    # (priority 3), per the documented priority order: repo-local config
-    # outranks an inherited/exported envvar.
+    # anon-git.name (priority 2) must win over ANON_GIT_NAME (priority 3).
     local cfg_name='Config Wins' env_name='Envvar Loses'
     local exit_status commit_info errors=0
 
@@ -213,9 +205,8 @@ test_gitconfig_flag_priority() {
 }
 
 test_gitconfig_keepuser_bool() {
-    # anon-git.keepuser (a boolean config key) must behave like --keep-user:
-    # git config's true/false/yes/no/on/off/1/0 spellings all normalize to
-    # the same '1'/'0' contract as the ANON_GIT_KEEPUSER envvar.
+    # git config's true/false/yes/no/on/off/1/0 spellings must all normalize
+    # like --keep-user.
     local before_author after_author exit_status errors=0
 
     before_author=$(git show -s --format='%an <%ae>' HEAD)
@@ -268,8 +259,7 @@ test_gitconfig_invalid_bool() {
 }
 
 test_gitconfig_catch_incompatible() {
-    # anon-git.keepuser=true + anon-git.email configured together must be
-    # rejected the same way --keep-user --email is, since reject_incompatible_options
+    # Must be rejected the same way --keep-user --email is: reject_incompatible_options
     # folds GITCONFIG_* into the same "_set" checks as flags/envvars.
     local before after exit_status errors=0
 
@@ -297,8 +287,7 @@ test_gitconfig_catch_incompatible() {
 }
 
 test_gitconfig_quiet() {
-    # anon-git.quiet=true must suppress informational output like --quiet,
-    # and --verbose must still override it for one run.
+    # Must suppress output like --quiet; --verbose must still override for one run.
     local original_branch new_branch_name output exit_status errors=0
 
     git config --local anon-git.quiet true
@@ -336,9 +325,8 @@ test_gitconfig_quiet() {
 }
 
 test_flag_env_var_entirehistory() {
-    # ANON_GIT_ENTIREHISTORY=1 must behave like --entire-history even
-    # without the flag (isolates the env-var path from the flag path
-    # already covered by test_entire_history).
+    # Must behave like --entire-history without the flag (isolates the
+    # envvar path from test_entire_history's flag path).
     local exit_status mismatches errors=0
 
     ANON_GIT_ENTIREHISTORY=1 ./"${SCRIPT_NAME}" --no-confirm --no-backup --current-branch >/dev/null 2>&1
@@ -359,8 +347,7 @@ test_flag_env_var_entirehistory() {
 }
 
 test_flag_env_var_currentbranch() {
-    # ANON_GIT_CURRENTBRANCH=1 must rewrite HEAD in place (like
-    # --current-branch) instead of creating a new branch.
+    # Must rewrite HEAD in place (like --current-branch), not on a new branch.
     local before_head after_head branch_before branch_after exit_status errors=0
 
     before_head=$(git rev-parse HEAD)
@@ -389,10 +376,8 @@ test_flag_env_var_currentbranch() {
 }
 
 test_flag_env_var_dryrun() {
-    # ANON_GIT_DRYRUN=1 must behave like --dry-run: preview only, no branch
-    # created, HEAD untouched. Regression test: the resolve-args line for
-    # ANON_GIT_DRYRUN previously only considered the --dry-run flag or the
-    # hardcoded default, silently ignoring the environment variable.
+    # Must behave like --dry-run: preview only, no branch, HEAD untouched.
+    # Regression: the resolve-args line previously ignored this envvar.
     local before after branches_before branches_after output exit_status errors=0
 
     before=$(git rev-parse HEAD)
@@ -425,8 +410,7 @@ test_flag_env_var_dryrun() {
 }
 
 test_flag_verbose_overrides_env_quiet() {
-    # --verbose is a CLI-only override that must win over ANON_GIT_QUIET=1,
-    # forcing the informational output back on for that one run.
+    # Must win over ANON_GIT_QUIET=1, forcing output back on for one run.
     local output exit_status errors=0
 
     output=$(ANON_GIT_QUIET=1 ./"${SCRIPT_NAME}" --no-confirm --no-backup --current-branch --verbose --name 'Dennis Ritchie' HEAD 2>&1)

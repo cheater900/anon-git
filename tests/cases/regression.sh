@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 
 # Sourced by test_anon_git.sh — not meant to be run directly.
-# REGRESSION TESTS: pinned-down edge cases (merge commits, detached HEAD,\n# shell injection, EXIT-trap cleanup, filter-repo rerun cache) so a future\n# change cannot silently reintroduce them.
+# REGRESSION TESTS: pinned-down edge cases (merge commits, detached HEAD,
+# shell injection, EXIT-trap cleanup, filter-repo rerun cache) so a future
+# change cannot silently reintroduce them.
 
 test_match_detached_head_current_branch() {
     local original_branch before_head after_head output exit_status errors=0
@@ -67,12 +69,9 @@ test_match_merge_commit() {
 }
 
 test_match_merge_commit_single_target() {
-    # Regression test: anonymizing a merge commit directly (single-commit
-    # mode, i.e. targeted by hash, not --entire-history) must rewrite only
-    # that commit's metadata while leaving its two-parent topology, both
-    # parents' own metadata, and the merge's tree/content untouched.
-    # Complements test_match_merge_commit, which only covers
-    # --entire-history + a merge commit.
+    # Targeting a merge commit by hash (not --entire-history) must rewrite
+    # only its metadata, leaving parent topology, parents' own metadata, and
+    # tree/content untouched. Complements test_match_merge_commit.
     local original_branch feature_branch parent1_before parent2_before
     local parent1_author_before merge_hash tree_before exit_status
     local new_merge_author parents_after tree_after parent1_author_after
@@ -135,11 +134,9 @@ test_match_merge_commit_single_target() {
 }
 
 test_match_merge_commit_ancestor_only() {
-    # Regression test: anonymizing a single ancestor commit that a later
-    # merge commit descends from (single-commit mode, not --entire-history)
-    # must cascade through git-filter-repo — the merge commit's parent
-    # pointer follows the ancestor's new hash — while the merge's tree,
-    # parent count, and the OTHER (non-rewritten) parent branch stay intact.
+    # Rewriting an ancestor of a later merge commit must cascade through
+    # git-filter-repo (the merge's parent pointer follows the ancestor's new
+    # hash), while the merge's tree, parent count, and other parent stay intact.
     local original_branch feature_branch other_parent_before ancestor_hash
     local tree_before exit_status new_ancestor_author merge_parent_count
     local other_parent_after tree_after errors=0
@@ -226,17 +223,11 @@ test_match_outside_git_repo() {
 }
 
 test_match_trap_cleanup_on_kill() {
-    # Regression test for the EXIT trap (cleanup_on_exit) that removes
-    # dryrun_file/filter_repo_log if the script is killed mid-run (Ctrl-C, CI
-    # timeout, ...), not just on the normal success/failure exit paths. Uses
-    # a dedicated large repo (git-filter-repo needs a moment to process it)
-    # and points mktemp's TMPDIR at a scratch dir, so leftover scratch files
-    # are trivial to spot and the kill has a window to land mid-run. `exec`
-    # inside the backgrounded subshell replaces it with the script itself, so
-    # $pid is the script's own PID and the signal reaches it directly. If the
-    # run finishes before the kill lands (a fast machine, a loaded one that
-    # never schedules the poll loop in time, ...) the check is inconclusive
-    # rather than a real failure, so that case is skipped, not errored.
+    # The EXIT trap (cleanup_on_exit) must remove scratch files even when
+    # killed mid-run. Uses a large repo (gives filter-repo time to run) and a
+    # dedicated TMPDIR to spot leftovers easily. `exec` in the backgrounded
+    # subshell makes $pid the script's own PID. If the run finishes before
+    # the kill lands, the check is inconclusive and skipped, not errored.
     local repo_dir scratch_tmpdir pid i caught_mid_run leftover errors=0
 
     repo_dir=$(mktemp -d "${TMP_DIR}/trap_kill_repo.XXXXXX")
@@ -291,10 +282,8 @@ test_match_trap_cleanup_on_kill() {
 }
 
 test_match_rerun_cache() {
-    # git-filter-repo caches metadata under .git/filter-repo/ after a run; a
-    # second run against the same repo is a known trigger for an upstream
-    # assertion bug unless that cache is cleared first (see anon-git.sh's
-    # "CLEAN CACHE" section). Regression test for that workaround.
+    # A second run against the same repo is a known trigger for an upstream
+    # git-filter-repo assertion bug unless clean_cache clears its metadata cache first.
     local first_exit second_exit new_author errors=0
 
     ./"${SCRIPT_NAME}" --no-confirm --no-backup --current-branch --name 'First Run' HEAD >/dev/null 2>&1
