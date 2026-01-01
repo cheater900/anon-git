@@ -170,6 +170,7 @@ main() {
     test_match_dry_run_non_utf8
     test_match_rerun_cache
     test_match_clean_cache_from_subdir
+    test_match_linked_worktree
     test_match_trap_cleanup_on_kill
     test_match_shell_injection_email
     test_match_shell_injection_name

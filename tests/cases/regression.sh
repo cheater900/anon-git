@@ -246,6 +246,33 @@ test_match_unborn_head() {
     record_result "$errors" 'unborn HEAD fails with clear message'
 }
 
+test_match_linked_worktree() {
+    # In a linked worktree .git is a file and hooks live in the common dir.
+    local repo_dir wt_dir exit_status author errors=0
+
+    repo_dir=$(new_hook_test_repo)
+    wt_dir="${repo_dir}_wt"
+    git -C "$repo_dir" worktree add -q -b wt_branch "$wt_dir" 2>/dev/null
+    cp "$SCRIPT" "$wt_dir/"
+
+    (cd "$wt_dir" && "./${SCRIPT_NAME}" --no-confirm --no-backup --current-branch --name 'Worktree Run' HEAD >/dev/null 2>&1)
+    exit_status=$?
+    author=$(git -C "$wt_dir" show -s --format='%an' HEAD)
+    if [[ "$exit_status" -ne 0 || "$author" != 'Worktree Run' ]]; then
+        printf 'Error: run in linked worktree failed (exit %s, author "%s")\n' "$exit_status" "$author"
+        errors=$((errors + 1))
+    fi
+
+    (cd "$wt_dir" && "./${SCRIPT_NAME}" --install-hook >/dev/null 2>&1)
+    if [[ ! -x "${repo_dir}/.git/hooks/post-commit" ]]; then
+        printf 'Error: --install-hook in linked worktree missed common hooks dir\n'
+        errors=$((errors + 1))
+    fi
+
+    rm -rf "$repo_dir" "$wt_dir"
+    record_result "$errors" 'linked worktree run and hook install'
+}
+
 test_match_clean_cache_from_subdir() {
     # Run from a subdir, $PWD/.git does not exist; the cache must still go.
     local marker errors=0
