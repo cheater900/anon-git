@@ -276,7 +276,9 @@ You can automatically anonymize **every new commit right after** you run `git co
    # Run anonymization on HEAD (the commit we just created)
    #
    # IMPORTANT: Customize flags/environment variables here before running it!
-   "$SCRIPT" --no-confirm --current-branch HEAD
+   # --no-backup: this hook runs on every commit, so a per-commit backup
+   # branch would accumulate forever; drop it if you'd rather have one.
+   "$SCRIPT" --no-confirm --no-backup --current-branch HEAD
 
    # Optional: show what changed
    echo "Last commit anonymized:"

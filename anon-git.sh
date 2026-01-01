@@ -467,7 +467,7 @@ parse_args() {
     done
 }
 
-# Internal: shared by validate_incompatible below to reject a pair of
+# Internal: shared by reject_incompatible_options below to reject a pair of
 # mutually-exclusive options once both are non-empty.
 check_incompatible() {
     local flag1="$1"
@@ -557,7 +557,7 @@ require_target() {
     fi
 }
 
-# Internal: shared by validate_flags below to enforce the "0 or 1" contract
+# Internal: shared by validate_final_options below to enforce the "0 or 1" contract
 # every resolved ANON_GIT_* boolean must satisfy, however it was supplied.
 validate_bool() {
     local name="$1" value="$2"
