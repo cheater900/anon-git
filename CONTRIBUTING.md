@@ -76,7 +76,7 @@ TEST_RANDOM_INDEX=3 bats tests/core.bats      # replay a random HEAD~N target
 | Path                     | Purpose                                                                                                          |
 |--------------------------|------------------------------------------------------------------------------------------------------------------|
 | `tests/setup_suite.bash` | once per run: builds the template repo (20 commits), reads the script's `DEFAULT_*` values                       |
-| `tests/test_helper.bash` | loaded by every file: per-test fresh repo copy in `setup()`, shared assert helpers                               |
+| `tests/test_helper.bash` | loaded by every file: constants, per-test fresh repo copy in `setup()`, repo fixtures, shared helpers            |
 | `tests/*.bats`           | tests by category: core, validation, config_priority, flags, help, install, random_dates, regression, completion |
 
 Every test runs in its own copy of the template repo under `$BATS_TEST_TMPDIR`,
