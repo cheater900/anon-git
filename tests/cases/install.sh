@@ -265,6 +265,35 @@ test_flag_uninstall_removes_both_dirs() {
     record_result "$errors" 'flag --uninstall removes script from ~/.local/bin and ~/.bin'
 }
 
+test_flag_uninstall_keeps_foreign_file() {
+    local fake_home target output exit_status errors=0
+
+    fake_home=$(mktemp -d "${TMP_DIR}/fake_home.XXXXXX")
+    mkdir -p "${fake_home}/.local/bin"
+    target="${fake_home}/.local/bin/anon-git"
+    printf '#!/bin/sh\necho foreign\n' >"$target"
+
+    output=$(HOME="$fake_home" PATH="/usr/bin:/bin" ./"${SCRIPT_NAME}" --uninstall 2>&1)
+    exit_status=$?
+
+    if [[ "$exit_status" -eq 0 ]]; then
+        printf 'Error: --uninstall over foreign file did not fail\n'
+        errors=$((errors + 1))
+    fi
+    if [[ ! -e "$target" ]]; then
+        printf 'Error: --uninstall removed foreign file %s\n' "$target"
+        errors=$((errors + 1))
+    fi
+    if ! grep -q 'not anon-git' <<<"$output"; then
+        printf 'Error: expected "not anon-git" message not found (got: %s)\n' "$output"
+        errors=$((errors + 1))
+    fi
+
+    rm -rf "$fake_home"
+
+    record_result "$errors" 'flag --uninstall keeps foreign file'
+}
+
 test_flag_uninstall_skips_missing_dir() {
     # Must not treat the absent ~/.bin copy as a failure.
     local fake_home target exit_status errors=0

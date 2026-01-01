@@ -462,11 +462,22 @@ EOF
 
 # Internal: removes $1/anon-git if present. Unlike install_copy, a missing
 # target is not a failure -- uninstalling is idempotent.
+# Internal: true if $1 is a copy of this script, so --uninstall never deletes
+# an unrelated file that happens to share the name.
+is_anon_git() {
+    grep -q "^ANON_GIT_VERSION=" "$1" 2>/dev/null
+}
+
 uninstall_copy() {
     local dir="$1" target="${1}/anon-git"
 
     if [[ ! -e "$target" ]]; then
         return 0
+    fi
+
+    if ! is_anon_git "$target"; then
+        printf 'Error: %s is not anon-git; refusing to remove it.\n' "$target" >&2
+        return 1
     fi
 
     if ! rm -f -- "$target"; then
@@ -502,7 +513,10 @@ uninstall_all() {
 
     if [[ -e "$system_target" ]]; then
         found=1
-        if ! command -v sudo >/dev/null 2>&1; then
+        if ! is_anon_git "$system_target"; then
+            printf 'Error: %s is not anon-git; refusing to remove it.\n' "$system_target" >&2
+            failures=$((failures + 1))
+        elif ! command -v sudo >/dev/null 2>&1; then
             printf 'Error: sudo not found; cannot remove %s\n' "$system_target" >&2
             failures=$((failures + 1))
         elif ! sudo rm -f -- "$system_target"; then

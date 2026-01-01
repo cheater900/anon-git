@@ -114,6 +114,7 @@ main() {
     test_flag_install_idempotent
     test_flag_uninstall_removes_both_dirs
     test_flag_uninstall_skips_missing_dir
+    test_flag_uninstall_keeps_foreign_file
     test_flag_uninstall_nothing_installed
     test_flag_install_hook_creates_hook
     test_flag_install_hook_requires_git_repo
