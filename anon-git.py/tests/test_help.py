@@ -41,8 +41,9 @@ def test_no_args_in_dirty_repo_shows_help(repo):
 
 def test_name_value_not_taken_as_help(repo):
     # `--name --help` sets the name; it must not short-circuit to help.
-    result = run_cli("--name", "--help")
+    result = run_cli("--dry-run", "--name", "--help", "HEAD", env={"PAGER": "cat"})
     assert "Usage:" not in result.stdout
+    assert f"-> --help <{anon_git.DEFAULT_EMAIL}>" in result.stdout
 
 
 def test_help_lists_every_flag():
@@ -62,3 +63,19 @@ def test_dropped_install_flag_points_to_uv(outside_repo):
         result = run_cli(flag)
         assert result.returncode == 1
         assert "uv tool install" in result.stderr
+
+
+def test_no_target_shows_help(repo):
+    before = head()
+    result = run_cli("--no-confirm")
+    assert result.returncode == 0
+    assert "Usage:" in result.stdout
+    assert head() == before
+
+
+def test_dry_run_without_target_shows_help(repo):
+    before = head()
+    result = run_cli("--dry-run", env={"PAGER": "cat"})
+    assert result.returncode == 0
+    assert "Usage:" in result.stdout
+    assert head() == before

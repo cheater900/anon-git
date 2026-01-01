@@ -114,6 +114,11 @@ def repo(template_repo, tmp_path, monkeypatch):
 
 
 @pytest.fixture
+def head_before(repo):
+    return head()
+
+
+@pytest.fixture
 def outside_repo(tmp_path, monkeypatch):
     path = tmp_path / "norepo"
     path.mkdir()

@@ -19,27 +19,14 @@ Decisions:
 
 Layout: `pyproject.toml` (hatchling, dep `git-filter-repo`, script
 `anon-git = "anon_git:main"`, dev group pytest/hypothesis/ruff), single module
-`src/anon_git.py`, `completions/`, pytest suite in `tests/` with
+`src/anon_git/__init__.py`, `completions/`, pytest suite in `tests/` with
 `conftest.py` fixtures (20-commit template repo, `run_cli`, `commit_author`,
 `commit_date`, `history_authors`), `justfile` (lint, format, format-check,
 test).
 
-Steps, each porting matching bats tests to pytest:
+Code for every step below is in `anon-git.py/src/anon_git/__init__.py`;
+remaining steps port the matching bats tests to pytest:
 
-2. Options resolution: flags > `git config anon-git.*` > `ANON_GIT_*` >
-   defaults, group ownership, incompatibility checks, `--strip-timezone`
-   alone, `--verbose` over quiet, bool validation. Pure functions. Port
-   `config_priority.bats`, flag parts of `validation.bats`; parametrize every
-   incompatible pair.
-3. Safety, target validation: work tree, HEAD, clean tree, filter-repo
-   importable, `^{commit}` resolution, reachability, date parsing (ISO,
-   `T…Z`, not pre-1970), identity (`<`, `>`, newline). Port rest of
-   `validation.bats`; hypothesis round-trip for `parse_target_date`.
-4. Rewrite core: confirm via `/dev/tty`, new/backup branch, cache clean,
-   commit callback as real function. `--keep-*`, `--strip-timezone`,
-   `--entire-history`. Port `core.bats`, `flags.bats`.
-5. Dry run: 0600 temp preview file, `$PAGER`, `--dry-run` to filter-repo.
-   Assert refs untouched.
 6. Randomized timestamps: `compute_random_dates(history, targets,
    granularity, entire, rng)`, same semantics (local-calendar buckets,
    topo tie-break, clamped fallback, `SystemRandom`), injectable `rng`. Port
