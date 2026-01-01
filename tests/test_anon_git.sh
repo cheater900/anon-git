@@ -124,6 +124,7 @@ main() {
     test_flag_uninstall_hook_preserves_foreign_hook
     test_flag_no_confirm
     test_noconfirm_executes_first
+    test_flag_keep_user_keep_date_verbose_message
     test_flag_unknown
     test_match_default_shows_help
     test_match_detached_head_current_branch

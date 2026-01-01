@@ -878,10 +878,10 @@ verbose_info() {
         printf 'Anonymizing entire history!\n'
     fi
     if [[ -n "$KEEPUSER_ARG" ]]; then
-        printf 'Using identity: %s <%s>\n' "${ANON_GIT_NAME}" "${ANON_GIT_EMAIL}"
+        printf 'Not overwriting user/email.\n'
     fi
     if [[ -n "$KEEPDATE_ARG" ]]; then
-        printf 'Using date: %s\n' "${ANON_GIT_DATE}"
+        printf 'Not overwriting date.\n'
     fi
     if [[ -n "$KEEPYEAR_ARG" ]]; then
         printf 'Using commit date year (anonymizing only month, day, time and tz).\n'

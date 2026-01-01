@@ -421,3 +421,36 @@ test_noconfirm_executes_first() {
 
     record_result "$errors" 'declining the confirmation prompt creates no branch'
 }
+
+test_flag_keep_user_keep_date_verbose_message() {
+    # --keep-user / --keep-date don't overwrite the author or date at all, so
+    # the informational output must say so rather than claiming the
+    # (unused) default/env identity or date is "in use".
+    local output exit_status errors=0
+
+    output=$(./"${SCRIPT_NAME}" --no-confirm --no-backup --current-branch --keep-user --keep-date HEAD 2>&1)
+    exit_status=$?
+
+    if [[ "$exit_status" -ne 0 ]]; then
+        printf 'Error: --keep-user --keep-date run exited with status %s\n' "$exit_status"
+        errors=$((errors + 1))
+    fi
+    if ! grep -q 'Not overwriting user/email\.' <<<"$output"; then
+        printf 'Error: --keep-user did not print "Not overwriting user/email." (got: %s)\n' "$output"
+        errors=$((errors + 1))
+    fi
+    if ! grep -q 'Not overwriting date\.' <<<"$output"; then
+        printf 'Error: --keep-date did not print "Not overwriting date." (got: %s)\n' "$output"
+        errors=$((errors + 1))
+    fi
+    if grep -q 'Using identity:' <<<"$output"; then
+        printf 'Error: --keep-user still printed the stale "Using identity: ..." message\n'
+        errors=$((errors + 1))
+    fi
+    if grep -q 'Using date:' <<<"$output"; then
+        printf 'Error: --keep-date still printed the stale "Using date: ..." message\n'
+        errors=$((errors + 1))
+    fi
+
+    record_result "$errors" 'flags --keep-user --keep-date print "Not overwriting ..." instead of the stale default'
+}
