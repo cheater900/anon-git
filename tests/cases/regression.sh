@@ -302,6 +302,44 @@ test_match_annotated_tag() {
     record_result "$errors" 'annotated tag target rewritten'
 }
 
+test_match_dry_run_keeps_signed_commit() {
+    # filter-repo strips signatures, so a dry run that reaches it for real
+    # changes the hash even though the callback rewrites nothing.
+    local repo_dir before after exit_status errors=0
+
+    repo_dir=$(mktemp -d "${TMP_DIR}/signed_repo.XXXXXX")
+    (
+        cd "$repo_dir" || exit 1
+        ssh-keygen -q -t ed25519 -N '' -f signing_key
+        git init >/dev/null
+        git config --local user.name "Jordan Blake"
+        git config --local user.email "jordan.blake@example.com"
+        git config --local gpg.format ssh
+        git config --local user.signingkey "${repo_dir}/signing_key"
+        printf 'signing_key*\n' >.git/info/exclude
+        git commit -q -S --allow-empty -m 'Signed commit'
+    )
+    cp "$SCRIPT" "$repo_dir/"
+    printf '%s\n' "$SCRIPT_NAME" >>"${repo_dir}/.git/info/exclude"
+
+    before=$(git -C "$repo_dir" rev-parse HEAD)
+    (cd "$repo_dir" && PAGER="cat" "./${SCRIPT_NAME}" --no-confirm --dry-run HEAD >/dev/null 2>&1)
+    exit_status=$?
+    after=$(git -C "$repo_dir" rev-parse HEAD)
+
+    if [[ "$exit_status" -ne 0 ]]; then
+        printf 'Error: --dry-run on signed commit exited with status %s\n' "$exit_status"
+        errors=$((errors + 1))
+    fi
+    if [[ "$before" != "$after" ]]; then
+        printf 'Error: --dry-run rewrote signed commit %s -> %s\n' "$before" "$after"
+        errors=$((errors + 1))
+    fi
+
+    rm -rf "$repo_dir"
+    record_result "$errors" 'dry run keeps signed commit hash'
+}
+
 test_match_rerun_cache() {
     # A second run against the same repo is a known trigger for an upstream
     # git-filter-repo assertion bug unless clean_cache clears its metadata cache first.

@@ -1335,9 +1335,15 @@ commit.committer_date = committer_date
 "
 
 # filter_repo_log is a global the EXIT trap (cleanup_on_exit) removes.
+# --dry-run is forwarded: without it filter-repo still rewrites history even
+# when the callback changes nothing (e.g. signed commits lose their signature).
 run_filter_repo() {
+    local dryrun_args=()
+    if [[ "$ANON_GIT_DRYRUN" == '1' ]]; then
+        dryrun_args=(--dry-run)
+    fi
     filter_repo_log=$(mktemp)
-    if ! git filter-repo --force --commit-callback "$python_commit_callback" --refs HEAD >"$filter_repo_log" 2>&1; then
+    if ! git filter-repo --force ${dryrun_args[@]+"${dryrun_args[@]}"} --commit-callback "$python_commit_callback" --refs HEAD >"$filter_repo_log" 2>&1; then
         printf 'Error: git filter-repo failed:\n' >&2
         cat "$filter_repo_log" >&2
         exit 1
