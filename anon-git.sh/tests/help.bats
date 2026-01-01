@@ -40,7 +40,7 @@ load test_helper
 @test "no target shows help" {
     # Without a commit target or --entire-history, shows help instead of
     # defaulting to HEAD.
-    run ./anon-git.sh
+    run ./anon-git.sh --no-confirm
     assert_success
     assert_head_unchanged
     assert_output --partial 'Usage:'
@@ -52,4 +52,23 @@ load test_helper
     assert_success
     assert_head_unchanged
     assert_output --partial 'Usage:'
+}
+
+# Run from the checkout: the per-test repo copy has no completions/ next to it.
+@test "--print-completion prints shell's script" {
+    run "$SCRIPT" --print-completion fish
+    assert_success
+    assert_output "$(cat "${SCRIPT_DIR}/completions/anon-git.sh.fish")"
+}
+
+@test "--print-completion defaults to \$SHELL" {
+    SHELL=/usr/bin/zsh run "$SCRIPT" --print-completion
+    assert_success
+    assert_output "$(cat "${SCRIPT_DIR}/completions/_anon-git.sh")"
+}
+
+@test "--print-completion rejects unknown shell" {
+    run "$SCRIPT" --print-completion tcsh
+    assert_failure
+    assert_output --partial 'unsupported shell "tcsh"'
 }
