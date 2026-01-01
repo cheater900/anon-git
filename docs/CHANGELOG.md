@@ -4,6 +4,7 @@ Derived from git history, newest first.
 
 ## 2026-11-02
 
+- docs(py): describe derived flag list in CONTRIBUTING
 - test(py): share DEFAULT_AUTHOR, REWRITE, CLI and no-tty runner via conftest
 - refactor(py): check detached HEAD before prompting, name preview and tty helpers
 - refactor(py): split random-date bucketing into named steps, gather date helpers

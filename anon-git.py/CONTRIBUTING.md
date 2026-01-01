@@ -47,9 +47,10 @@ Each test runs in its own copy of the template repo under pytest's
 
 ## Adding or changing a flag
 
-1. `src/anon_git/__init__.py`: `FLAGS`, `FLAGS_BOOL`/`FLAGS_VALUE`, `HELP`,
-   and wherever the value is consumed (`Options`, `BOOLS`/`CONFIG_BOOLS` if it
-   has an envvar/config equivalent).
+1. `src/anon_git/__init__.py`: `FLAGS_BOOL` or `FLAGS_VALUE` (`FLAGS`, the
+   `--_list-flags` list, derives from them), `HELP`, `Options`, and
+   `BOOLS`/`CONFIG_BOOLS`/`VALUE_OPTIONS` if it has an envvar or config
+   equivalent. Constants and types live at the top of the file.
 2. `src/anon_git/completions/_anon-git` and `anon-git.fish` (bash reads
    `--_list-flags` itself). `tests/test_completion.py` fails if they drift.
 3. The same change in `anon-git.sh`, so the parity tests keep passing.
