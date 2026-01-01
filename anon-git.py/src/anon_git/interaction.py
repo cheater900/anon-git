@@ -3,8 +3,15 @@
 import termios
 import tty
 
+from anon_git.constants import VERBOSE_FLAG_MESSAGES
 from anon_git.utils.errors import fail
 from anon_git.utils.git import git
+
+
+# One rev-parse for the repo's abbrev length, not one per commit.
+def short_hashes(commits):
+    length = len(git("rev-parse", "--short", commits[0]))
+    return [commit[:length] for commit in commits]
 
 
 # Gated on flags explicitly passed on the CLI (not the resolved value), so
@@ -15,25 +22,8 @@ def verbose_info(opts):
     if opts.entirehistory:
         print("Anonymizing entire history!")
     else:
-        # One rev-parse for the repo's abbrev length, not one per commit.
-        length = len(git("rev-parse", "--short", opts.commits[0]))
-        shorts = [commit[:length] for commit in opts.commits]
-        print(f"Anonymizing commit(s): {' '.join(shorts)} ")
-    messages = {
-        "KEEPUSER": "Not overwriting user/email.",
-        "KEEPDATE": "Not overwriting date.",
-        "KEEPYEAR": "Using commit date year (anonymizing only month, day, time and tz).",
-        "KEEPMONTH": "Using commit date year and month (anonymizing only day, time and tz).",
-        "KEEPDAY": "Using commit date year, month and day (anonymizing only time and tz).",
-        "RANDOMTIME": "Randomizing time only (keeping commit date year, month and day), "
-        "preserving relative commit order.",
-        "RANDOMDAY": "Randomizing day and time (keeping commit date year and month), "
-        "preserving relative commit order.",
-        "RANDOMMONTH": "Randomizing month, day and time (keeping commit date year), "
-        "preserving relative commit order.",
-        "STRIPTIMEZONE": "Forcing timezone offset to UTC+0000 (date/time digits unchanged).",
-    }
-    for opt, message in messages.items():
+        print(f"Anonymizing commit(s): {' '.join(short_hashes(opts.commits))} ")
+    for opt, message in VERBOSE_FLAG_MESSAGES.items():
         if opts.cli_flags.get(opt):
             print(message)
     print()

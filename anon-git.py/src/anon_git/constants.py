@@ -162,4 +162,21 @@ COMPLETION_FILES = {
 }
 
 
+# Printed by verbose_info for each option given as a CLI flag.
+VERBOSE_FLAG_MESSAGES = {
+    "KEEPUSER": "Not overwriting user/email.",
+    "KEEPDATE": "Not overwriting date.",
+    "KEEPYEAR": "Using commit date year (anonymizing only month, day, time and tz).",
+    "KEEPMONTH": "Using commit date year and month (anonymizing only day, time and tz).",
+    "KEEPDAY": "Using commit date year, month and day (anonymizing only time and tz).",
+    "RANDOMTIME": "Randomizing time only (keeping commit date year, month and day), "
+    "preserving relative commit order.",
+    "RANDOMDAY": "Randomizing day and time (keeping commit date year and month), "
+    "preserving relative commit order.",
+    "RANDOMMONTH": "Randomizing month, day and time (keeping commit date year), "
+    "preserving relative commit order.",
+    "STRIPTIMEZONE": "Forcing timezone offset to UTC+0000 (date/time digits unchanged).",
+}
+
+
 ERROR_NOT_A_COMMIT = 'Error: Commit "{rev}" does not exist or is not a commit object.'
