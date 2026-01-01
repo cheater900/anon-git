@@ -7,6 +7,11 @@
 
 load test_helper
 
+SECONDS_PER_HOUR=3600
+SECONDS_PER_DAY=86400
+EPOCH_2019_01_01=1546300800
+EPOCH_2020_01_01=1577836800
+
 # Runs python_compute_random_dates directly against synthetic
 # "<hash> <epoch> [parents...]" stdin input (bypassing git/git-filter-repo),
 # so its ordering guarantee can be checked against input a real repo test
@@ -22,10 +27,10 @@ run_random_dates_script() {
         python3 -c "$(extract_script_block python_compute_random_dates)"
 }
 
-# Builds $1 linear "<hash> <epoch> <parent>" lines, $2 seconds apart, from a
-# fixed 2020-01-01 UTC epoch. Hashes named commit_0, commit_1, ...
+# Builds $1 linear "<hash> <epoch> <parent>" lines, $2 seconds apart, from
+# EPOCH_2020_01_01. Hashes named commit_0, commit_1, ...
 build_synthetic_history() {
-    local count=$1 spacing=$2 base=1577836800 i
+    local count=$1 spacing=$2 base=$EPOCH_2020_01_01 i
     printf 'commit_0 %s\n' "$base"
     for ((i = 1; i < count; i++)); do
         printf 'commit_%s %s commit_%s\n' "$i" "$((base + i * spacing))" "$((i - 1))"
@@ -86,7 +91,7 @@ build_dated_repo() {
 order_within_bucket() {
     # $1: granularity envvar
     local count=40 i got=()
-    run run_random_dates_script "$1" 1 '' < <(build_synthetic_history "$count" 3600)
+    run run_random_dates_script "$1" 1 '' < <(build_synthetic_history "$count" "$SECONDS_PER_HOUR")
     assert_success
     assert_equal "${#lines[@]}" "$count"
     for ((i = 0; i < count; i++)); do
@@ -119,7 +124,7 @@ order_within_bucket() {
     local history neighbor
     # 1 day apart, same month: --random-day's bucket is a full month, so
     # without neighbor-bounding a pick could land past a real neighbor.
-    history=$(build_synthetic_history 10 86400)
+    history=$(build_synthetic_history 10 "$SECONDS_PER_DAY")
     run run_random_dates_script ANON_GIT_RANDOMDAY 0 'commit_3 commit_6' <<<"$history"
     assert_success
     assert_equal "${#lines[@]}" 2
@@ -141,7 +146,7 @@ order_within_bucket() {
 # internally ordered.
 @test "random dates: contiguous run bounded by real neighbors, stays ordered" {
     local history
-    history=$(build_synthetic_history 10 86400)
+    history=$(build_synthetic_history 10 "$SECONDS_PER_DAY")
     run run_random_dates_script ANON_GIT_RANDOMDAY 0 'commit_3 commit_4 commit_5' <<<"$history"
     assert_success
     assert_increasing \
@@ -156,7 +161,7 @@ order_within_bucket() {
 # the lower bound must fall back to the bucket's calendar start.
 @test "random dates: run at first commit needs no lower neighbor" {
     local history
-    history=$(build_synthetic_history 10 86400)
+    history=$(build_synthetic_history 10 "$SECONDS_PER_DAY")
     run run_random_dates_script ANON_GIT_RANDOMDAY 0 'commit_0 commit_1' <<<"$history"
     assert_success
     assert_increasing \
@@ -169,7 +174,7 @@ order_within_bucket() {
 # "after" neighbor; the upper bound must fall back to the bucket's calendar end.
 @test "random dates: run at last commit needs no upper neighbor" {
     local history
-    history=$(build_synthetic_history 10 86400)
+    history=$(build_synthetic_history 10 "$SECONDS_PER_DAY")
     run run_random_dates_script ANON_GIT_RANDOMDAY 0 'commit_8 commit_9' <<<"$history"
     assert_success
     assert_increasing \
@@ -181,7 +186,7 @@ order_within_bucket() {
 @test "random dates bounded by parent and merge child" {
     # Side commit side_1 sits next to main_1 in log order but its real child
     # is the merge; main_1's skewed date must not stretch side_1's range past it.
-    local history day=86400 base=1577836800 merge_epoch i
+    local history day=$SECONDS_PER_DAY base=$EPOCH_2020_01_01 merge_epoch i
     merge_epoch=$((base + 2 * day))
     history=$(printf '%s\n' \
         "root ${base}" \
@@ -244,7 +249,7 @@ random_partial() {
 # end to end through git-filter-repo.
 @test "--random-day keeps log ordered vs untouched neighbors" {
     local repo_dir=${BATS_TEST_TMPDIR}/random_day_neighbor_repo
-    build_dated_repo "$repo_dir" 8 $((86400 * 3)) 1577836800
+    build_dated_repo "$repo_dir" 8 $((SECONDS_PER_DAY * 3)) "$EPOCH_2020_01_01"
     cd "$repo_dir"
     # HEAD~5 is commit 2, HEAD~2 commit 5, 0-indexed from the bottom.
     run ./anon-git.sh --no-confirm --no-backup --current-branch --random-day HEAD~5 HEAD~2
@@ -257,7 +262,7 @@ random_partial() {
 # --entire-history more than one calendar-year bucket to keep ordered.
 @test "--random-month --entire-history keeps year, order across years" {
     local repo_dir=${BATS_TEST_TMPDIR}/random_month_order_repo before_years
-    build_dated_repo "$repo_dir" 20 $((86400 * 40)) 1546300800
+    build_dated_repo "$repo_dir" 20 $((SECONDS_PER_DAY * 40)) "$EPOCH_2019_01_01"
     cd "$repo_dir"
     before_years=$(git log --reverse --date=format:'%Y' --format='%ad')
     run ./anon-git.sh --no-confirm --no-backup --current-branch --random-month --entire-history
