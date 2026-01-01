@@ -242,19 +242,29 @@ EOF
     exit 0
 }
 
+# Where --install/--install-system put completions/, since an installed
+# copy has none next to it.
+USER_DATA_DIR="${HOME}/.local/share/anon-git"
+SYSTEM_DATA_DIR='/usr/share/anon-git'
+
 # Internal: completion scripts are static files shipped in completions/,
 # not generated; this resolves the shell name (defaulting to $SHELL) and
-# cats the matching file.
+# cats the matching file, from a checkout or an installed copy.
 print_completion() {
-    local shell="$1" script_dir completion_file
+    local shell="$1" script_dir completions_dir completion_file
 
     [[ -n "$shell" ]] || shell="${SHELL##*/}"
 
     script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")" && pwd)
+    for completions_dir in "${script_dir}/completions" "${USER_DATA_DIR}/completions" "${SYSTEM_DATA_DIR}/completions"; do
+        if [[ -d "$completions_dir" ]]; then
+            break
+        fi
+    done
     case "$shell" in
-    bash) completion_file="${script_dir}/completions/anon-git.bash" ;;
-    zsh) completion_file="${script_dir}/completions/_anon-git.sh" ;;
-    fish) completion_file="${script_dir}/completions/anon-git.sh.fish" ;;
+    bash) completion_file="${completions_dir}/anon-git.bash" ;;
+    zsh) completion_file="${completions_dir}/_anon-git.sh" ;;
+    fish) completion_file="${completions_dir}/anon-git.sh.fish" ;;
     *)
         printf 'Error: unsupported shell "%s" (expected bash, zsh, or fish)\n' "$shell" >&2
         exit 1
@@ -326,6 +336,16 @@ install_user() {
         exit 1
     fi
 
+    # Absent when run from an installed copy; that install already has them.
+    if [[ -d "$(dirname -- "$src")/completions" ]]; then
+        mkdir -p "$USER_DATA_DIR"
+        if cp -R -- "$(dirname -- "$src")/completions" "$USER_DATA_DIR/"; then
+            printf 'Installed: %s/completions\n' "$USER_DATA_DIR"
+        else
+            failures=$((failures + 1))
+        fi
+    fi
+
     [[ "$failures" -eq 0 ]] && exit 0
     exit 1
 }
@@ -352,6 +372,12 @@ install_system() {
     fi
     sudo chmod 755 "$target"
     printf 'Installed: %s\n' "$target"
+
+    if [[ -d "$(dirname -- "$src")/completions" ]]; then
+        sudo mkdir -p "$SYSTEM_DATA_DIR"
+        sudo cp -R -- "$(dirname -- "$src")/completions" "$SYSTEM_DATA_DIR/"
+        printf 'Installed: %s/completions\n' "$SYSTEM_DATA_DIR"
+    fi
     exit 0
 }
 
@@ -465,6 +491,15 @@ uninstall_all() {
         fi
     done
 
+    if [[ -e "$USER_DATA_DIR" ]]; then
+        found=1
+        if rm -rf -- "$USER_DATA_DIR"; then
+            printf 'Removed: %s\n' "$USER_DATA_DIR"
+        else
+            failures=$((failures + 1))
+        fi
+    fi
+
     if [[ -e "$system_target" ]]; then
         found=1
         if ! command -v sudo >/dev/null 2>&1; then
@@ -475,6 +510,15 @@ uninstall_all() {
             failures=$((failures + 1))
         else
             printf 'Removed: %s\n' "$system_target"
+        fi
+    fi
+
+    if [[ -e "$SYSTEM_DATA_DIR" ]] && command -v sudo >/dev/null 2>&1; then
+        found=1
+        if sudo rm -rf -- "$SYSTEM_DATA_DIR"; then
+            printf 'Removed: %s\n' "$SYSTEM_DATA_DIR"
+        else
+            failures=$((failures + 1))
         fi
     fi
 

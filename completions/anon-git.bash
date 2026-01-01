@@ -37,3 +37,4 @@ _anon_git_completion() {
 
 complete -F _anon_git_completion anon-git.sh
 complete -F _anon_git_completion ./anon-git.sh
+complete -F _anon_git_completion anon-git

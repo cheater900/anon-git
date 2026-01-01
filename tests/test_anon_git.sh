@@ -104,6 +104,7 @@ main() {
     test_flag_env_var_currentbranch
     test_flag_env_var_dryrun
     test_flag_install_local_bin
+    test_flag_install_print_completion
     test_flag_install_bin_fallback
     test_flag_install_both_dirs
     test_flag_install_path_already_set

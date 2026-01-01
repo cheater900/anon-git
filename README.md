@@ -78,7 +78,8 @@ git clone https://github.com/radioactively/anon-git && cd anon-git
 > The `--install` only copies into `~/.local/bin` and/or `~/.bin` if they already exist.
 > The `--install-system` requires `sudo`.
 > The directory `~/.local/bin` or `~/.bin` must be in your `$PATH`.
-> `--uninstall` removes the script from all three locations at once, skipping whichever don't have a copy.
+> Both also copy `completions/` to `~/.local/share/anon-git` (or `/usr/share/anon-git`), so the installed `anon-git --print-completion` works.
+> `--uninstall` removes the script and its completions from all locations at once, skipping whichever don't have a copy.
 
 #### Manual installation
 

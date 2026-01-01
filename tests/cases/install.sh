@@ -37,6 +37,41 @@ test_flag_install_local_bin() {
     record_result "$errors" 'flag --install copies to ~/.local/bin'
 }
 
+test_flag_install_print_completion() {
+    # The installed copy has no completions/ next to it; --install must ship
+    # them so --print-completion still works, and --uninstall drop them.
+    local fake_home src_dir output exit_status errors=0
+
+    fake_home=$(mktemp -d "${TMP_DIR}/fake_home.XXXXXX")
+    src_dir=$(mktemp -d "${TMP_DIR}/src.XXXXXX")
+    mkdir -p "${fake_home}/.local/bin"
+    cp "$SCRIPT" "$src_dir/"
+    cp -R "${SCRIPT_DIR}/completions" "$src_dir/"
+
+    HOME="$fake_home" PATH="/usr/bin:/bin" "${src_dir}/${SCRIPT_NAME}" --install >/dev/null 2>&1
+    output=$(HOME="$fake_home" "${fake_home}/.local/bin/anon-git" --print-completion bash 2>&1)
+    exit_status=$?
+
+    if [[ "$exit_status" -ne 0 ]]; then
+        printf 'Error: installed --print-completion exited with status %s: %s\n' "$exit_status" "$output"
+        errors=$((errors + 1))
+    fi
+    if ! grep -q 'complete -F _anon_git_completion anon-git$' <<<"$output"; then
+        printf 'Error: bash completion does not bind installed name anon-git\n'
+        errors=$((errors + 1))
+    fi
+
+    HOME="$fake_home" PATH="/usr/bin:/bin" "${src_dir}/${SCRIPT_NAME}" --uninstall >/dev/null 2>&1
+    if [[ -e "${fake_home}/.local/share/anon-git" ]]; then
+        printf 'Error: --uninstall left installed completions behind\n'
+        errors=$((errors + 1))
+    fi
+
+    rm -rf "$fake_home" "$src_dir"
+
+    record_result "$errors" 'flag --install ships completions for installed copy'
+}
+
 test_flag_install_bin_fallback() {
     local fake_home target exit_status errors=0
 

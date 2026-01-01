@@ -41,3 +41,4 @@ complete -c anon-git.sh -l install-hook -d 'Install a post-commit hook that anon
 complete -c anon-git.sh -l uninstall -d 'Remove this script from ~/.local/bin, ~/.bin, and /usr/bin'
 complete -c anon-git.sh -l uninstall-hook -d 'Remove the post-commit hook installed by --install-hook'
 complete -c anon-git.sh -a '(__anon_git_commits)' -d 'commit'
+complete -c anon-git --wraps anon-git.sh

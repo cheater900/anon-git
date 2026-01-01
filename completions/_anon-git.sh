@@ -1,4 +1,4 @@
-#compdef anon-git.sh ./anon-git.sh
+#compdef anon-git.sh ./anon-git.sh anon-git
 #
 # Zsh completion for anon-git.sh
 #
@@ -60,4 +60,4 @@ _anon_git() {
         '*:commit:_anon_git_commits'
 }
 
-compdef _anon_git anon-git.sh ./anon-git.sh
+compdef _anon_git anon-git.sh ./anon-git.sh anon-git
