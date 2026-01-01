@@ -294,6 +294,8 @@ EOF
     exit 0
 }
 
+# ──────────────────────────────────────────────
+
 [[ $# -eq 0 ]] && show_help
 
 args=("$@")
@@ -452,23 +454,48 @@ check_incompatible() {
     local value1="$2"
     local value2="$4"
     if [[ -n "$value1" && -n "$value2" ]]; then
-        printf 'Error: flags %s and %s cannot be used together\n' "$flag1" "$flag2" >&2
+        printf 'Error: %s and %s cannot be used together\n' "$flag1" "$flag2" >&2
         flag_errors=1
     fi
 }
 
-check_incompatible --keep-user "$KEEPUSER_ARG" --name "$NAME_ARG"
-check_incompatible --keep-user "$KEEPUSER_ARG" --email "$EMAIL_ARG"
-check_incompatible --date "$DATE_ARG" --keep-date "$KEEPDATE_ARG"
-check_incompatible --date "$DATE_ARG" --keep-year "$KEEPYEAR_ARG"
-check_incompatible --date "$DATE_ARG" --keep-month "$KEEPMONTH_ARG"
-check_incompatible --date "$DATE_ARG" --keep-day "$KEEPDAY_ARG"
-check_incompatible --keep-date "$KEEPDATE_ARG" --keep-year "$KEEPYEAR_ARG"
-check_incompatible --keep-date "$KEEPDATE_ARG" --keep-month "$KEEPMONTH_ARG"
-check_incompatible --keep-date "$KEEPDATE_ARG" --keep-day "$KEEPDAY_ARG"
-check_incompatible --keep-year "$KEEPYEAR_ARG" --keep-month "$KEEPMONTH_ARG"
-check_incompatible --keep-year "$KEEPYEAR_ARG" --keep-day "$KEEPDAY_ARG"
-check_incompatible --keep-month "$KEEPMONTH_ARG" --keep-day "$KEEPDAY_ARG"
+# "Was this option provided" for each documented option, regardless of
+# whether it came from a CLI flag or its ANON_GIT_* environment variable
+# equivalent — so e.g. `ANON_GIT_KEEP_USER=1 ANON_GIT_NAME=X` is rejected the
+# same way `--keep-user --name X` is, instead of silently letting one win.
+# Read here (before RESOLVE ARGS below overwrites these names with the
+# fully-resolved value, default included), so an unset env var reads as
+# empty and a hardcoded default never counts as "provided". Booleans only
+# count as provided when explicitly '1' (the "0 or 1" contract validate_bool
+# enforces later); string options count as provided whenever non-empty.
+DATE_SET="${DATE_ARG:-${ANON_GIT_DATE:-}}"
+NAME_SET="${NAME_ARG:-${ANON_GIT_NAME:-}}"
+EMAIL_SET="${EMAIL_ARG:-${ANON_GIT_EMAIL:-}}"
+KEEPUSER_SET="$KEEPUSER_ARG"
+KEEPDATE_SET="$KEEPDATE_ARG"
+KEEPYEAR_SET="$KEEPYEAR_ARG"
+KEEPMONTH_SET="$KEEPMONTH_ARG"
+KEEPDAY_SET="$KEEPDAY_ARG"
+[[ "${ANON_GIT_KEEPUSER:-}" == '1' ]] && KEEPUSER_SET='1'
+[[ "${ANON_GIT_KEEPDATE:-}" == '1' ]] && KEEPDATE_SET='1'
+[[ "${ANON_GIT_KEEPYEAR:-}" == '1' ]] && KEEPYEAR_SET='1'
+[[ "${ANON_GIT_KEEPMONTH:-}" == '1' ]] && KEEPMONTH_SET='1'
+[[ "${ANON_GIT_KEEPDAY:-}" == '1' ]] && KEEPDAY_SET='1'
+
+check_incompatible --keep-user "$KEEPUSER_SET" --name "$NAME_SET"
+check_incompatible --keep-user "$KEEPUSER_SET" --email "$EMAIL_SET"
+check_incompatible --date "$DATE_SET" --keep-date "$KEEPDATE_SET"
+check_incompatible --date "$DATE_SET" --keep-year "$KEEPYEAR_SET"
+check_incompatible --date "$DATE_SET" --keep-month "$KEEPMONTH_SET"
+check_incompatible --date "$DATE_SET" --keep-day "$KEEPDAY_SET"
+check_incompatible --keep-date "$KEEPDATE_SET" --keep-year "$KEEPYEAR_SET"
+check_incompatible --keep-date "$KEEPDATE_SET" --keep-month "$KEEPMONTH_SET"
+check_incompatible --keep-date "$KEEPDATE_SET" --keep-day "$KEEPDAY_SET"
+check_incompatible --keep-year "$KEEPYEAR_SET" --keep-month "$KEEPMONTH_SET"
+check_incompatible --keep-year "$KEEPYEAR_SET" --keep-day "$KEEPDAY_SET"
+check_incompatible --keep-month "$KEEPMONTH_SET" --keep-day "$KEEPDAY_SET"
+# The commit(s) argument is CLI-only (there is no ANON_GIT_COMMIT env var
+# users are meant to set), so this one stays flag-vs-flag.
 check_incompatible "commit(s) argument" "$COMMIT_ARG" --entire-history "$ENTIREHISTORY_ARG"
 
 [[ "$flag_errors" -ne 0 ]] && exit 1

@@ -309,7 +309,7 @@ Now every `git commit` automatically triggers anonymization of that commit's aut
 ./tests/test-anon-git.sh
 ```
 
-Spins up a disposable git repository in `/tmp`, runs the script against it through a range of flags and edge cases (defaults, `--keep-*`, `--dry-run`, `--entire-history`, `--current-branch`, invalid input, incompatible flags, the uncommitted-changes guard, ...), and prints a pass/fail summary. It cleans up the temp repo on exit.
+Spins up a disposable git repository in `/tmp`, runs the script against it through a range of flags and edge cases (defaults, `--keep-*`, `--dry-run`, `--entire-history`, `--current-branch`, invalid input, incompatible combinations — flags, `ANON_GIT_*` envvars, and mixes of both — the uncommitted-changes guard, ...), and prints a pass/fail summary. It cleans up the temp repo on exit.
 
 `tests/test-manually.sh` instead just creates a disposable repo with sample commits and drops you into it, for manual/interactive poking at the script.
 

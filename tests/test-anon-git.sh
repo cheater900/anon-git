@@ -288,27 +288,42 @@ test_entire_history() {
 # ──────────────────────────────────────────────────────────────────────
 # UNIT TESTS (alphabetical order)
 
-test_catch_incompatible_flags() {
-    # @param $@  the incompatible combination of flags/args to reject
-    local before after exit_status errors=0 flags=() arg label
+test_catch_incompatible() {
+    # @param $@  the incompatible combination to reject: CLI flags/args
+    #            (--foo, HEAD, ...) and/or ANON_GIT_*=value envvar
+    #            assignments, in any mix. Each envvar assignment must be a
+    #            single "ANON_GIT_NAME=value" argument (not split across
+    #            two), since it's routed to `env` rather than the script.
+    #            This covers flag-vs-flag (the classic case), envvar-vs-
+    #            envvar, and mixed flag-vs-envvar conflicts with one
+    #            function, since anon-git.sh is meant to reject an
+    #            incompatible combination the same way regardless of
+    #            whether each side came from a flag or its env var.
+    local before after exit_status errors=0 envvars=() cli_args=() arg label
 
     for arg in "$@"; do
-        [[ "${flags[0]}" == "--entire-history" ]] && flags+=("$arg")
-        [[ "$arg" == -* ]] && flags+=("$arg")
+        if [[ "$arg" == ANON_GIT_*=* ]]; then
+            envvars+=("$arg")
+        else
+            cli_args+=("$arg")
+        fi
     done
-    label="catch incompatible args ${flags[*]:-(defaults)}"
+    label='catch incompatible'
+    [[ -n "${envvars[*]}" ]] && label="${label} ${envvars[*]}"
+    [[ -n "${cli_args[*]}" ]] && label="${label} ${cli_args[*]}"
+    [[ "$label" == 'catch incompatible' ]] && label="${label} (defaults)"
 
     before=$(git rev-parse HEAD)
-    ./${SCRIPT_NAME} --no-confirm --no-backup "$@" >/dev/null 2>&1
+    env "${envvars[@]}" ./${SCRIPT_NAME} --no-confirm --no-backup "${cli_args[@]}" >/dev/null 2>&1
     exit_status=$?
     after=$(git rev-parse HEAD)
 
     if [[ "$exit_status" -eq 0 ]]; then
-        printf 'Error: flags "%s" did not fail as expected\n' "$*"
+        printf 'Error: "%s" did not fail as expected\n' "$*"
         errors=$((errors + 1))
     fi
     if [[ "$before" != "$after" ]]; then
-        printf 'Error: repository was modified despite incompatible flags "%s"\n' "$*"
+        printf 'Error: repository was modified despite incompatible "%s"\n' "$*"
         errors=$((errors + 1))
     fi
 
@@ -387,6 +402,40 @@ test_combo_dry_run_entire_history() {
     fi
 
     record_result "$errors" 'flags --dry-run --entire-history'
+}
+
+test_combo_env_var_dry_run_entire_history() {
+    # ANON_GIT_DRYRUN and ANON_GIT_ENTIREHISTORY are not flagged by
+    # check_incompatible (that only looks at CLI-flag-derived *_ARG
+    # variables, never at env vars) and are not meant to be: --dry-run and
+    # --entire-history are a supported combo (see
+    # test_combo_dry_run_entire_history), so setting both env vars together
+    # must behave the same way, i.e. preview every commit without rewriting
+    # anything. --no-confirm is passed as a flag (not an env var) only to
+    # avoid the separate "zero args at all" early-exit that shows help
+    # before env vars are even read; it does not affect what's under test.
+    local before after output exit_status preview_count errors=0
+
+    before=$(git rev-parse HEAD)
+    output=$(PAGER="cat" ANON_GIT_DRYRUN=1 ANON_GIT_ENTIREHISTORY=1 ./${SCRIPT_NAME} --no-confirm 2>&1)
+    exit_status=$?
+    after=$(git rev-parse HEAD)
+    preview_count=$(grep -c '^Commit:' <<<"$output")
+
+    if [[ "$exit_status" -ne 0 ]]; then
+        printf 'Error: ANON_GIT_DRYRUN=1 ANON_GIT_ENTIREHISTORY=1 run exited with status %s\n' "$exit_status"
+        errors=$((errors + 1))
+    fi
+    if [[ "$before" != "$after" ]]; then
+        printf 'Error: ANON_GIT_DRYRUN=1 ANON_GIT_ENTIREHISTORY=1 modified HEAD\n'
+        errors=$((errors + 1))
+    fi
+    if [[ "$preview_count" -ne "$COMMIT_COUNT" ]]; then
+        printf 'Error: expected %s commits previewed, got %s\n' "$COMMIT_COUNT" "$preview_count"
+        errors=$((errors + 1))
+    fi
+
+    record_result "$errors" 'envvars ANON_GIT_DRYRUN=1 ANON_GIT_ENTIREHISTORY=1 preview entire history without rewriting'
 }
 
 test_combo_env_var_flag_priority() {
@@ -1474,17 +1523,32 @@ main() {
     test_script --keep-user --date '2020-01-01 00:10:10 +0000'
     test_multiple_commits
     test_entire_history
-    test_catch_incompatible_flags --date '2020-01-01 00:00:00 +0000' --keep-date
-    test_catch_incompatible_flags --date '2020-01-01 00:00:00 +0000' --keep-year
-    test_catch_incompatible_flags --keep-user --name 'Nobody'
-    test_catch_incompatible_flags --keep-user --email 'nobody@example.com'
-    test_catch_incompatible_flags --keep-year --keep-month
-    test_catch_incompatible_flags --keep-year --keep-day
-    test_catch_incompatible_flags --keep-month --keep-day
-    test_catch_incompatible_flags --entire-history HEAD
+    test_catch_incompatible --date '2020-01-01 00:00:00 +0000' --keep-date
+    test_catch_incompatible --date '2020-01-01 00:00:00 +0000' --keep-year
+    test_catch_incompatible --keep-user --name 'Nobody'
+    test_catch_incompatible --keep-user --email 'nobody@example.com'
+    test_catch_incompatible --keep-year --keep-month
+    test_catch_incompatible --keep-year --keep-day
+    test_catch_incompatible --keep-month --keep-day
+    test_catch_incompatible --entire-history HEAD
+    # Same combinations, provided via their ANON_GIT_* envvar equivalents
+    # instead of flags (--entire-history has none: there is no ANON_GIT_COMMIT
+    # envvar users are meant to set, so it's flag-only and not repeated here).
+    test_catch_incompatible 'ANON_GIT_DATE=2020-01-01 00:00:00 +0000' ANON_GIT_KEEPDATE=1
+    test_catch_incompatible 'ANON_GIT_DATE=2020-01-01 00:00:00 +0000' ANON_GIT_KEEPYEAR=1
+    test_catch_incompatible ANON_GIT_KEEPUSER=1 ANON_GIT_NAME=Nobody
+    test_catch_incompatible ANON_GIT_KEEPUSER=1 ANON_GIT_EMAIL=nobody@example.com
+    test_catch_incompatible ANON_GIT_KEEPYEAR=1 ANON_GIT_KEEPMONTH=1
+    test_catch_incompatible ANON_GIT_KEEPYEAR=1 ANON_GIT_KEEPDAY=1
+    test_catch_incompatible ANON_GIT_KEEPMONTH=1 ANON_GIT_KEEPDAY=1
+    # Mixed: one side via flag, the other via envvar — the combination must
+    # still be rejected regardless of where each side came from.
+    test_catch_incompatible --keep-user ANON_GIT_NAME=Nobody
+    test_catch_incompatible ANON_GIT_KEEPUSER=1 --name 'Nobody'
     test_catch_invalid_commit
     test_catch_uncommitted_changes
     test_combo_dry_run_entire_history
+    test_combo_env_var_dry_run_entire_history
     test_combo_env_var_flag_priority
     test_flag_current_branch_backup
     test_flag_dry_run
