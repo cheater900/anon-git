@@ -32,3 +32,7 @@ format:
 # Check formatting without writing (used by CI; `just format` to fix)
 format-check:
     shfmt -d -ln bash -i 4 {{SCRIPT}} {{TEST_SCRIPT}} {{TEST_COMPLETION_SCRIPT}}
+
+# Run the CI workflow locally via `act` (https://github.com/nektos/act); only ubuntu-latest, act can't run the macos-latest job
+ci-local:
+    act push --job test --matrix os:ubuntu-latest
