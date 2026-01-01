@@ -1,7 +1,7 @@
 """Date parsing and git date-string conversion."""
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 
 def parse_target_date(date_str):
@@ -18,16 +18,24 @@ def parse_target_date(date_str):
     return datetime.strptime(normalized, "%Y-%m-%d %H:%M:%S %z")
 
 
-def parse_git_date(date_bytes):
+# Returns (epoch, offset sign, hours, minutes, seconds). The offset is not
+# range-checked: old repos carry bogus ones like +9999 that datetime's
+# timezone rejects.
+def split_git_date(date_bytes):
     unix_ts, offset = date_bytes.decode().split()
     sign = 1 if offset.startswith("+") else -1
     offset = offset.lstrip("+-")
     if len(offset) not in (4, 6):
         raise ValueError("unsupported timezone format")
-    tz_offset = timedelta(
-        hours=int(offset[:2]), minutes=int(offset[2:4]), seconds=int(offset[4:] or 0)
+    return int(unix_ts), sign, int(offset[:2]), int(offset[2:4]), int(offset[4:] or 0)
+
+
+# Wall-clock date/time in the date's own offset, labeled UTC.
+def parse_git_date(date_bytes):
+    epoch, sign, hours, minutes, seconds = split_git_date(date_bytes)
+    return datetime.fromtimestamp(
+        epoch + sign * (hours * 3600 + minutes * 60 + seconds), tz=timezone.utc
     )
-    return datetime.fromtimestamp(float(unix_ts), tz=timezone(sign * tz_offset))
 
 
 # Same digits, relabeled (not converted) as UTC.
@@ -35,15 +43,21 @@ def as_utc_epoch(dt):
     return int(dt.replace(tzinfo=timezone.utc).timestamp())
 
 
-# Wall-clock date/time in the commit's own offset, labeled UTC: the output is
-# +0000, so bucket bounds must be these digits read as UTC.
+# Bucket bounds must be these digits read as UTC: the output is +0000.
 def local_datetime(epoch, offset):
-    return parse_git_date(f"{epoch} {offset}".encode()).replace(tzinfo=timezone.utc)
+    return parse_git_date(f"{epoch} {offset}".encode())
 
 
 def utc_git_date(epoch):
     return b"%d +0000" % epoch
 
 
+# ISO 8601 with the original offset, built by hand so a bogus offset shows
+# as-is instead of raising.
 def git_date_iso(git_date):
-    return parse_git_date(git_date).isoformat()
+    _, sign, hours, minutes, seconds = split_git_date(git_date)
+    negative = sign < 0 and (hours or minutes or seconds)
+    offset = f"{'-' if negative else '+'}{hours:02d}:{minutes:02d}"
+    if seconds:
+        offset += f":{seconds:02d}"
+    return f"{parse_git_date(git_date).replace(tzinfo=None).isoformat()}{offset}"

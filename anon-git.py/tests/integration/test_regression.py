@@ -186,6 +186,27 @@ def test_dry_run_handles_non_utf8_metadata(tmp_path, monkeypatch):
     assert "AuthorDate:" in result.stdout
 
 
+@pytest.mark.parametrize(
+    "args",
+    [["--dry-run"], ["--keep-year", *REWRITE], ["--keep-date", "--strip-timezone", *REWRITE]],
+)
+def test_bogus_timezone_offset_rewrites_without_crash(repo, args):
+    raw = (
+        f"tree 4b825dc642cb6eb9a060e54bf8d69288fbee4904\nparent {head()}\n"
+        "author A <a@b> 1700000000 +9999\ncommitter A <a@b> 1700000000 +9999\n\nbad tz\n"
+    )
+    sha = subprocess.run(
+        ["git", "hash-object", "-t", "commit", "-w", "--stdin"],
+        input=raw,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    git("reset", "-q", "--hard", sha)
+    result = run_cli(*args, "HEAD", env={"PAGER": "cat"})
+    assert result.returncode == 0, result.stderr
+
+
 def test_dry_run_escapes_terminal_control_chars(repo):
     git("commit", "-q", "--allow-empty", "-m", "evil \x1b]0;pwned\x07 title\n\n\tbody")
     result = run_cli("--dry-run", "HEAD", env={"PAGER": "cat"})
