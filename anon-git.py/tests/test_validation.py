@@ -161,3 +161,34 @@ def test_validate_identity_rejects_exactly_bad_chars(name):
             anon_git.validate_identity(opts)
         return
     anon_git.validate_identity(opts)
+
+
+def test_many_targets_resolve_in_one_git_call(repo, monkeypatch):
+    revs = [f"HEAD~{i}" for i in range(19)]
+    expected = [git("rev-parse", rev) for rev in revs]
+    calls = []
+    real_run = anon_git.subprocess.run
+
+    def counting_run(cmd, *args, **kwargs):
+        calls.append(cmd)
+        return real_run(cmd, *args, **kwargs)
+
+    monkeypatch.setattr(anon_git.subprocess, "run", counting_run)
+    _args, commits = anon_git.parse_args(revs)
+    assert commits == expected
+    assert len(calls) == 1
+
+
+def test_invalid_rev_among_many_named_in_error(repo, head_before):
+    result = run_cli("--no-confirm", "HEAD", "HEAD~1", "no-such-ref", "HEAD~2")
+    assert result.returncode == 1
+    assert 'Commit "no-such-ref" does not exist' in result.stderr
+    assert head() == head_before
+
+
+@pytest.mark.parametrize("rev", ["HEAD^{tree}", "HEAD:file_1.txt", "bad\nrev"])
+def test_rejects_non_commit_objects(repo, head_before, rev):
+    result = run_cli("--no-confirm", rev)
+    assert result.returncode == 1
+    assert "is not a commit object" in result.stderr
+    assert head() == head_before

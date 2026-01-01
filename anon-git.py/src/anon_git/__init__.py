@@ -535,10 +535,34 @@ def flag_option(flag):
     return flag.lstrip("-").replace("-", "").upper()
 
 
+# Resolves revisions to commit hashes in one git process, so passing
+# `$(git log --format=%H)` doesn't spawn one per commit. ^{commit} peels
+# annotated tags, whose own hash never matches a commit.
+def resolve_commits(revs):
+    # A newline would split one revision into two batch lines.
+    for rev in revs:
+        if "\n" in rev:
+            fail(f'Error: Commit "{rev}" does not exist or is not a commit object.')
+    batch = subprocess.run(
+        ["git", "cat-file", "--batch-check=%(objectname) %(objecttype)"],
+        input="".join(f"{rev}^{{commit}}\n" for rev in revs),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    commits = []
+    for rev, line in zip(revs, batch.stdout.splitlines(), strict=True):
+        commit, kind = line.rsplit(" ", 1)
+        if kind != "commit":
+            fail(f'Error: Commit "{rev}" does not exist or is not a commit object.')
+        commits.append(commit)
+    return commits
+
+
 # Parses argv into ({option: value} for given flags, [resolved commit hashes]).
 def parse_args(argv):
     args = {}
-    commits = []
+    revs = []
     i = 0
     while i < len(argv):
         arg = argv[i]
@@ -553,13 +577,10 @@ def parse_args(argv):
             args[flag_option(arg)] = "1"
         elif arg.startswith("-"):
             fail(f"Unknown option: {arg}")
-        elif not git_ok("rev-parse", "--quiet", "--verify", f"{arg}^{{commit}}"):
-            fail(f'Error: Commit "{arg}" does not exist or is not a commit object.')
         else:
-            # ^{commit} peels annotated tags, whose own hash never matches a commit.
-            commits.append(git("rev-parse", f"{arg}^{{commit}}"))
+            revs.append(arg)
         i += 1
-    return args, commits
+    return args, resolve_commits(revs) if revs else []
 
 
 def is_on(value):
@@ -722,8 +743,11 @@ def validate_identity(opts):
 # Only HEAD's history is rewritten (--refs HEAD), so any other target would
 # silently stay untouched.
 def require_reachable(opts):
+    if not opts.commits:
+        return
+    reachable = set(git("rev-list", "HEAD").splitlines())
     for commit in opts.commits:
-        if not git_ok("merge-base", "--is-ancestor", commit, "HEAD"):
+        if commit not in reachable:
             fail(
                 f"Error: commit {git('rev-parse', '--short', commit)} is not reachable "
                 "from HEAD; check out a branch containing it first."
@@ -742,7 +766,9 @@ def verbose_info(opts):
     if opts.entirehistory:
         print("Anonymizing entire history!")
     else:
-        shorts = [git("rev-parse", "--short", commit) for commit in opts.commits]
+        # One rev-parse for the repo's abbrev length, not one per commit.
+        length = len(git("rev-parse", "--short", opts.commits[0]))
+        shorts = [commit[:length] for commit in opts.commits]
         print(f"Anonymizing commit(s): {' '.join(shorts)} ")
     messages = {
         "KEEPUSER": "Not overwriting user/email.",
