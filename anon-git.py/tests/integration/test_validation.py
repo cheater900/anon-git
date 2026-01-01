@@ -10,31 +10,14 @@ from anon_git.options import parse_args
 DATE = "2020-01-01 00:00:00 +0000"
 
 
+# One case per option group and source: every pair is in unit/test_options.py.
 INCOMPATIBLE = [
     (["--date", DATE, "--keep-date"], {}),
-    (["--date", DATE, "--keep-year"], {}),
     (["--keep-user", "--name", "Nobody"], {}),
-    (["--keep-user", "--email", "nobody@example.com"], {}),
-    (["--keep-year", "--keep-month"], {}),
-    (["--keep-year", "--keep-day"], {}),
-    (["--keep-month", "--keep-day"], {}),
-    (["--entire-history", "HEAD"], {}),
     (["--random-day", "--keep-day"], {}),
-    (["--random-time", "--keep-year"], {}),
-    (["--random-month", "--keep-month"], {}),
-    (["--keep-date", "--random-time"], {}),
-    (["--random-time", "--random-day"], {}),
-    (["--random-day", "--random-month"], {}),
-    (["--random-time", "--random-month"], {}),
-    (["--date", DATE, "--random-month"], {}),
-    ([], {"ANON_GIT_DATE": DATE, "ANON_GIT_KEEPDATE": "1"}),
+    (["--entire-history", "HEAD"], {}),
     ([], {"ANON_GIT_DATE": DATE, "ANON_GIT_KEEPYEAR": "1"}),
-    ([], {"ANON_GIT_KEEPUSER": "1", "ANON_GIT_NAME": "Nobody"}),
     ([], {"ANON_GIT_KEEPUSER": "1", "ANON_GIT_EMAIL": "nobody@example.com"}),
-    ([], {"ANON_GIT_KEEPYEAR": "1", "ANON_GIT_KEEPMONTH": "1"}),
-    ([], {"ANON_GIT_KEEPYEAR": "1", "ANON_GIT_KEEPDAY": "1"}),
-    ([], {"ANON_GIT_KEEPMONTH": "1", "ANON_GIT_KEEPDAY": "1"}),
-    ([], {"ANON_GIT_RANDOMDAY": "1", "ANON_GIT_KEEPDAY": "1"}),
     ([], {"ANON_GIT_RANDOMTIME": "1", "ANON_GIT_RANDOMMONTH": "1"}),
 ]
 
