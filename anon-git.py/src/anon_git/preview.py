@@ -4,13 +4,13 @@ import os
 import subprocess
 import sys
 
-from anon_git.constants import PREVIEW_SEPARATOR
+from anon_git.constants import CONTROL_ESCAPES, PREVIEW_SEPARATOR
 from anon_git.utils.dates import git_date_iso
 
 
 # Commit metadata is raw bytes with no guaranteed encoding.
 def decode_metadata(raw):
-    return raw.decode(errors="replace")
+    return raw.decode(errors="replace").translate(CONTROL_ESCAPES)
 
 
 def ident(name, email):

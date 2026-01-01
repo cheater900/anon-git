@@ -186,6 +186,15 @@ def test_dry_run_handles_non_utf8_metadata(tmp_path, monkeypatch):
     assert "AuthorDate:" in result.stdout
 
 
+def test_dry_run_escapes_terminal_control_chars(repo):
+    git("commit", "-q", "--allow-empty", "-m", "evil \x1b]0;pwned\x07 title\n\n\tbody")
+    result = run_cli("--dry-run", "HEAD", env={"PAGER": "cat"})
+    assert result.returncode == 0, result.stderr
+    assert "\x1b" not in result.stdout
+    assert "\x07" not in result.stdout
+    assert "evil \\x1b]0;pwned\\x07 title\n\n\tbody" in result.stdout
+
+
 def test_consecutive_runs_avoid_filter_repo_cache_bug(repo):
     assert run_cli(*REWRITE, "--name", "First Run", "HEAD").returncode == 0
     result = run_cli(*REWRITE, "--name", "Second Run", "HEAD")

@@ -31,9 +31,8 @@
 - Branch suffixes (`_anonymized_`, `_backup_`) and the random suffix range
   stay fixed so branch names match what `anon-git.sh` creates.
 
-## Open question
+## Dry-run preview escaping
 
-- `--dry-run` prints commit names, emails and messages verbatim, so a cloned
-  repo can embed terminal escape sequences in them (`git log` behaves the
-  same). Stripping control characters would make the preview differ from
-  `anon-git.sh` output and break the preview parity test. Undecided.
+- `--dry-run` shows control characters in commit names, emails and messages
+  (except tab and newline) as `\xNN`, so a cloned repo can't inject terminal
+  escape sequences. Output differs from `anon-git.sh` only for such commits.

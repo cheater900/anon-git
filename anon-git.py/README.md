@@ -34,7 +34,7 @@ install`/`uv tool uninstall` replace them. Passing one exits 1 with that hint.
 - `--install-hook` refuses a `core.hooksPath` set outside repo-local config:
   that directory is shared, so the hook would rewrite every repo's commits.
 - `--dry-run` pipes the preview to `$PAGER` on stdin; no preview file is
-  written to disk.
+  written to disk. Control characters in commit metadata show as `\xNN`.
 
 ## Shell completion
 

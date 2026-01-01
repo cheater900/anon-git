@@ -130,6 +130,13 @@ BRANCH_RANDOM_RANGE = 32768
 PREVIEW_SEPARATOR = "-" * 80
 
 
+# C0/C1 control characters except tab and newline, shown as \xNN: a cloned
+# repo's commit metadata must not drive the terminal (escape sequences).
+CONTROL_ESCAPES = {
+    code: f"\\x{code:02x}" for code in (*range(0x20), *range(0x7F, 0xA0)) if chr(code) not in "\t\n"
+}
+
+
 # Marks hooks this tool generated, so install_hook can refresh them without
 # clobbering a hook the user wrote. Same marker as the shell version.
 HOOK_MARKER = "# Installed by anon-git --install-hook"
