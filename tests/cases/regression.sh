@@ -222,6 +222,30 @@ test_match_outside_git_repo() {
     record_result "$errors" 'outside git repo fails cleanly'
 }
 
+test_match_unborn_head() {
+    local repo_dir output exit_status errors=0
+
+    repo_dir=$(mktemp -d "${TMP_DIR}/unborn_repo.XXXXXX")
+    git -C "$repo_dir" init >/dev/null
+    cp "$SCRIPT" "$repo_dir/"
+
+    output=$(cd "$repo_dir" && "./${SCRIPT_NAME}" --no-confirm HEAD 2>&1)
+    exit_status=$?
+
+    if [[ "$exit_status" -eq 0 ]]; then
+        printf 'Error: run on unborn HEAD did not fail\n'
+        errors=$((errors + 1))
+    fi
+    if ! grep -q 'no commits yet' <<<"$output"; then
+        printf 'Error: expected "no commits yet" message not found (got: %s)\n' "$output"
+        errors=$((errors + 1))
+    fi
+
+    rm -rf "$repo_dir"
+
+    record_result "$errors" 'unborn HEAD fails with clear message'
+}
+
 test_match_clean_cache_from_subdir() {
     # Run from a subdir, $PWD/.git does not exist; the cache must still go.
     local marker errors=0

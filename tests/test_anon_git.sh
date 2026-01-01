@@ -164,6 +164,7 @@ main() {
     test_match_malformed_date_no_branch
     test_match_unreachable_commit
     test_match_outside_git_repo
+    test_match_unborn_head
     test_match_annotated_tag
     test_match_dry_run_keeps_signed_commit
     test_match_dry_run_non_utf8

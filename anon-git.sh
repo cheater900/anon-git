@@ -609,6 +609,11 @@ safety_checks() {
         exit 1
     fi
 
+    if ! git rev-parse --quiet --verify HEAD >/dev/null; then
+        printf 'Error: repository has no commits yet; nothing to anonymize.\n' >&2
+        exit 1
+    fi
+
     if ! git diff-index --quiet HEAD -- || ! git diff-files --quiet; then
         printf 'Repository has uncommitted changes. Commit or stash first to prevent losing the changes.\n' >&2
         exit 1
