@@ -429,7 +429,7 @@ $HOOK_MARKER
 # --verbose to bring it back. Regenerate with: $src --install-hook
 
 set -e
-anon_git="$src"
+anon_git=$(printf '%q' "$src")
 EOF
     cat >>"$hook_file" <<'EOF'
 

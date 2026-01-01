@@ -120,6 +120,7 @@ main() {
     test_flag_install_hook_honors_hookspath
     test_flag_install_hook_partial_commit
     test_flag_install_hook_skips_rebase
+    test_flag_install_hook_special_path
     test_flag_install_hook_idempotent
     test_flag_install_hook_anonymizes_next_commit
     test_show_help

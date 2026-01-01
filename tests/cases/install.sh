@@ -527,6 +527,32 @@ test_flag_install_hook_partial_commit() {
     record_result "$errors" 'flag --install-hook anonymizes partial commit, keeps changes'
 }
 
+test_flag_install_hook_special_path() {
+    # Script path with shell metacharacters must survive into the hook.
+    local repo_dir odd_dir author errors=0
+
+    repo_dir=$(new_hook_test_repo)
+    odd_dir="${repo_dir}/odd \"\$dir\`"
+    mkdir -p "$odd_dir"
+    mv "${repo_dir}/${SCRIPT_NAME}" "$odd_dir/"
+    printf 'odd*\n' >>"${repo_dir}/.git/info/exclude"
+    (
+        cd "$repo_dir" || exit 1
+        "${odd_dir}/${SCRIPT_NAME}" --install-hook >/dev/null 2>&1
+        git commit -q --allow-empty -m 'Hooked commit' 2>/dev/null
+    )
+    author=$(git -C "$repo_dir" show -s --format='%an' HEAD)
+
+    if [[ "$author" != "$DEFAULT_NAME" ]]; then
+        printf 'Error: hook from odd path did not anonymize (author "%s")\n' "$author"
+        errors=$((errors + 1))
+    fi
+
+    rm -rf "$repo_dir"
+
+    record_result "$errors" 'flag --install-hook works from path with shell metacharacters'
+}
+
 test_flag_install_hook_skips_rebase() {
     local repo_dir output exit_status errors=0
 
