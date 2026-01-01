@@ -773,7 +773,7 @@ parse_args() {
             fi
             # ^{commit} peels annotated tags, whose own hash never matches a commit.
             ref=$(git rev-parse "${1}^{commit}")
-            COMMITS_ARG=("${COMMITS_ARG[@]}" "$ref")
+            COMMITS_ARG+=("$ref")
             COMMIT_ARG="${COMMITS_ARG[*]}"
             shift
             ;;
