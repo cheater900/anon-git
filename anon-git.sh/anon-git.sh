@@ -1161,9 +1161,8 @@ export_rewrite_env() {
 # of a target)/ignored, buckets by the commit's local calendar unit (what
 # `git log` shows, as --keep-* uses), and assigns each bucket's runs random
 # timestamps bounded by their nearest anchor, preserving relative order.
-# Prints "<hash> <epoch> +0000" lines, targets only. Kept as a plain
-# top-level assignment: the test suite locates it by its exact, unindented
-# `python_compute_random_dates="` ... `"` line anchors.
+# Prints "<hash> <epoch> +0000" lines, targets only. Top-level, so the test
+# suite can read it by sourcing the script.
 python_compute_random_dates="
 import os
 import random
@@ -1327,9 +1326,8 @@ def parse_target_date(date_str):
     return datetime.strptime(normalized, '%Y-%m-%d %H:%M:%S %z')
 "
 
-# Kept as a plain top-level assignment (not nested in a function): the test
-# suite locates this callback by its exact, unindented
-# `python_commit_callback="` ... `"` line anchors to check it's valid Python.
+# Top-level, so the test suite can read it by sourcing the script and check
+# it's valid Python.
 python_commit_callback="
 import os
 from datetime import datetime, timedelta, timezone

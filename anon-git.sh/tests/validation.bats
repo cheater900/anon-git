@@ -28,7 +28,7 @@ assert_incompatible() {
     # `return`, only legal inside a function -- matching how
     # git-filter-repo itself embeds the callback.
     local python_code check_file
-    python_code=$(extract_script_block python_commit_callback)
+    python_code="$(script_var python_parse_target_date)$(script_var python_commit_callback)"
     assert [ -n "$python_code" ]
     check_file=${BATS_TEST_TMPDIR}/python_commit_callback_check.py
     {

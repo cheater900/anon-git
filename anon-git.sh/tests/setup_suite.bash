@@ -7,20 +7,14 @@
 # shellcheck source=tests/test_helper.bash
 source "$(dirname "${BASH_SOURCE[0]}")/test_helper.bash"
 
-script_default() {
-    # $1: option name. Prints DEFAULT_$1, read by sourcing the script in a
-    # subshell (main is skipped when sourced).
-    bash -c 'source "$1" && printf "%s" "${!2}"' _ "$SCRIPT" "DEFAULT_$1"
-}
-
 setup_suite() {
     local i
     export DEFAULT_DATE DEFAULT_NAME DEFAULT_EMAIL DEFAULT_KEEPUSER DEFAULT_KEEPDATE
-    DEFAULT_DATE=$(script_default DATE)
-    DEFAULT_NAME=$(script_default NAME)
-    DEFAULT_EMAIL=$(script_default EMAIL)
-    DEFAULT_KEEPUSER=$(script_default KEEPUSER)
-    DEFAULT_KEEPDATE=$(script_default KEEPDATE)
+    DEFAULT_DATE=$(script_var DEFAULT_DATE)
+    DEFAULT_NAME=$(script_var DEFAULT_NAME)
+    DEFAULT_EMAIL=$(script_var DEFAULT_EMAIL)
+    DEFAULT_KEEPUSER=$(script_var DEFAULT_KEEPUSER)
+    DEFAULT_KEEPDATE=$(script_var DEFAULT_KEEPDATE)
     export DEFAULT_AUTHOR="${DEFAULT_NAME} <${DEFAULT_EMAIL}>"
     export REPO_TEMPLATE=${BATS_SUITE_TMPDIR}/template
     new_repo "$REPO_TEMPLATE"

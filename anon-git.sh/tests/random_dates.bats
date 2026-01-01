@@ -24,7 +24,7 @@ run_random_dates_script() {
     # "<hash> <epoch> <offset>", targets only.
     env ANON_GIT_RANDOMTIME=0 ANON_GIT_RANDOMDAY=0 ANON_GIT_RANDOMMONTH=0 "${1}=1" \
         ANON_GIT_ENTIREHISTORY="$2" ANON_GIT_TARGET_COMMITS="$3" \
-        python3 -c "$(extract_script_block python_compute_random_dates)"
+        python3 -c "$(script_var python_compute_random_dates)"
 }
 
 # Builds $1 linear "<hash> <epoch> +0000 <parent>" lines, $2 seconds apart, from
@@ -73,16 +73,6 @@ build_dated_repo() {
         GIT_AUTHOR_DATE="${ts} +0000" GIT_COMMITTER_DATE="${ts} +0000" \
             git -C "$dir" commit -q -m "commit $i"
     done
-}
-
-@test "python compute-random-dates syntax valid" {
-    local python_code check_file
-    python_code=$(extract_script_block python_compute_random_dates)
-    assert [ -n "$python_code" ]
-    check_file=${BATS_TEST_TMPDIR}/python_compute_random_dates_check.py
-    printf '%s\n' "$python_code" >"$check_file"
-    run python3 -m py_compile "$check_file"
-    assert_success
 }
 
 # UNIT TEST: a synthetic bucket of commits, all targets (--entire-history,

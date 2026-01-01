@@ -32,7 +32,7 @@ If you change `show_help()`'s `Options:` section (new/renamed/reworded flag), ru
 
 - Match the existing style: 4-space indent (`shfmt -i 4`), `snake_case` function names, `local` for anything not meant to leak out of a function.
 - `anon-git.sh` is organized as small, single-purpose functions (`parse_args`, `merge_args_with_defaults`, `reject_incompatible_options`, `backup_branch`, ...) called in sequence from `main()` at the bottom. Keep new logic in a similarly-scoped function rather than adding to `main()` directly or to an existing function's unrelated concern.
-- One exception: the `python_commit_callback` string assignment must stay an unindented, top-level `python_commit_callback="..."` (opening) / `"` (closing) pair — `tests/test_helper.bash`'s `extract_script_block` locates it with a `sed` line-anchor regex to check it's valid Python. Don't nest it inside a function.
+- One exception: the embedded Python (`python_commit_callback`, `python_compute_random_dates`, `python_parse_target_date`) must stay top-level assignments, not nested inside a function: `tests/test_helper.bash`'s `script_var` reads them by sourcing the script.
 - Comments explain *why*, not *what* — see the existing header comments on each function for the expected tone.
 
 ## Adding or changing a flag

@@ -83,9 +83,9 @@ commit_date() {
     git show -s --date=format:"$2" --format='%ad' "$1"
 }
 
-# Extracts a "name=\"...\"" multi-line string assignment from the script,
-# without its first/last lines.
-extract_script_block() {
-    # $1: variable name, e.g. python_commit_callback
-    sed -n "/^$1=\"\$/,/^\"\$/p" "$SCRIPT" | sed -e '1d' -e '$d'
+# Prints the script's variable $1 as bash expands it, read by sourcing the
+# script in a subshell (main is skipped when sourced). Embedded Python comes
+# out exactly as git-filter-repo gets it, escapes resolved.
+script_var() {
+    bash -c 'source "$1" && printf "%s" "${!2}"' _ "$SCRIPT" "$1"
 }
