@@ -4,6 +4,7 @@ Derived from git history, newest first.
 
 ## 2026-11-02
 
+- refactor(py): group constants and types at top, derive flag list, share git config helper
 - fix(py): report Ctrl-C and bare filter-repo exit codes without traceback or stray number
 - fix(py): make post-commit hook explain a removed install instead of failing
 - fix(py): resolve and check many target commits in one git call each

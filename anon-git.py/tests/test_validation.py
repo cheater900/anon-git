@@ -153,7 +153,7 @@ def test_validate_identity_rejects_exactly_bad_chars(name):
         **{opt.lower(): False for opt in anon_git.BOOLS},
         noconfirm=True,
         nobackup=True,
-        args={},
+        cli_flags={},
     )
     bad = any(char in name for char in "<>\n")
     if bad:

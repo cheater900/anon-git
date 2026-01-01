@@ -19,6 +19,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from importlib import resources
+from typing import NamedTuple
 
 import git_filter_repo as fr
 
@@ -28,42 +29,13 @@ DEFAULT_NAME = "Anon"
 DEFAULT_EMAIL = "anon@localhost"
 DEFAULT_DATE = "2008-10-31 00:00:00 +0000"
 
-# Value-taking flags end in "=". Single source of truth for --_list-flags.
-FLAGS = [
-    "-h",
-    "--help",
-    "-v",
-    "--version",
-    "--date=",
-    "--name=",
-    "--email=",
-    "--keep-user",
-    "--keep-date",
-    "--keep-year",
-    "--keep-month",
-    "--keep-day",
-    "--random-time",
-    "--random-day",
-    "--random-month",
-    "--strip-timezone",
-    "--no-confirm",
-    "--no-backup",
-    "--current-branch",
-    "--entire-history",
-    "--dry-run",
-    "--quiet",
-    "--verbose",
-    "--print-completion=",
-    "--install-hook",
-    "--uninstall-hook",
-]
-
-# Shell-version flags that copy the script around; uv owns installs here.
-FLAGS_DROPPED = ["--install", "--install-system", "--uninstall"]
+# Options taking a value; each has a --flag, git config and ANON_GIT_* envvar.
+VALUE_OPTIONS = ["NAME", "EMAIL", "DATE"]
 
 # Boolean options: each has a flag (KEEPUSER <-> --keep-user, see
 # flag_option), an ANON_GIT_<OPT> envvar and a default of "0". CONFIG_BOOLS
-# also read git config anon-git.<opt>.
+# also read git config anon-git.<opt>; the rest would be too destructive as
+# a silent repo default.
 CONFIG_BOOLS = [
     "KEEPUSER",
     "KEEPDATE",
@@ -96,6 +68,7 @@ GROUP_DATE = [
 SOURCES = ["ARG", "GITCONFIG", "ANON_GIT"]
 
 FLAGS_VALUE = ["--date", "--name", "--email"]
+# Order matches anon-git.sh's --_list-flags.
 FLAGS_BOOL = [
     "--keep-user",
     "--keep-date",
@@ -108,21 +81,42 @@ FLAGS_BOOL = [
     "--strip-timezone",
     "--no-confirm",
     "--no-backup",
-    "--entire-history",
     "--current-branch",
+    "--entire-history",
     "--dry-run",
     "--quiet",
     "--verbose",
 ]
-FLAGS_DATE = [
-    "--keep-date",
-    "--keep-year",
-    "--keep-month",
-    "--keep-day",
-    "--random-time",
-    "--random-day",
-    "--random-month",
+FLAGS_HOOK = ["--install-hook", "--uninstall-hook"]
+# Value-taking flags end in "=". Single source of truth for --_list-flags.
+FLAGS = [
+    "-h",
+    "--help",
+    "-v",
+    "--version",
+    *(f"{flag}=" for flag in FLAGS_VALUE),
+    *FLAGS_BOOL,
+    "--print-completion=",
+    *FLAGS_HOOK,
 ]
+# Shell-version flags that copy the script around; uv owns installs here.
+FLAGS_DROPPED = ["--install", "--install-system", "--uninstall"]
+
+# fast-import can't store these in an ident.
+IDENT_FORBIDDEN_CHARS = "<>\n"
+
+# Calendar unit each --random-* flag keeps; the rest is randomized.
+KEPT_YEAR = "year"
+KEPT_MONTH = "month"
+KEPT_DAY = "day"
+
+# New/backup branch names: "<branch><suffix><timestamp>".
+BRANCH_SUFFIX_ANONYMIZED = "_anonymized_"
+BRANCH_SUFFIX_BACKUP = "_backup_"
+# Same range as bash's $RANDOM, which anon-git.sh uses for the same suffix.
+BRANCH_RANDOM_RANGE = 32768
+
+PREVIEW_SEPARATOR = "-" * 80
 
 # Marks hooks this tool generated, so install_hook can refresh them without
 # clobbering a hook the user wrote. Same marker as the shell version.
@@ -133,6 +127,39 @@ COMPLETION_FILES = {
     "zsh": "_anon-git",
     "fish": "anon-git.fish",
 }
+
+ERROR_NOT_A_COMMIT = 'Error: Commit "{rev}" does not exist or is not a commit object.'
+
+HOOK_BODY = """
+# The install this hook calls is gone (e.g. `uv tool uninstall anon-git`):
+# say so instead of failing every commit with a bare "No such file".
+if [[ ! -x "${anon_git[0]}" ]]; then
+    printf 'anon-git: %s missing, not anonymized; re-run --install-hook.\\n' "${anon_git[0]}" >&2
+    exit 0
+fi
+
+# Rewriting HEAD mid-sequence would derail the rebase/cherry-pick/revert.
+for state in rebase-merge rebase-apply sequencer CHERRY_PICK_HEAD REVERT_HEAD; do
+    if [[ -e "$(git rev-parse --git-path "$state")" ]]; then
+        printf 'anon-git: %s in progress, commit not anonymized.\\n' "$state" >&2
+        exit 0
+    fi
+done
+
+# A partial commit (git add -p, git commit <path>) leaves a dirty tree,
+# which anon-git refuses; stash it around the run.
+stashed=0
+if ! git diff-index --quiet HEAD -- || ! git diff-files --quiet; then
+    git stash push --quiet
+    stashed=1
+fi
+status=0
+"${anon_git[@]}" --no-confirm --no-backup --quiet --current-branch HEAD || status=$?
+if [[ "$stashed" -eq 1 ]]; then
+    git stash pop --quiet --index
+fi
+exit "$status"
+"""
 
 HELP = """Anonymizes git commit metadata.
 
@@ -267,6 +294,47 @@ Examples:
     anon-git --uninstall-hook"""
 
 
+class HistoryCommit(NamedTuple):
+    hash: str
+    epoch: int
+    offset: str
+    parents: list
+
+
+# One commit placed in a calendar-unit bucket; sorts by (epoch, index).
+class BucketMember(NamedTuple):
+    epoch: int
+    index: int
+    hash: str
+    is_target: bool
+
+
+@dataclass(frozen=True)
+class Options:
+    name: str
+    email: str
+    date: str
+    commits: list
+    keepuser: bool
+    keepdate: bool
+    keepyear: bool
+    keepmonth: bool
+    keepday: bool
+    randomtime: bool
+    randomday: bool
+    randommonth: bool
+    striptimezone: bool
+    entirehistory: bool
+    currentbranch: bool
+    dryrun: bool
+    quiet: bool
+    # CLI-only, never read from config/envvars.
+    noconfirm: bool
+    nobackup: bool
+    # Flags given on the CLI, for messages gated on explicit flags.
+    cli_flags: dict
+
+
 def fail(message):
     print(message, file=sys.stderr)
     sys.exit(1)
@@ -312,7 +380,7 @@ def handle_early_options(argv):
     i = 0
     while i < len(argv):
         arg = argv[i]
-        if arg in ("--date", "--name", "--email"):
+        if arg in FLAGS_VALUE:
             # Skip the value, so `--name --help` uses "--help" as the name.
             i += 1
         elif arg in ("-h", "--help"):
@@ -330,32 +398,6 @@ def handle_early_options(argv):
         elif arg in FLAGS_DROPPED:
             dropped_install_flag(arg)
         i += 1
-
-
-@dataclass(frozen=True)
-class Options:
-    name: str
-    email: str
-    date: str
-    commits: list
-    keepuser: bool
-    keepdate: bool
-    keepyear: bool
-    keepmonth: bool
-    keepday: bool
-    randomtime: bool
-    randomday: bool
-    randommonth: bool
-    striptimezone: bool
-    entirehistory: bool
-    currentbranch: bool
-    dryrun: bool
-    quiet: bool
-    # CLI-only, never read from config/envvars.
-    noconfirm: bool
-    nobackup: bool
-    # Flags given on the CLI, for messages gated on explicit flags.
-    args: dict
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -394,44 +436,16 @@ def hook_is_ours(hook_file):
         return HOOK_MARKER in fh.read()
 
 
-HOOK_BODY = """
-# The install this hook calls is gone (e.g. `uv tool uninstall anon-git`):
-# say so instead of failing every commit with a bare "No such file".
-if [[ ! -x "${anon_git[0]}" ]]; then
-    printf 'anon-git: %s missing, not anonymized; re-run --install-hook.\\n' "${anon_git[0]}" >&2
-    exit 0
-fi
-
-# Rewriting HEAD mid-sequence would derail the rebase/cherry-pick/revert.
-for state in rebase-merge rebase-apply sequencer CHERRY_PICK_HEAD REVERT_HEAD; do
-    if [[ -e "$(git rev-parse --git-path "$state")" ]]; then
-        printf 'anon-git: %s in progress, commit not anonymized.\\n' "$state" >&2
-        exit 0
-    fi
-done
-
-# A partial commit (git add -p, git commit <path>) leaves a dirty tree,
-# which anon-git refuses; stash it around the run.
-stashed=0
-if ! git diff-index --quiet HEAD -- || ! git diff-files --quiet; then
-    git stash push --quiet
-    stashed=1
-fi
-status=0
-"${anon_git[@]}" --no-confirm --no-backup --quiet --current-branch HEAD || status=$?
-if [[ "$stashed" -eq 1 ]]; then
-    git stash pop --quiet --index
-fi
-exit "$status"
-"""
-
-
 # --install-hook: re-anonymizes HEAD in place after every commit, with
 # --no-backup (would accumulate one branch per commit) and --quiet. Calls
 # this exact interpreter, never whatever `anon-git` is first on $PATH.
-def install_hook():
+def require_work_tree_for(flag):
     if not git_ok("rev-parse", "--show-toplevel"):
-        fail("Error: --install-hook must be run inside a git repository.")
+        fail(f"Error: {flag} must be run inside a git repository.")
+
+
+def install_hook():
+    require_work_tree_for("--install-hook")
     hook_file = hook_file_path()
     if os.path.lexists(hook_file) and not hook_is_ours(hook_file):
         fail(
@@ -461,8 +475,7 @@ def install_hook():
 # --uninstall-hook: guarded by the same HOOK_MARKER check install_hook uses,
 # so a hook this tool didn't create is never touched.
 def uninstall_hook():
-    if not git_ok("rev-parse", "--show-toplevel"):
-        fail("Error: --uninstall-hook must be run inside a git repository.")
+    require_work_tree_for("--uninstall-hook")
     hook_file = hook_file_path()
     if not os.path.lexists(hook_file):
         print(f"No post-commit hook installed at {hook_file}")
@@ -501,40 +514,43 @@ def safety_checks():
         )
 
 
+# Returns (git exit status, value). Status 1 means the key is unset.
+def git_config_get(key, *flags):
+    result = subprocess.run(["git", "config", *flags, "--get", key], capture_output=True, text=True)
+    return result.returncode, result.stdout.rstrip("\n")
+
+
+def config_key(opt):
+    return f"anon-git.{opt.lower()}"
+
+
 # Reads git config anon-git.<key> as "1"/"0", or "" if unset. Parsed by git
 # itself (--type=bool), so "True", "YES" or a valueless key mean what git
 # says. An unparseable value is a hard error: a typo must not fail open.
 def read_git_config_bool(key):
-    result = subprocess.run(
-        ["git", "config", "--type=bool", "--get", key], capture_output=True, text=True
-    )
-    if result.returncode == 1:
+    status, value = git_config_get(key, "--type=bool")
+    if status == 1:
         return ""
-    if result.returncode != 0:
-        raw = subprocess.run(["git", "config", "--get", key], capture_output=True, text=True)
+    if status != 0:
         fail(
-            f'Error: git config {key} has an invalid boolean value "{raw.stdout.strip()}" '
+            f'Error: git config {key} has an invalid boolean value "{git_config_get(key)[1]}" '
             "(expected true/false)"
         )
-    return "1" if result.stdout.strip() == "true" else "0"
+    return "1" if value == "true" else "0"
 
 
-# Excludes ENTIREHISTORY/CURRENTBRANCH/DRYRUN: a silent default for those
-# would be too destructive.
 def read_git_config():
     config = {}
-    for opt in ("NAME", "EMAIL", "DATE"):
-        result = subprocess.run(
-            ["git", "config", "--get", f"anon-git.{opt.lower()}"], capture_output=True, text=True
-        )
-        config[opt] = result.stdout.rstrip("\n") if result.returncode == 0 else ""
+    for opt in VALUE_OPTIONS:
+        status, value = git_config_get(config_key(opt))
+        config[opt] = value if status == 0 else ""
     for opt in CONFIG_BOOLS:
-        config[opt] = read_git_config_bool(f"anon-git.{opt.lower()}")
+        config[opt] = read_git_config_bool(config_key(opt))
     return config
 
 
 def read_env(environ):
-    return {opt: environ.get(f"ANON_GIT_{opt}", "") for opt in ("NAME", "EMAIL", "DATE", *BOOLS)}
+    return {opt: environ.get(f"ANON_GIT_{opt}", "") for opt in (*VALUE_OPTIONS, *BOOLS)}
 
 
 # --keep-user -> KEEPUSER.
@@ -549,7 +565,7 @@ def resolve_commits(revs):
     # A newline would split one revision into two batch lines.
     for rev in revs:
         if "\n" in rev:
-            fail(f'Error: Commit "{rev}" does not exist or is not a commit object.')
+            fail(ERROR_NOT_A_COMMIT.format(rev=rev))
     batch = subprocess.run(
         ["git", "cat-file", "--batch-check=%(objectname) %(objecttype)"],
         input="".join(f"{rev}^{{commit}}\n" for rev in revs),
@@ -561,7 +577,7 @@ def resolve_commits(revs):
     for rev, line in zip(revs, batch.stdout.splitlines(), strict=True):
         commit, kind = line.rsplit(" ", 1)
         if kind != "commit":
-            fail(f'Error: Commit "{rev}" does not exist or is not a commit object.')
+            fail(ERROR_NOT_A_COMMIT.format(rev=rev))
         commits.append(commit)
     return commits
 
@@ -635,7 +651,11 @@ def reject_incompatible_options(sources, commits):
             errors.append(f"Error: --keep-user and {flag} cannot be used together")
     # --date, --keep-* and --random-* each decide the whole date: one at most.
     date_flags = ["--date"] if first_set(sources, "DATE") else []
-    date_flags += [flag for flag in FLAGS_DATE if bool_set(sources, flag_option(flag))]
+    date_flags += [
+        flag
+        for flag in FLAGS_BOOL
+        if flag_option(flag) in GROUP_DATE and bool_set(sources, flag_option(flag))
+    ]
     if len(date_flags) > 1:
         errors.append(f"Error: {' and '.join(date_flags)} cannot be used together")
     if commits and bool_set(sources, "ENTIREHISTORY"):
@@ -650,7 +670,7 @@ def reject_incompatible_options(sources, commits):
 # Flags > repo-local git config > ANON_GIT_* envvars > defaults.
 def merge_args_with_defaults(sources):
     defaults = {"NAME": DEFAULT_NAME, "EMAIL": DEFAULT_EMAIL, "DATE": DEFAULT_DATE}
-    defaults.update({opt: "0" for opt in BOOLS})
+    defaults.update(dict.fromkeys(BOOLS, "0"))
     resolved = {opt: first_set(sources, opt) or default for opt, default in defaults.items()}
     # --verbose always wins over whatever set QUIET above.
     if sources["ARG"].get("VERBOSE") == "1":
@@ -693,7 +713,7 @@ def build_options(argv, environ):
         commits=commits,
         noconfirm=args.get("NOCONFIRM") == "1",
         nobackup=args.get("NOBACKUP") == "1",
-        args=args,
+        cli_flags=args,
         **{opt.lower(): resolved[opt] == "1" for opt in BOOLS},
     )
 
@@ -743,7 +763,7 @@ def validate_identity(opts):
     if opts.keepuser:
         return
     for field, value in (("name", opts.name), ("email", opts.email)):
-        if any(char in value for char in "<>\n"):
+        if any(char in value for char in IDENT_FORBIDDEN_CHARS):
             fail(f'Error: {field} must not contain "<", ">" or a newline (got "{value}")')
 
 
@@ -792,7 +812,7 @@ def verbose_info(opts):
         "STRIPTIMEZONE": "Forcing timezone offset to UTC+0000 (date/time digits unchanged).",
     }
     for opt, message in messages.items():
-        if opts.args.get(opt):
+        if opts.cli_flags.get(opt):
             print(message)
     print()
 
@@ -835,9 +855,11 @@ def backup_branch(opts):
     branch_label = current_branch or f"detached-{git('rev-parse', '--short', 'HEAD')}"
     # Colon-free (git ref names disallow ":"); PID + random suffix for
     # uniqueness within the same second.
-    timestamp = f"{time.strftime('%Y%m%d_%H%M%S')}_{os.getpid()}_{random.randrange(32768)}"
+    timestamp = (
+        f"{time.strftime('%Y%m%d_%H%M%S')}_{os.getpid()}_{random.randrange(BRANCH_RANDOM_RANGE)}"
+    )
     if not opts.currentbranch:
-        new_branch = f"{branch_label}_anonymized_{timestamp}"
+        new_branch = f"{branch_label}{BRANCH_SUFFIX_ANONYMIZED}{timestamp}"
         # --quiet also silences git's own "Switched to a new branch" line.
         stderr = subprocess.DEVNULL if opts.quiet else None
         if subprocess.run(["git", "switch", "--create", new_branch], stderr=stderr).returncode:
@@ -852,7 +874,7 @@ def backup_branch(opts):
             f"WARNING! Overwriting existing branch {branch_label} without backup!", file=sys.stderr
         )
         return
-    backup_branch_name = f"{branch_label}_backup_{timestamp}"
+    backup_branch_name = f"{branch_label}{BRANCH_SUFFIX_BACKUP}{timestamp}"
     if subprocess.run(["git", "branch", backup_branch_name]).returncode:
         fail(f"Error: failed to create backup branch {backup_branch_name}")
     if not opts.quiet:
@@ -1050,7 +1072,7 @@ def preview_entry(commit, new):
         f"CommitterDate:\t{iso(commit.committer_date)} -> {iso(new['committer_date'])}\n"
         "\n"
         f"{text(commit.message)}"
-        f"\n{'-' * 80}\n"
+        f"\n{PREVIEW_SEPARATOR}\n"
     )
 
 
