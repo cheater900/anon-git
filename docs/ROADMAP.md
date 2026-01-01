@@ -27,12 +27,6 @@ test).
 Code for every step below is in `anon-git.py/src/anon_git/__init__.py`;
 remaining steps port the matching bats tests to pytest:
 
-6. Randomized timestamps: `compute_random_dates(history, targets,
-   granularity, entire, rng)`, same semantics (local-calendar buckets,
-   topo tie-break, clamped fallback, `SystemRandom`), injectable `rng`. Port
-   `random_dates.bats`; hypothesis properties over random histories (mixed
-   offsets, ties, merges, bucket edges): pick stays in local calendar unit,
-   and between parent/child anchors absent timezone conflict.
 7. Hooks: `--install-hook`/`--uninstall-hook`, marker, `core.hooksPath`;
    dropped install flags. Port hook parts of `install.bats`.
 8. Regression parity: port `regression.bats`; parity test running both

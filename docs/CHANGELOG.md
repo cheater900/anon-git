@@ -4,6 +4,7 @@ Derived from git history, newest first.
 
 ## 2026-11-02
 
+- test: cover anon-git.py random dates with unit, property, end-to-end tests
 - feat: port anon-git rewrite to Python, calling git_filter_repo in-process
 - feat: add anon-git.py skeleton with early options, completions
 - refactor: move shell implementation into anon-git.sh/

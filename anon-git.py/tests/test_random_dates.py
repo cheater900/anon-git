@@ -1,0 +1,252 @@
+"""--random-time/--random-day/--random-month: compute_random_dates unit and
+property tests on synthetic histories, then end-to-end runs."""
+
+import random
+from datetime import datetime, timedelta, timezone
+
+import pytest
+from conftest import commit, commit_date, git, new_repo, pick_random_index, run_cli
+from hypothesis import given, settings
+from hypothesis import strategies as st
+
+import anon_git
+
+HOUR = 3600
+DAY = 86400
+EPOCH_2019 = 1546300800
+EPOCH_2020 = 1577836800
+GRANULARITIES = ["time-of-day", "day-of-month", "month"]
+REWRITE = ("--no-confirm", "--no-backup", "--current-branch")
+
+
+def linear_history(count, spacing, base=EPOCH_2020, offset="+0000"):
+    """count commits commit_0..commit_{count-1}, spacing seconds apart."""
+    return [
+        (f"commit_{i}", base + i * spacing, offset, [f"commit_{i - 1}"] if i else [])
+        for i in range(count)
+    ]
+
+
+def epoch_of(history, commit_hash):
+    return next(epoch for h, epoch, _offset, _parents in history if h == commit_hash)
+
+
+def local_unit(epoch, offset, granularity):
+    return anon_git.bucket_bounds(anon_git.local_datetime(epoch, offset), granularity)[0]
+
+
+@pytest.mark.parametrize("granularity", GRANULARITIES)
+def test_order_kept_within_bucket(granularity):
+    history = linear_history(40, HOUR)
+    picked = anon_git.compute_random_dates(history, set(), granularity, entire=True)
+    assert len(picked) == 40
+    epochs = [picked[f"commit_{i}"] for i in range(40)]
+    assert epochs == sorted(epochs)
+
+
+def test_sparse_targets_bounded_by_real_neighbors():
+    # --random-day's bucket is a full month: without neighbor bounds a pick
+    # could land past a real neighbor.
+    history = linear_history(10, DAY)
+    picked = anon_git.compute_random_dates(history, {"commit_3", "commit_6"}, "day-of-month", False)
+    assert set(picked) == {"commit_3", "commit_6"}
+    assert epoch_of(history, "commit_2") < picked["commit_3"] < epoch_of(history, "commit_4")
+    assert epoch_of(history, "commit_5") < picked["commit_6"] < epoch_of(history, "commit_7")
+
+
+def test_contiguous_run_bounded_and_ordered():
+    history = linear_history(10, DAY)
+    targets = {"commit_3", "commit_4", "commit_5"}
+    picked = anon_git.compute_random_dates(history, targets, "day-of-month", False)
+    chain = [
+        epoch_of(history, "commit_2"),
+        picked["commit_3"],
+        picked["commit_4"],
+        picked["commit_5"],
+        epoch_of(history, "commit_6"),
+    ]
+    assert chain == sorted(set(chain))
+
+
+def test_run_at_first_commit_needs_no_lower_neighbor():
+    history = linear_history(10, DAY)
+    picked = anon_git.compute_random_dates(history, {"commit_0", "commit_1"}, "day-of-month", False)
+    assert EPOCH_2020 <= picked["commit_0"] < picked["commit_1"] < epoch_of(history, "commit_2")
+
+
+def test_run_at_last_commit_needs_no_upper_neighbor():
+    history = linear_history(10, DAY)
+    picked = anon_git.compute_random_dates(history, {"commit_8", "commit_9"}, "day-of-month", False)
+    assert epoch_of(history, "commit_7") < picked["commit_8"] < picked["commit_9"]
+
+
+def test_bounded_by_parent_and_merge_child():
+    # side_1 sits next to main_1 in log order but its real child is the
+    # merge; main_1's skewed date must not stretch side_1's range past it.
+    merge_epoch = EPOCH_2020 + 2 * DAY
+    history = [
+        ("root", EPOCH_2020, "+0000", []),
+        ("side_1", EPOCH_2020 + DAY, "+0000", ["root"]),
+        ("main_1", EPOCH_2020 + 20 * DAY, "+0000", ["root"]),
+        ("merge", merge_epoch, "+0000", ["main_1", "side_1"]),
+    ]
+    for _ in range(20):
+        picked = anon_git.compute_random_dates(history, {"side_1"}, "day-of-month", False)
+        assert EPOCH_2020 < picked["side_1"] < merge_epoch
+
+
+def test_same_second_neighbors_at_bucket_end_stay_in_bucket():
+    last = EPOCH_2020 + DAY - 1
+    history = [
+        ("parent", last, "+0000", []),
+        ("target", last, "+0000", ["parent"]),
+        ("child", last, "+0000", ["target"]),
+    ]
+    assert anon_git.compute_random_dates(history, {"target"}, "time-of-day", False) == {
+        "target": last
+    }
+
+
+def test_bucket_follows_local_calendar_not_utc():
+    # 2020-01-01 01:00 +0200 is 2019-12-31 23:00 UTC; the day shown stays Jan 1.
+    history = [("commit", EPOCH_2020 - HOUR, "+0200", [])]
+    for _ in range(20):
+        picked = anon_git.compute_random_dates(history, set(), "time-of-day", True)
+        assert EPOCH_2020 <= picked["commit"] < EPOCH_2020 + DAY
+
+
+def test_seeded_rng_reproducible():
+    history = linear_history(10, HOUR)
+    first = anon_git.compute_random_dates(history, set(), "month", True, random.Random(7))
+    second = anon_git.compute_random_dates(history, set(), "month", True, random.Random(7))
+    assert first == second
+
+
+# ── properties ───────────────────────────────────────────────────────────
+
+OFFSETS = st.sampled_from(["+0000", "+0200", "-0500", "+0530", "+1400", "-1200"])
+
+
+@st.composite
+def histories(draw, utc_only):
+    """Random DAG, oldest first: each commit's parents are earlier commits,
+    epochs non-decreasing along history (ties allowed, bucket edges likely)."""
+    count = draw(st.integers(min_value=1, max_value=25))
+    epoch = draw(st.integers(min_value=EPOCH_2019, max_value=EPOCH_2020 + 365 * DAY))
+    history = []
+    for i in range(count):
+        epoch += draw(st.sampled_from([0, 1, 59, HOUR, DAY - 1, DAY, 31 * DAY]))
+        parents = []
+        if i:
+            parents.append(f"c{draw(st.integers(min_value=max(0, i - 3), max_value=i - 1))}")
+            if i > 1 and draw(st.booleans()):
+                parents.append(f"c{draw(st.integers(min_value=0, max_value=i - 1))}")
+        history.append(
+            (f"c{i}", epoch, "+0000" if utc_only else draw(OFFSETS), sorted(set(parents)))
+        )
+    targets = {h for h, *_ in history if draw(st.booleans())}
+    entire = draw(st.booleans())
+    granularity = draw(st.sampled_from(GRANULARITIES))
+    return history, targets, entire, granularity
+
+
+@settings(max_examples=300, deadline=None)
+@given(histories(utc_only=False))
+def test_property_pick_stays_in_local_calendar_unit(case):
+    history, targets, entire, granularity = case
+    picked = anon_git.compute_random_dates(history, targets, granularity, entire)
+    expected = {h for h, *_ in history} if entire else targets
+    assert set(picked) == expected
+    for commit_hash, epoch, offset, _parents in history:
+        if commit_hash not in picked:
+            continue
+        # Output is +0000, so its calendar unit is read in UTC.
+        assert local_unit(picked[commit_hash], "+0000", granularity) == local_unit(
+            epoch, offset, granularity
+        )
+
+
+@settings(max_examples=300, deadline=None)
+@given(histories(utc_only=True))
+def test_property_pick_between_parent_and_child(case):
+    # Output is +0000; with +0000 input no timezone conflicts with the kept
+    # calendar unit, so parent <= child must hold.
+    history, targets, entire, granularity = case
+    picked = anon_git.compute_random_dates(history, targets, granularity, entire)
+    new_epoch = {h: picked.get(h, epoch) for h, epoch, _offset, _parents in history}
+    for commit_hash, _epoch, _offset, parents in history:
+        for parent in parents:
+            assert new_epoch[parent] <= new_epoch[commit_hash]
+
+
+# ── end to end ───────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "flag, kept",
+    [("--random-time", "%Y-%m-%d"), ("--random-day", "%Y-%m"), ("--random-month", "%Y")],
+)
+def test_random_flag_keeps_calendar_unit(repo, flag, kept):
+    # Never asserts a change: randomness could reproduce the original.
+    target = f"HEAD~{pick_random_index()}"
+    old = commit_date(target, kept)
+    result = run_cli(*REWRITE, flag, target)
+    assert result.returncode == 0, result.stderr
+    assert commit_date(target, kept) == old
+    assert commit_date(target, "%z") == "+0000"
+
+
+def test_random_day_multiple_targets_keep_month(repo):
+    old = commit_date("HEAD~1", "%Y-%m"), commit_date("HEAD~3", "%Y-%m")
+    result = run_cli(*REWRITE, "--random-day", "HEAD~1", "HEAD~3")
+    assert result.returncode == 0, result.stderr
+    assert (commit_date("HEAD~1", "%Y-%m"), commit_date("HEAD~3", "%Y-%m")) == old
+
+
+def dated_repo(path, count, spacing, base, offset="+0000"):
+    new_repo(path)
+    for i in range(count):
+        commit(f"commit {i}", date=f"{base + i * spacing} {offset}", cwd=path)
+
+
+def assert_log_chronological():
+    epochs = [int(e) for e in git("log", "--reverse", "--format=%at").splitlines()]
+    assert epochs == sorted(epochs)
+
+
+def test_random_day_keeps_log_ordered_vs_neighbors(tmp_path, monkeypatch):
+    dated_repo(tmp_path / "r", 8, 3 * DAY, EPOCH_2020)
+    monkeypatch.chdir(tmp_path / "r")
+    result = run_cli(*REWRITE, "--random-day", "HEAD~5", "HEAD~2")
+    assert result.returncode == 0, result.stderr
+    assert_log_chronological()
+
+
+def test_random_month_entire_history_keeps_years_and_order(tmp_path, monkeypatch):
+    dated_repo(tmp_path / "r", 20, 40 * DAY, EPOCH_2019)
+    monkeypatch.chdir(tmp_path / "r")
+    years = git("log", "--reverse", "--date=format:%Y", "--format=%ad")
+    result = run_cli(*REWRITE, "--random-month", "--entire-history")
+    assert result.returncode == 0, result.stderr
+    assert git("log", "--reverse", "--date=format:%Y", "--format=%ad") == years
+    assert_log_chronological()
+
+
+def test_random_month_keeps_local_year_across_utc_new_year(tmp_path, monkeypatch):
+    new_repo(tmp_path / "r")
+    monkeypatch.chdir(tmp_path / "r")
+    commit("new year", date="2020-01-01 01:00:00 +0200")
+    result = run_cli(*REWRITE, "--random-month", "HEAD")
+    assert result.returncode == 0, result.stderr
+    assert commit_date("HEAD", "%Y") == "2020"
+
+
+def test_random_time_rewrites_committer_date_too(repo):
+    result = run_cli(*REWRITE, "--random-time", "HEAD")
+    assert result.returncode == 0, result.stderr
+    assert git("show", "-s", "--format=%ad", "HEAD") == git("show", "-s", "--format=%cd", "HEAD")
+
+
+def test_local_datetime_applies_offset():
+    dt = anon_git.local_datetime(EPOCH_2020, "-0530")
+    assert dt == datetime(2020, 1, 1, tzinfo=timezone.utc) - timedelta(hours=5, minutes=30)
