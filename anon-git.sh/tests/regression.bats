@@ -219,6 +219,15 @@ add_main_ancestor() {
     assert_output --partial 'AuthorDate:'
 }
 
+@test "dry run escapes terminal control chars" {
+    git commit -q --allow-empty -m $'evil \e]0;pwned\a title\n\n\tbody'
+    PAGER='cat' run ./anon-git.sh --dry-run HEAD
+    assert_success
+    refute_output --partial $'\e'
+    refute_output --partial $'\a'
+    assert_output --partial $'evil \\x1b]0;pwned\\x07 title\n\n\tbody'
+}
+
 @test "consecutive runs avoid filter-repo cache bug" {
     # A second run against the same repo is a known trigger for an upstream
     # git-filter-repo assertion bug unless clean_cache clears its metadata cache first.

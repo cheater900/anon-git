@@ -1459,23 +1459,33 @@ elif striptimezone:
     committer_date = b'%d +0000' % (int(committer_dt.timestamp()),)
 
 if dryrun:
+    # C0/C1 control characters except tab and newline, shown as \xNN: a
+    # cloned repo's commit metadata must not drive the terminal (escape
+    # sequences).
+    control_escapes = {
+        code: '\\\\x%02x' % code for code in [*range(0x20), *range(0x7f, 0xa0)] if chr(code) not in '\t\n'
+    }
+
     # Metadata is raw bytes with no guaranteed encoding.
-    an = commit.author_name.decode(errors='replace')
-    ae = commit.author_email.decode(errors='replace')
+    def decode_metadata(raw):
+        return raw.decode(errors='replace').translate(control_escapes)
+
+    an = decode_metadata(commit.author_name)
+    ae = decode_metadata(commit.author_email)
     ad = parse_git_date(commit.author_date).isoformat()
-    new_an = author_name.decode(errors='replace')
-    new_ae = author_email.decode(errors='replace')
+    new_an = decode_metadata(author_name)
+    new_ae = decode_metadata(author_email)
     new_ad = parse_git_date(author_date).isoformat()
 
-    cn = commit.committer_name.decode(errors='replace')
-    ce = commit.committer_email.decode(errors='replace')
+    cn = decode_metadata(commit.committer_name)
+    ce = decode_metadata(commit.committer_email)
     cd = parse_git_date(commit.committer_date).isoformat()
-    new_cn = committer_name.decode(errors='replace')
-    new_ce = committer_email.decode(errors='replace')
+    new_cn = decode_metadata(committer_name)
+    new_ce = decode_metadata(committer_email)
     new_cd = parse_git_date(committer_date).isoformat()
 
     commit_id = commit.original_id.decode()
-    msg = commit.message.decode(errors='replace')
+    msg = decode_metadata(commit.message)
     sep = '\n' + '-' * 80 + '\n'
 
     with open(dryrun_file, 'a', encoding='utf-8') as f:

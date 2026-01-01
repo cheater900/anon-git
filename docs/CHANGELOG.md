@@ -4,6 +4,7 @@ Derived from git history, newest first.
 
 ## 2026-11-04
 
+- fix(sh): escape control chars in --dry-run preview
 - fix(sh): refuse --install-hook into shared core.hooksPath
 - fix(sh): refuse symlinked post-commit hook instead of writing through it
 - fix(sh): make post-commit hook explain a moved script instead of failing
