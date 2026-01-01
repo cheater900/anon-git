@@ -502,7 +502,7 @@ test_flag_env_vars() {
     record_result "$errors" 'ANON_GIT_* envvars overwrite defaults'
 }
 
-test_flag_help() {
+test_show_help() {
     local output exit_status errors=0
 
     output=$(./${SCRIPT_NAME} --help 2>&1)
@@ -517,7 +517,43 @@ test_flag_help() {
         errors=$((errors + 1))
     fi
 
-    record_result "$errors" 'flag --help'
+    record_result "$errors" 'show --help'
+}
+
+test_show_help_inside_dirty_repo() {
+    # A bare invocation (no args) should show help unconditionally, before
+    # any safety checks run — an unstaged change to a tracked file should
+    # not turn it into a hard failure, since there's nothing here for the
+    # script to do or lose. Modifies an existing tracked file (rather than
+    # adding an untracked one) since the uncommitted-changes guard this is
+    # meant to bypass only looks at diff-index/diff-files, not untracked
+    # files.
+    local tracked_file before after output exit_status errors=0
+
+    tracked_file='file_1.txt'
+    echo 'uncommitted change' >>"$tracked_file"
+
+    before=$(git rev-parse HEAD)
+    output=$(./${SCRIPT_NAME} 2>&1)
+    exit_status=$?
+    after=$(git rev-parse HEAD)
+
+    if [[ "$exit_status" -ne 0 ]]; then
+        printf 'Error: bare invocation in a dirty repo exited with status %s\n' "$exit_status"
+        errors=$((errors + 1))
+    fi
+    if [[ "$before" != "$after" ]]; then
+        printf 'Error: bare invocation in a dirty repo modified HEAD\n'
+        errors=$((errors + 1))
+    fi
+    if ! grep -q 'Usage:' <<<"$output"; then
+        printf 'Error: bare invocation in a dirty repo did not show help\n'
+        errors=$((errors + 1))
+    fi
+
+    git checkout -- "$tracked_file"
+
+    record_result "$errors" 'show help inside dirty repo (no args)'
 }
 
 test_flag_keep_partial() {
@@ -998,7 +1034,8 @@ main() {
     test_flag_current_branch_backup
     test_flag_dry_run
     test_flag_env_vars
-    test_flag_help
+    test_show_help
+    test_show_help_inside_dirty_repo
     test_flag_keep_partial --keep-year
     test_flag_keep_partial --keep-month
     test_flag_keep_partial --keep-day

@@ -57,10 +57,10 @@ Examples:
     ./anon-git.sh HEAD~2
 
     # Explicit values at specific commit
-    ./anon-git.sh --date "2024-01-01 00:00:00 +0000" \
-                            --name "Jane Doe" \
-                            --email "jane@anon.dev" \
-                            8ddf55a
+    ./anon-git.sh --date "2024-01-01 00:00:00 +0000"
+                  --name "Jane Doe"
+                  --email "jane@anon.dev"
+                  8ddf55a
 
     # Keep real name/email, only change date
     ./anon-git.sh --keep-user --date "2025-06-15T14:20:00Z"
@@ -141,6 +141,8 @@ print_completion() {
     cat -- "$completion_file"
     exit 0
 }
+
+[[ $# -eq 0 ]] && show_help
 
 args=("$@")
 for ((i = 0; i < ${#args[@]}; i++)); do
