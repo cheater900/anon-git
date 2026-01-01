@@ -2,6 +2,9 @@
 
 set -euo pipefail
 
+# Bumped by hand; no automated release process yet. Not tied to git tags.
+ANON_GIT_VERSION='0.1.0'
+
 DEFAULT_NAME='Anon'
 DEFAULT_EMAIL='anon@localhost'
 DEFAULT_DATE='2008-10-31 00:00:00 +0000'
@@ -30,6 +33,7 @@ Usage:
 
 Options:
   -h, --help                      Show this help message and exit
+  -v, --version                   Show version and exit
   --date        ISO Date          Date to use (example: "2025-03-10 13:37:00 +0000")
   --name        "Full name"       Name to use for author & committer
   --email       "Email address"   Email to use for author & committer
@@ -113,6 +117,11 @@ EOF
     exit 0
 }
 
+show_version() {
+    printf 'anon-git %s\n' "$ANON_GIT_VERSION"
+    exit 0
+}
+
 # Internal/undocumented: prints one flag per line (value-taking flags end in
 # "="), so shell completion scripts have a single source of truth for the
 # flag list instead of hardcoding it (and silently drifting out of sync).
@@ -120,6 +129,8 @@ list_flags() {
     cat <<'EOF'
 -h
 --help
+-v
+--version
 --date=
 --name=
 --email=
@@ -268,7 +279,11 @@ HOOK_MARKER='# Installed by anon-git --install-hook'
 # --install-hook: installs a post-commit hook in the current repository's
 # .git/hooks/ that re-anonymizes HEAD (the commit that was just made) after
 # every `git commit`, using --current-branch so it rewrites in place instead
-# of creating a new branch on every commit.
+# of creating a new branch on every commit. Also passes --no-backup: a
+# per-commit backup branch would otherwise accumulate one extra branch per
+# commit forever (this fires on *every* commit, unlike a manual run); `git
+# reflog`/`git reset` still recover the pre-hook state if something goes
+# wrong, per the README.
 install_hook() {
     local git_dir hooks_dir hook_file src
 
@@ -293,10 +308,12 @@ install_hook() {
 $HOOK_MARKER
 #
 # Anonymizes the just-created commit (HEAD) after every \`git commit\`.
-# Regenerate with: $src --install-hook
+# --no-backup: this runs on every commit, so a per-commit backup branch
+# would accumulate forever; use \`git reflog\`/\`git reset\` to recover if
+# needed. Regenerate with: $src --install-hook
 
 set -e
-"$src" --no-confirm --current-branch HEAD
+"$src" --no-confirm --no-backup --current-branch HEAD
 EOF
     chmod +x "$hook_file"
     printf 'Installed post-commit hook: %s\n' "$hook_file"
@@ -316,6 +333,7 @@ handle_early_options() {
     for ((i = 0; i < ${#args[@]}; i++)); do
         case "${args[i]}" in
         -h | --help) show_help ;;
+        -v | --version) show_version ;;
         --_list-flags) list_flags ;;
         --print-completion) print_completion "${args[i + 1]:-}" ;;
         --install) install_user ;;
@@ -606,8 +624,12 @@ backup_branch() {
         exit 1
     fi
     branch_label="${current_branch:-detached-$(git rev-parse --short HEAD)}"
-    # Colon-free timestamp: git ref names may not contain ":" (see git-check-ref-format).
-    timestamp=$(date +%Y%m%d_%H%M%S_%N)
+    # Colon-free timestamp: git ref names may not contain ":" (see
+    # git-check-ref-format). Suffixed with PID + $RANDOM rather than
+    # sub-second precision (e.g. GNU date's %N) for uniqueness across
+    # back-to-back runs within the same second: %N is a GNU coreutils
+    # extension stock BSD/macOS date doesn't support, so this stays portable.
+    timestamp="$(date +%Y%m%d_%H%M%S)_$$_${RANDOM}"
 
     if [[ "$ANON_GIT_DRYRUN" != '1' ]]; then
         if [[ "$ANON_GIT_CURRENTBRANCH" != '1' ]]; then
@@ -874,8 +896,8 @@ main() {
     validate_final_options
     require_target
     verbose_info
-    backup_branch
     confirm
+    backup_branch
     clean_cache
     setup_dryrun
     export_rewrite_env

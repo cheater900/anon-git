@@ -1,5 +1,7 @@
 # ANON GIT
 
+[![CI](https://github.com/radioactively/anon-git/actions/workflows/ci.yml/badge.svg)](https://github.com/radioactively/anon-git/actions/workflows/ci.yml)
+
 AnonGit is a script to **anonymize** git commit authorship and timestamp.
 
 Useful when you want to contribute to privacy-sensitive, anti-surveillance, or censorship-resistant open-source projects **without leaking information** from your commit **timestamps** and **email**.
@@ -103,6 +105,7 @@ required — pass `HEAD` explicitly to anonymize the last commit.
 
 ```
   -h, --help                      Show this help message and exit
+  -v, --version                   Show version and exit
   --date        ISO Date          Date to use (example: "2025-03-10 13:37:00 +0000")
   --name        "Full name"       Name to use for author & committer
   --email       "Email address"   Email to use for author & committer
@@ -210,7 +213,7 @@ To automatically anonymize every new commit in the *current* repository, install
 ./anon-git.sh --install-hook
 ```
 
-This writes `.git/hooks/post-commit`, which anonymizes only the commit you just made (`HEAD`), using `--current-branch` so it rewrites in place rather than creating a new branch after every commit. Re-running `--install-hook` safely refreshes a hook it created, but refuses to overwrite a pre-existing hook it didn't write (remove or back that one up first). See [Using anon-git as a post-commit hook](#using-anon-git-as-a-post-commit-hook) below to customize the flags it runs with instead.
+This writes `.git/hooks/post-commit`, which anonymizes only the commit you just made (`HEAD`), using `--current-branch --no-backup` so it rewrites in place rather than creating a new branch (or a backup branch) after every commit — the hook fires on *every* commit, so a per-commit backup branch would otherwise accumulate forever; `git reflog`/`git reset` still recover the pre-hook state if something goes wrong. Re-running `--install-hook` safely refreshes a hook it created, but refuses to overwrite a pre-existing hook it didn't write (remove or back that one up first). See [Using anon-git as a post-commit hook](#using-anon-git-as-a-post-commit-hook) below to customize the flags it runs with instead.
 
 ### Shell completion
 
@@ -314,3 +317,9 @@ Spins up a disposable git repository in `/tmp`, runs the script against it throu
 `tests/test-manually.sh` instead just creates a disposable repo with sample commits and drops you into it, for manual/interactive poking at the script.
 
 `--install` and `--install-hook` are covered (`--install` with `$HOME` pointed at a disposable directory, so it never touches your real `~/.local/bin` or `~/.bin`; `--install-hook` against disposable repos separate from the suite's own, so an installed hook can't fire during later tests). `--install-system` is not: it needs `sudo` and a real `/usr/bin`, and the suite intentionally doesn't run as root or mock it — verify it manually.
+
+A [`justfile`](justfile) wraps the day-to-day commands (`just test`, `just lint`, `just format`, `just test-completion`, `just all`); see [CONTRIBUTING.md](CONTRIBUTING.md) for the full development workflow.
+
+## License
+
+[GPL-3.0](LICENSE).

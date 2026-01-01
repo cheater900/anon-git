@@ -28,3 +28,7 @@ lint:
 # Format the scripts in place with shfmt
 format:
     shfmt -w -ln bash -i 4 {{SCRIPT}} {{TEST_SCRIPT}} {{TEST_COMPLETION_SCRIPT}}
+
+# Check formatting without writing (used by CI; `just format` to fix)
+format-check:
+    shfmt -d -ln bash -i 4 {{SCRIPT}} {{TEST_SCRIPT}} {{TEST_COMPLETION_SCRIPT}}

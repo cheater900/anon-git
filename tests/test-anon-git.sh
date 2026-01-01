@@ -870,6 +870,10 @@ test_flag_install_hook_creates_hook() {
         printf 'Error: hook file does not invoke the script by its absolute path\n'
         errors=$((errors + 1))
     fi
+    if ! grep -q -- '--no-backup' "$hook_file"; then
+        printf 'Error: hook file does not pass --no-backup (would accumulate a backup branch per commit)\n'
+        errors=$((errors + 1))
+    fi
     if ! grep -qi 'installed post-commit hook' <<<"$output"; then
         printf 'Error: expected confirmation message not found in output\n'
         errors=$((errors + 1))
@@ -970,23 +974,31 @@ test_flag_install_hook_idempotent() {
 
 test_flag_install_hook_anonymizes_next_commit() {
     # The hook must fire after `git commit` and rewrite only the just-made
-    # commit (HEAD); earlier history must be left untouched.
+    # commit (HEAD); earlier history must be left untouched. Also a
+    # regression test for the hook accumulating a backup branch per commit
+    # (fixed by passing --no-backup): makes two hooked commits and checks
+    # the branch count never grows, since the hook fires on every commit.
     local repo_dir prior_hash prior_commit new_commit errors=0
+    local branch_count_before branch_count_after
 
     repo_dir=$(new_hook_test_repo)
     prior_hash=$(cd "$repo_dir" && git rev-parse HEAD)
     prior_commit=$(cd "$repo_dir" && git show --pretty=fuller --no-patch --date=iso "$prior_hash")
 
     (cd "$repo_dir" && "./${SCRIPT_NAME}" --install-hook >/dev/null 2>&1)
+    branch_count_before=$(cd "$repo_dir" && git branch --list | wc -l)
 
-    (
-        cd "$repo_dir" || exit 1
-        echo "This is file 2" >file_2.txt
-        git add file_2.txt >/dev/null
-        git commit -m "Add file_2.txt" >/dev/null 2>&1
-    )
+    for i in 2 3; do
+        (
+            cd "$repo_dir" || exit 1
+            echo "This is file ${i}" >"file_${i}.txt"
+            git add "file_${i}.txt" >/dev/null
+            git commit -m "Add file_${i}.txt" >/dev/null 2>&1
+        )
+    done
 
     new_commit=$(cd "$repo_dir" && git show --pretty=fuller --no-patch --date=iso HEAD)
+    branch_count_after=$(cd "$repo_dir" && git branch --list | wc -l)
 
     if ! grep -q "^Author:\s\+${DEFAULT_NAME} <${DEFAULT_EMAIL}>" <<<"$new_commit"; then
         printf 'Error: new commit author was not anonymized by the hook\n'
@@ -998,6 +1010,11 @@ test_flag_install_hook_anonymizes_next_commit() {
     fi
     if [[ "$(cd "$repo_dir" && git show --pretty=fuller --no-patch --date=iso "$prior_hash" 2>/dev/null)" != "$prior_commit" ]]; then
         printf 'Error: the hook modified the earlier commit, which should have been left untouched\n'
+        errors=$((errors + 1))
+    fi
+    if [[ "$branch_count_after" != "$branch_count_before" ]]; then
+        printf 'Error: hooked commits accumulated backup branches (%s -> %s branches for 2 commits)\n' \
+            "$branch_count_before" "$branch_count_after"
         errors=$((errors + 1))
     fi
 
@@ -1022,6 +1039,49 @@ test_show_help() {
     fi
 
     record_result "$errors" 'show --help'
+}
+
+test_show_version() {
+    # --version/-v are handled in handle_early_options, before any git-repo
+    # safety checks, so they must work even outside a repository (same as
+    # --help) and must print a non-empty version string.
+    local no_repo_dir output exit_status errors=0
+
+    output=$(./${SCRIPT_NAME} --version 2>&1)
+    exit_status=$?
+    if [[ "$exit_status" -ne 0 ]]; then
+        printf 'Error: --version exited with status %s\n' "$exit_status"
+        errors=$((errors + 1))
+    fi
+    if ! grep -qE '^anon-git [0-9]+\.[0-9]+\.[0-9]+$' <<<"$output"; then
+        printf 'Error: --version output did not match "anon-git X.Y.Z" (got "%s")\n' "$output"
+        errors=$((errors + 1))
+    fi
+
+    output=$(./${SCRIPT_NAME} -v 2>&1)
+    exit_status=$?
+    if [[ "$exit_status" -ne 0 ]]; then
+        printf 'Error: -v exited with status %s\n' "$exit_status"
+        errors=$((errors + 1))
+    fi
+    if ! grep -qE '^anon-git [0-9]+\.[0-9]+\.[0-9]+$' <<<"$output"; then
+        printf 'Error: -v output did not match "anon-git X.Y.Z" (got "%s")\n' "$output"
+        errors=$((errors + 1))
+    fi
+
+    # Must not require a git repository (mirrors test_match_outside_git_repo).
+    no_repo_dir=$(mktemp -d /tmp/anon_git_test_version_norepo.XXXXXX)
+    cp "$SCRIPT" "$no_repo_dir/"
+    chmod +x "${no_repo_dir}/${SCRIPT_NAME}"
+    output=$(cd "$no_repo_dir" && "./${SCRIPT_NAME}" --version 2>&1)
+    exit_status=$?
+    if [[ "$exit_status" -ne 0 ]]; then
+        printf 'Error: --version outside a git repository exited with status %s\n' "$exit_status"
+        errors=$((errors + 1))
+    fi
+    rm -rf "$no_repo_dir"
+
+    record_result "$errors" 'show --version / -v'
 }
 
 test_show_help_inside_dirty_repo() {
@@ -1226,6 +1286,38 @@ test_flag_no_confirm() {
     fi
 
     record_result "$errors" 'flag --no-confirm skips confirmation prompt'
+}
+
+test_noconfirm_executes_first() {
+    # Regression test: confirm() must run before backup_branch() in main().
+    # backup_branch() creates/switches to a new branch pointing at the same
+    # commit, so checking only `git rev-parse HEAD` (as test_flag_no_confirm
+    # does) can't tell a decline-with-no-branch-created apart from a
+    # decline-after-the-branch-was-already-created-and-switched-to — both
+    # leave HEAD's commit hash unchanged. Assert on the checked-out branch
+    # name instead, which the earlier ordering bug did change.
+    local branch_before branch_after branch_count_before branch_count_after errors=0
+
+    branch_before=$(git branch --show-current)
+    branch_count_before=$(git branch --list | wc -l)
+
+    echo 'n' | ./${SCRIPT_NAME} HEAD >/dev/null 2>&1
+
+    branch_after=$(git branch --show-current)
+    branch_count_after=$(git branch --list | wc -l)
+
+    if [[ "$branch_after" != "$branch_before" ]]; then
+        printf 'Error: declining the confirmation prompt left a different branch checked out (%s -> %s)\n' \
+            "$branch_before" "$branch_after"
+        errors=$((errors + 1))
+    fi
+    if [[ "$branch_count_after" != "$branch_count_before" ]]; then
+        printf 'Error: declining the confirmation prompt still created a branch (%s -> %s branches)\n' \
+            "$branch_count_before" "$branch_count_after"
+        errors=$((errors + 1))
+    fi
+
+    record_result "$errors" 'declining the confirmation prompt creates no branch'
 }
 
 test_flag_unknown() {
@@ -1568,6 +1660,7 @@ main() {
     test_flag_install_hook_idempotent
     test_flag_install_hook_anonymizes_next_commit
     test_show_help
+    test_show_version
     test_show_help_inside_dirty_repo
     test_flag_keep_partial --keep-year
     test_flag_keep_partial --keep-month
@@ -1578,6 +1671,7 @@ main() {
     test_flag_new_branch
     test_flag_no_backup
     test_flag_no_confirm
+    test_noconfirm_executes_first
     test_flag_unknown
     test_match_default_shows_help
     test_match_detached_head_current_branch

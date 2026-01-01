@@ -14,6 +14,7 @@ end
 
 complete -c anon-git.sh -f
 complete -c anon-git.sh -s h -l help -d 'Show help message and exit'
+complete -c anon-git.sh -s v -l version -d 'Show version and exit'
 complete -c anon-git.sh -l date -x -d 'ISO date to use'
 complete -c anon-git.sh -l name -x -d 'Full name to use for author & committer'
 complete -c anon-git.sh -l email -x -d 'Email address to use for author & committer'

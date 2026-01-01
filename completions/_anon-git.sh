@@ -31,6 +31,7 @@ _anon_git_commits() {
 _anon_git() {
     _arguments -s \
         '(-h --help)'{-h,--help}'[Show help message and exit]' \
+        '(-v --version)'{-v,--version}'[Show version and exit]' \
         '--date=[ISO date to use]:date:' \
         '--name=[Full name to use for author & committer]:name:' \
         '--email=[Email address to use for author & committer]:email:' \
