@@ -205,6 +205,39 @@ record_result() {
 }
 
 # ──────────────────────────────────────────────────────────────────────
+# LINT / STATIC CHECKS
+#
+# Run first, before init_repo, since they don't need a repo at all — just
+# the script file already copied into $TMP_DIR at the top of this file.
+
+test_lint_syntax() {
+  local output exit_status errors=0
+
+  output=$(bash -n "./${SCRIPT_NAME}" 2>&1)
+  exit_status=$?
+
+  [[ "$exit_status" -eq 0 ]] || { printf 'Error: bash -n reported syntax errors:\n%s\n' "$output"; errors=$(( errors + 1 )); }
+
+  record_result "$errors" 'bash -n syntax check'
+}
+
+test_lint_shellcheck() {
+  local output exit_status errors=0
+
+  if ! command -v shellcheck >/dev/null 2>&1; then
+    printf 'shellcheck not installed, skipping lint test.\n\n'
+    return
+  fi
+
+  output=$(shellcheck "./${SCRIPT_NAME}" 2>&1)
+  exit_status=$?
+
+  [[ "$exit_status" -eq 0 ]] || { printf 'Error: shellcheck reported issues:\n%s\n' "$output"; errors=$(( errors + 1 )); }
+
+  record_result "$errors" 'shellcheck'
+}
+
+# ──────────────────────────────────────────────────────────────────────
 # INTEGRATION TESTS
 
 test_multiple_commits() {
@@ -514,6 +547,22 @@ test_flag_keep_partial() {
   record_result "$errors" "$flag"
 }
 
+test_flag_missing_value() {
+  # @param $1  flag under test: --date | --name | --email
+  local flag="$1" before after output exit_status errors=0
+
+  before=$(git rev-parse HEAD)
+  output=$(./${SCRIPT_NAME} --no-confirm --no-backup --current-branch "$flag" 2>&1)
+  exit_status=$?
+  after=$(git rev-parse HEAD)
+
+  [[ "$exit_status" -ne 0 ]] || { printf 'Error: %s with no value did not fail as expected\n' "$flag"; errors=$(( errors + 1 )); }
+  [[ "$before" == "$after" ]] || { printf 'Error: repository was modified despite %s missing its value\n' "$flag"; errors=$(( errors + 1 )); }
+  grep -qi 'requires a value' <<<"$output" || { printf 'Error: expected "requires a value" message not found\n'; errors=$(( errors + 1 )); }
+
+  record_result "$errors" "missing value: $flag"
+}
+
 test_flag_new_branch() {
   # Exercises the default (no --current-branch) code path: a fresh
   # "<branch>_anonymized_<timestamp>" branch must be created and the
@@ -584,7 +633,167 @@ test_flag_no_confirm() {
   record_result "$errors" 'confirmation prompt (no --no-confirm)'
 }
 
+test_flag_unknown() {
+  local before after output exit_status errors=0
+
+  before=$(git rev-parse HEAD)
+  output=$(./${SCRIPT_NAME} --no-confirm --no-backup --bogus-flag HEAD 2>&1)
+  exit_status=$?
+  after=$(git rev-parse HEAD)
+
+  [[ "$exit_status" -ne 0 ]] || { printf 'Error: unknown flag did not cause failure\n'; errors=$(( errors + 1 )); }
+  [[ "$before" == "$after" ]] || { printf 'Error: repository was modified despite unknown flag\n'; errors=$(( errors + 1 )); }
+  grep -qi 'unknown option' <<<"$output" || { printf 'Error: expected "Unknown option" message not found\n'; errors=$(( errors + 1 )); }
+
+  record_result "$errors" 'unknown flag'
+}
+
+# ──────────────────────────────────────────────────────────────────────
+# REGRESSION / MATCH TESTS (alphabetical order)
+#
+# Each test here pins down one specific behavior (usually security- or
+# robustness-relevant) so a future change can't silently reintroduce it.
+
+test_match_detached_head_current_branch() {
+  local original_branch before_head after_head output exit_status errors=0
+
+  original_branch=$(git branch --show-current)
+  before_head=$(git rev-parse HEAD)
+
+  git checkout --detach HEAD >/dev/null 2>&1
+
+  output=$(./${SCRIPT_NAME} --no-confirm --no-backup --current-branch HEAD 2>&1)
+  exit_status=$?
+  after_head=$(git rev-parse HEAD)
+
+  [[ "$exit_status" -ne 0 ]] || { printf 'Error: --current-branch on a detached HEAD did not fail\n'; errors=$(( errors + 1 )); }
+  [[ "$before_head" == "$after_head" ]] || { printf 'Error: HEAD changed despite detached-HEAD guard\n'; errors=$(( errors + 1 )); }
+  grep -qi 'detached' <<<"$output" || { printf 'Error: expected "detached" message not found\n'; errors=$(( errors + 1 )); }
+
+  git checkout "$original_branch" >/dev/null 2>&1
+
+  record_result "$errors" 'detached HEAD + --current-branch is rejected'
+}
+
+test_match_malformed_date() {
+  local before after output exit_status errors=0
+
+  before=$(git rev-parse HEAD)
+  output=$(./${SCRIPT_NAME} --no-confirm --no-backup --current-branch --date 'not-a-real-date' HEAD 2>&1)
+  exit_status=$?
+  after=$(git rev-parse HEAD)
+
+  [[ "$exit_status" -ne 0 ]] || { printf 'Error: malformed --date value did not cause failure\n'; errors=$(( errors + 1 )); }
+  [[ "$before" == "$after" ]] || { printf 'Error: repository was modified despite malformed --date value\n'; errors=$(( errors + 1 )); }
+  grep -qi 'error' <<<"$output" || { printf 'Error: expected an error message for malformed --date\n'; errors=$(( errors + 1 )); }
+
+  record_result "$errors" 'malformed --date value is rejected safely'
+}
+
+test_match_merge_commit() {
+  local original_branch feature_branch exit_status mismatches errors=0
+
+  original_branch=$(git branch --show-current)
+  feature_branch="merge_test_$$"
+
+  git switch --create "$feature_branch" >/dev/null 2>&1
+  echo 'feature work' >feature_file.txt
+  git add feature_file.txt >/dev/null
+  git commit -m 'Add feature file' >/dev/null
+
+  git switch "$original_branch" >/dev/null 2>&1
+  git merge --no-ff -m 'Merge feature branch' "$feature_branch" >/dev/null 2>&1
+
+  ./${SCRIPT_NAME} --no-confirm --no-backup --current-branch --entire-history --name 'Merge Tester' >/dev/null 2>&1
+  exit_status=$?
+
+  mismatches=$(git log --format='%an' | grep --invert-match --count '^Merge Tester$')
+
+  [[ "$exit_status" -eq 0 ]] || { printf 'Error: --entire-history on history with a merge commit exited with status %s\n' "$exit_status"; errors=$(( errors + 1 )); }
+  [[ "$mismatches" -eq 0 ]] || { printf 'Error: --entire-history left %s commit(s) unrewritten around the merge commit\n' "$mismatches"; errors=$(( errors + 1 )); }
+
+  git branch -D "$feature_branch" >/dev/null 2>&1
+
+  record_result "$errors" '--entire-history handles merge commits'
+}
+
+test_match_outside_git_repo() {
+  local no_repo_dir output exit_status errors=0
+
+  no_repo_dir=$(mktemp -d /tmp/anon_git_test_norepo.XXXXXX)
+  cp "$SCRIPT" "$no_repo_dir/"
+  chmod +x "${no_repo_dir}/${SCRIPT_NAME}"
+
+  output=$(cd "$no_repo_dir" && "./${SCRIPT_NAME}" --no-confirm 2>&1)
+  exit_status=$?
+
+  [[ "$exit_status" -ne 0 ]] || { printf 'Error: running outside a git repository did not fail\n'; errors=$(( errors + 1 )); }
+  grep -qi 'git repository' <<<"$output" || { printf 'Error: expected "git repository" message not found\n'; errors=$(( errors + 1 )); }
+
+  rm -rf "$no_repo_dir"
+
+  record_result "$errors" 'running outside a git repository fails cleanly'
+}
+
+test_match_rerun_cache() {
+  # git-filter-repo caches metadata under .git/filter-repo/ after a run; a
+  # second run against the same repo is a known trigger for an upstream
+  # assertion bug unless that cache is cleared first (see anon-git.sh's
+  # "CLEAN CACHE" section). Regression test for that workaround.
+  local first_exit second_exit new_author errors=0
+
+  ./${SCRIPT_NAME} --no-confirm --no-backup --current-branch --name 'First Run' HEAD >/dev/null 2>&1
+  first_exit=$?
+  ./${SCRIPT_NAME} --no-confirm --no-backup --current-branch --name 'Second Run' HEAD >/dev/null 2>&1
+  second_exit=$?
+  new_author=$(git show -s --format='%an' HEAD)
+
+  [[ "$first_exit" -eq 0 ]] || { printf 'Error: first run exited with status %s\n' "$first_exit"; errors=$(( errors + 1 )); }
+  [[ "$second_exit" -eq 0 ]] || { printf 'Error: second (back-to-back) run exited with status %s\n' "$second_exit"; errors=$(( errors + 1 )); }
+  [[ "$new_author" == 'Second Run' ]] || { printf 'Error: second run did not take effect (got author "%s")\n' "$new_author"; errors=$(( errors + 1 )); }
+
+  record_result "$errors" 'consecutive runs do not hit the filter-repo cache bug'
+}
+
+test_match_shell_injection_email() {
+  local marker payload commit_email exit_status errors=0
+
+  marker="${TMP_DIR}/injection_marker_email"
+  rm -f "$marker"
+  payload="evil'\"; touch ${marker}; \`touch ${marker}\`; \$(touch ${marker}) #@example.com"
+
+  ./${SCRIPT_NAME} --no-confirm --no-backup --current-branch --email "$payload" HEAD >/dev/null 2>&1
+  exit_status=$?
+  commit_email=$(git show -s --format='%ae' HEAD)
+
+  [[ "$exit_status" -eq 0 ]] || { printf 'Error: run with shell-metacharacter --email exited with status %s\n' "$exit_status"; errors=$(( errors + 1 )); }
+  [[ "$commit_email" == "$payload" ]] || { printf 'Error: email was not stored literally (got "%s")\n' "$commit_email"; errors=$(( errors + 1 )); }
+  [[ ! -e "$marker" ]] || { printf 'Error: shell metacharacters in --email were executed (marker file created)\n'; errors=$(( errors + 1 )); }
+
+  record_result "$errors" 'shell metacharacters in --email are not executed'
+}
+
+test_match_shell_injection_name() {
+  local marker payload commit_name exit_status errors=0
+
+  marker="${TMP_DIR}/injection_marker_name"
+  rm -f "$marker"
+  payload="Evil'\"; touch ${marker}; \`touch ${marker}\`; \$(touch ${marker}) #"
+
+  ./${SCRIPT_NAME} --no-confirm --no-backup --current-branch --name "$payload" HEAD >/dev/null 2>&1
+  exit_status=$?
+  commit_name=$(git show -s --format='%an' HEAD)
+
+  [[ "$exit_status" -eq 0 ]] || { printf 'Error: run with shell-metacharacter --name exited with status %s\n' "$exit_status"; errors=$(( errors + 1 )); }
+  [[ "$commit_name" == "$payload" ]] || { printf 'Error: author name was not stored literally (got "%s")\n' "$commit_name"; errors=$(( errors + 1 )); }
+  [[ ! -e "$marker" ]] || { printf 'Error: shell metacharacters in --name were executed (marker file created)\n'; errors=$(( errors + 1 )); }
+
+  record_result "$errors" 'shell metacharacters in --name are not executed'
+}
+
 main() {
+  test_lint_syntax
+  test_lint_shellcheck
   init_repo
   test_script
   test_script --name 'Grace Hopper'
@@ -624,9 +833,20 @@ main() {
   test_flag_keep_partial --keep-year
   test_flag_keep_partial --keep-month
   test_flag_keep_partial --keep-day
+  test_flag_missing_value --date
+  test_flag_missing_value --name
+  test_flag_missing_value --email
   test_flag_new_branch
   test_flag_no_backup
   test_flag_no_confirm
+  test_flag_unknown
+  test_match_detached_head_current_branch
+  test_match_malformed_date
+  test_match_outside_git_repo
+  test_match_rerun_cache
+  test_match_shell_injection_email
+  test_match_shell_injection_name
+  test_match_merge_commit
   printf 'Summary:\n%s tests passed\n%s tests failed\n%s total errors\n' "$TESTS_PASSED" "$TESTS_FAILED" "$TOTAL_ERRORS"
 }
 
