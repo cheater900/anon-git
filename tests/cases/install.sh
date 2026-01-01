@@ -410,7 +410,7 @@ test_flag_install_hook_requires_git_repo() {
     # pollute the shared suite repo's hooks.
     local no_repo_dir output exit_status errors=0
 
-    no_repo_dir=$(mktemp -d /tmp/anon_git_test_hook_norepo.XXXXXX)
+    no_repo_dir=$(mktemp -d "${TMPDIR:-/tmp}"/anon_git_test_hook_norepo.XXXXXX)
     cp "$SCRIPT" "$no_repo_dir/"
     chmod +x "${no_repo_dir}/${SCRIPT_NAME}"
 
@@ -718,7 +718,7 @@ test_flag_uninstall_hook_removes_hook() {
 test_flag_uninstall_hook_requires_git_repo() {
     local no_repo_dir output exit_status errors=0
 
-    no_repo_dir=$(mktemp -d /tmp/anon_git_test_uninstall_hook_norepo.XXXXXX)
+    no_repo_dir=$(mktemp -d "${TMPDIR:-/tmp}"/anon_git_test_uninstall_hook_norepo.XXXXXX)
     cp "$SCRIPT" "$no_repo_dir/"
     chmod +x "${no_repo_dir}/${SCRIPT_NAME}"
 

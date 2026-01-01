@@ -201,7 +201,7 @@ test_match_merge_commit_ancestor_only() {
 test_match_outside_git_repo() {
     local no_repo_dir output exit_status errors=0
 
-    no_repo_dir=$(mktemp -d /tmp/anon_git_test_norepo.XXXXXX)
+    no_repo_dir=$(mktemp -d "${TMPDIR:-/tmp}"/anon_git_test_norepo.XXXXXX)
     cp "$SCRIPT" "$no_repo_dir/"
     chmod +x "${no_repo_dir}/${SCRIPT_NAME}"
 

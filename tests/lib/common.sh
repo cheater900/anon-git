@@ -7,7 +7,7 @@ SCRIPT_DIR=$(realpath "$(dirname "$0")/..")
 SCRIPT_NAME=anon-git.sh
 SCRIPT=${SCRIPT_DIR}/${SCRIPT_NAME}
 
-TMP_DIR=$(mktemp -d /tmp/anon_git_test.XXXXXX)
+TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}"/anon_git_test.XXXXXX)
 cd "$TMP_DIR" || exit 1
 cp "$SCRIPT" .
 chmod +x "./${SCRIPT_NAME}"

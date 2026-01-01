@@ -8,7 +8,7 @@ set -euo pipefail
 
 SCRIPT_DIR=$(realpath "$(dirname "$0")/..")
 
-TMP_DIR=$(mktemp -d /tmp/anon_git_test.XXXXXX)
+TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}"/anon_git_test.XXXXXX)
 
 cleanup() {
   cd - >/dev/null 2>&1 || true
