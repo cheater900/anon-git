@@ -177,13 +177,7 @@ main() {
     test_match_merge_commit
     test_match_merge_commit_single_target
     test_match_merge_commit_ancestor_only
-    printf -- '----------------------------------------\n'
-    printf 'Summary: %s/%s tests passed (%s errors)\n' "$TESTS_PASSED" "$((TESTS_PASSED + TESTS_FAILED))" "$TOTAL_ERRORS"
-    if [[ "$TESTS_FAILED" -eq 0 ]]; then
-        printf 'Result: PASS\n'
-    else
-        printf 'Result: FAIL (%s test(s) failed)\n' "$TESTS_FAILED"
-    fi
+    print_summary
 }
 
 main

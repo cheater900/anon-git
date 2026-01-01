@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
-# Sourced by test_anon_git.sh — not meant to be run directly.
+# Sourced by test_anon_git.sh and test_anon_git_completion.sh — not meant to
+# be run directly.
 # Shared setup, globals, and helper functions used across cases/.
 
 SCRIPT_DIR=$(realpath "$(dirname "$0")/..")
@@ -231,4 +232,14 @@ sys.exit(os.waitstatus_to_exitcode(os.waitpid(pid, 0)[1]))
 run_without_tty() {
     # New session: no controlling terminal, so /dev/tty can't be opened.
     python3 -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' "$@"
+}
+
+print_summary() {
+    printf -- '----------------------------------------\n'
+    printf 'Summary: %s/%s tests passed (%s errors)\n' "$TESTS_PASSED" "$((TESTS_PASSED + TESTS_FAILED))" "$TOTAL_ERRORS"
+    if [[ "$TESTS_FAILED" -eq 0 ]]; then
+        printf 'Result: PASS\n'
+    else
+        printf 'Result: FAIL (%s test(s) failed)\n' "$TESTS_FAILED"
+    fi
 }

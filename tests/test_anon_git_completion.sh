@@ -4,42 +4,10 @@
 # test_anon_git.sh since they drive real interactive shells via `expect`
 # and depend on tooling (expect, bash/zsh/fish) not every environment has.
 
-SCRIPT_DIR=$(realpath "$(dirname "$0")/..")
-SCRIPT_NAME=anon-git.sh
-SCRIPT=${SCRIPT_DIR}/${SCRIPT_NAME}
+TESTS_DIR=$(cd "$(dirname "$0")" && pwd)
 
-TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}"/anon_git_test_completion.XXXXXX)
-cd "$TMP_DIR" || exit 1
-cp "$SCRIPT" .
-chmod +x "./${SCRIPT_NAME}"
-
-cleanup() {
-    cd - >/dev/null 2>&1 || true
-    rm -rf "$TMP_DIR"
-}
-trap cleanup EXIT
-
-CURRENT_TEST_INDEX=0
-TESTS_PASSED=0
-TESTS_FAILED=0
-TOTAL_ERRORS=0
-
-# ──────────────────────────────────────────────────────────────────────
-
-record_result() {
-    # $1: error count, $2: label for the summary line
-    local errors="$1" label="$2" status
-    CURRENT_TEST_INDEX=$((CURRENT_TEST_INDEX + 1))
-    if [[ "$errors" -eq 0 ]]; then
-        TESTS_PASSED=$((TESTS_PASSED + 1))
-        status='✅'
-    else
-        TESTS_FAILED=$((TESTS_FAILED + 1))
-        status='❌'
-    fi
-    TOTAL_ERRORS=$((TOTAL_ERRORS + errors))
-    printf '%s Test %02d » test %s\n' "$status" "$CURRENT_TEST_INDEX" "$label"
-}
+# shellcheck source=tests/lib/common.sh
+source "${TESTS_DIR}/lib/common.sh"
 
 test_completion_flags() {
     # Zsh and fish hand-maintain flag names (for per-flag descriptions); this
@@ -175,21 +143,10 @@ source ${SCRIPT_DIR}/completions/_anon-git.sh" "$ref_marker"; then
 }
 
 main() {
-    # An empty commit is enough: ref completion just needs a commit to tag.
-    git init >/dev/null
-    git config --local user.name "Jordan Blake"
-    git config --local user.email "jordan.blake@example.com"
-    git commit --allow-empty -m 'Initial commit' >/dev/null
-
+    init_repo
     test_completion_flags
     test_completion
-    printf -- '----------------------------------------\n'
-    printf 'Summary: %s/%s tests passed (%s errors)\n' "$TESTS_PASSED" "$((TESTS_PASSED + TESTS_FAILED))" "$TOTAL_ERRORS"
-    if [[ "$TESTS_FAILED" -eq 0 ]]; then
-        printf 'Result: PASS\n'
-    else
-        printf 'Result: FAIL (%s test(s) failed)\n' "$TESTS_FAILED"
-    fi
+    print_summary
 }
 
 main
