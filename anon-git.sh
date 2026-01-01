@@ -687,7 +687,7 @@ flag_option() {
 # Internal: parses "$@" into the *_ARG globals, later merged with ANON_GIT_*
 # envvars and DEFAULT_* fallbacks. Empty string means "not provided via flag".
 parse_args() {
-    local opt
+    local opt ref
 
     for opt in DATE NAME EMAIL "${BOOLS[@]}" NOCONFIRM NOBACKUP VERBOSE COMMIT; do
         printf -v "${opt}_ARG" '%s' ''
@@ -1044,7 +1044,7 @@ clean_cache() {
 # --dry-run preview to (shared via ANON_GIT_DRYRUN_FILE). Removed by the
 # EXIT trap (cleanup_on_exit).
 setup_dryrun() {
-    if [[ "${ANON_GIT_DRYRUN}" -eq 1 ]]; then
+    if [[ "$ANON_GIT_DRYRUN" == '1' ]]; then
         dryrun_file=$(mktemp)
     fi
 }
@@ -1355,9 +1355,6 @@ elif striptimezone:
     committer_date = b'%d +0000' % (int(committer_dt.timestamp()),)
 
 if dryrun:
-    f = open(dryrun_file, 'a', encoding='utf-8')
-    f.write('Commit:')
-
     # Metadata is raw bytes with no guaranteed encoding.
     an = commit.author_name.decode(errors='replace')
     ae = commit.author_email.decode(errors='replace')
@@ -1373,19 +1370,20 @@ if dryrun:
     new_ce = committer_email.decode(errors='replace')
     new_cd = parse_git_date(committer_date).isoformat()
 
-    id = commit.original_id.decode()
+    commit_id = commit.original_id.decode()
     msg = commit.message.decode(errors='replace')
     sep = '\n' + '-' * 80 + '\n'
 
-    f.write('%s\n' % id)
-    f.write('Author:\t\t%s <%s> -> %s <%s> \n' % (an, ae, new_an, new_ae))
-    f.write('Committer:\t%s <%s> -> %s <%s> \n' % (cn, ce, new_cn, new_ce))
-    f.write('AuthorDate:\t%s -> %s\n' % (ad, new_ad))
-    f.write('CommitterDate:\t%s -> %s\n' % (cd, new_cd))
-    f.write('\n')
-    f.write(msg)
-    f.write(sep)
-    f.close()
+    with open(dryrun_file, 'a', encoding='utf-8') as f:
+        f.write('Commit:')
+        f.write('%s\n' % commit_id)
+        f.write('Author:\t\t%s <%s> -> %s <%s> \n' % (an, ae, new_an, new_ae))
+        f.write('Committer:\t%s <%s> -> %s <%s> \n' % (cn, ce, new_cn, new_ce))
+        f.write('AuthorDate:\t%s -> %s\n' % (ad, new_ad))
+        f.write('CommitterDate:\t%s -> %s\n' % (cd, new_cd))
+        f.write('\n')
+        f.write(msg)
+        f.write(sep)
     return
 
 commit.author_name = author_name
