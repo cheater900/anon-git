@@ -4,6 +4,7 @@ Derived from git history, newest first.
 
 ## 2026-11-02
 
+- refactor(py): check detached HEAD before prompting, name preview and tty helpers
 - refactor(py): split random-date bucketing into named steps, gather date helpers
 - refactor(py): group constants and types at top, derive flag list, share git config helper
 - fix(py): report Ctrl-C and bare filter-repo exit codes without traceback or stray number

@@ -15,6 +15,7 @@ import sys
 import tempfile
 import termios
 import time
+import tty
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -798,6 +799,15 @@ def validate_identity(opts):
             fail(f'Error: {field} must not contain "<", ">" or a newline (got "{value}")')
 
 
+# --current-branch rewrites the checked-out branch, so there must be one.
+def require_branch_to_overwrite(opts):
+    if opts.currentbranch and not git("branch", "--show-current"):
+        fail(
+            "Error: HEAD is detached, so there is no current branch to overwrite. "
+            "Drop --current-branch or check out a branch first."
+        )
+
+
 # Only HEAD's history is rewritten (--refs HEAD), so any other target would
 # silently stay untouched.
 def require_reachable(opts):
@@ -854,19 +864,19 @@ def confirm(opts):
     if opts.noconfirm or opts.dryrun:
         return
     try:
-        tty = open("/dev/tty", "r+b", buffering=0)  # noqa: SIM115 -- closed by the `with` below
+        terminal = open("/dev/tty", "r+b", buffering=0)  # noqa: SIM115 -- closed by `with` below
     except OSError:
         fail("Error: no terminal to ask for confirmation; pass --no-confirm.")
-    with tty:
-        tty.write(b"Continue? (y/N) ")
-        saved = termios.tcgetattr(tty)
-        raw = list(saved)
-        raw[3] &= ~termios.ICANON
-        termios.tcsetattr(tty, termios.TCSANOW, raw)
+    with terminal:
+        terminal.write(b"Continue? (y/N) ")
+        saved = termios.tcgetattr(terminal)
+        single_key = list(saved)
+        single_key[tty.LFLAG] &= ~termios.ICANON
+        termios.tcsetattr(terminal, termios.TCSANOW, single_key)
         try:
-            reply = tty.read(1)
+            reply = terminal.read(1)
         finally:
-            termios.tcsetattr(tty, termios.TCSANOW, saved)
+            termios.tcsetattr(terminal, termios.TCSANOW, saved)
     print()
     if reply not in (b"y", b"Y"):
         fail("Aborted.")
@@ -875,14 +885,9 @@ def confirm(opts):
 # Creates a new branch (default) or a backup branch (--current-branch, unless
 # --no-backup) so pre-rewrite history stays reachable. No-op under --dry-run.
 def backup_branch(opts):
-    current_branch = git("branch", "--show-current")
-    if not current_branch and opts.currentbranch:
-        fail(
-            "Error: HEAD is detached, so there is no current branch to overwrite. "
-            "Drop --current-branch or check out a branch first."
-        )
     if opts.dryrun:
         return
+    current_branch = git("branch", "--show-current")
     branch_label = current_branch or f"detached-{git('rev-parse', '--short', 'HEAD')}"
     # Colon-free (git ref names disallow ":"); PID + random suffix for
     # uniqueness within the same second.
@@ -1040,6 +1045,14 @@ def kept_calendar_unit(opts):
     return None
 
 
+# {hash: epoch} for --random-*, or None when dates aren't randomized.
+def random_dates_for(opts):
+    kept_unit = None if opts.keepdate else kept_calendar_unit(opts)
+    if kept_unit is None:
+        return None
+    return compute_random_dates(read_history(), set(opts.commits), kept_unit, opts.entirehistory)
+
+
 # ──────────────────────────────────────────────────────────────────────
 # REWRITE
 
@@ -1070,24 +1083,33 @@ def target_date_bytes(opts, commit, random_dates):
     return b"%d %s%02d%02d" % (int(dt.timestamp()), sign.encode(), hours, minutes)
 
 
+# Commit metadata is raw bytes with no guaranteed encoding.
+def decode_metadata(raw):
+    return raw.decode(errors="replace")
+
+
+def git_date_iso(git_date):
+    return parse_git_date(git_date).isoformat()
+
+
+def ident(name, email):
+    return f"{decode_metadata(name)} <{decode_metadata(email)}>"
+
+
 def preview_entry(commit, new):
-    def text(raw):
-        # Metadata is raw bytes with no guaranteed encoding.
-        return raw.decode(errors="replace")
-
-    def iso(raw):
-        return parse_git_date(raw).isoformat()
-
+    author = ident(commit.author_name, commit.author_email)
+    new_author = ident(new["author_name"], new["author_email"])
+    committer = ident(commit.committer_name, commit.committer_email)
+    new_committer = ident(new["committer_name"], new["committer_email"])
     return (
         f"Commit:{commit.original_id.decode()}\n"
-        f"Author:\t\t{text(commit.author_name)} <{text(commit.author_email)}> -> "
-        f"{text(new['author_name'])} <{text(new['author_email'])}> \n"
-        f"Committer:\t{text(commit.committer_name)} <{text(commit.committer_email)}> -> "
-        f"{text(new['committer_name'])} <{text(new['committer_email'])}> \n"
-        f"AuthorDate:\t{iso(commit.author_date)} -> {iso(new['author_date'])}\n"
-        f"CommitterDate:\t{iso(commit.committer_date)} -> {iso(new['committer_date'])}\n"
+        f"Author:\t\t{author} -> {new_author} \n"
+        f"Committer:\t{committer} -> {new_committer} \n"
+        f"AuthorDate:\t{git_date_iso(commit.author_date)} -> {git_date_iso(new['author_date'])}\n"
+        f"CommitterDate:\t{git_date_iso(commit.committer_date)} -> "
+        f"{git_date_iso(new['committer_date'])}\n"
         "\n"
-        f"{text(commit.message)}"
+        f"{decode_metadata(commit.message)}"
         f"\n{PREVIEW_SEPARATOR}\n"
     )
 
@@ -1193,18 +1215,13 @@ def run(argv):
     validate_date(opts)
     validate_identity(opts)
     require_reachable(opts)
+    require_branch_to_overwrite(opts)
     verbose_info(opts)
     confirm(opts)
     backup_branch(opts)
     clean_cache()
-    kept_unit = None if opts.keepdate else kept_calendar_unit(opts)
-    random_dates = None
-    if kept_unit:
-        random_dates = compute_random_dates(
-            read_history(), set(opts.commits), kept_unit, opts.entirehistory
-        )
     preview = []
-    run_filter_repo(opts, make_commit_callback(opts, random_dates, preview))
+    run_filter_repo(opts, make_commit_callback(opts, random_dates_for(opts), preview))
     print_result(opts, preview)
 
 

@@ -42,6 +42,22 @@ def test_rejects_detached_head_with_current_branch(repo, head_before):
     assert head() == head_before
 
 
+def test_detached_head_check_runs_before_confirmation(repo, head_before):
+    # No terminal and no --no-confirm: the detached-HEAD error must win over
+    # the prompt, so nothing waits for a "y" that can't be acted on.
+    git("checkout", "-q", "--detach", "HEAD")
+    result = subprocess.run(
+        [sys.executable, "-m", "anon_git", "--current-branch", "HEAD"],
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        start_new_session=True,
+    )
+    assert result.returncode == 1
+    assert "HEAD is detached" in result.stderr
+    assert head() == head_before
+
+
 def test_detached_head_new_branch_named_after_commit(repo):
     git("checkout", "-q", "--detach", "HEAD")
     short = git("rev-parse", "--short", "HEAD")
