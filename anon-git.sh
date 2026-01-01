@@ -823,8 +823,8 @@ reject_incompatible_options() {
     fi
     # CLI-only: no ANON_GIT_COMMIT envvar exists.
     check_incompatible "commit(s) argument" "$COMMIT_ARG" --entire-history "$entirehistory_set"
-    # Not a real conflict: `ANON_GIT_QUIET=1 --verbose` is the intended way to
-    # un-silence a quiet default for one run.
+    # Only the two flags conflict: --verbose over ANON_GIT_QUIET=1 or
+    # anon-git.quiet is the intended way to un-silence a quiet default.
     check_incompatible --quiet "$QUIET_ARG" --verbose "$VERBOSE_ARG"
 
     [[ "$flag_errors" -ne 0 ]] && exit 1
