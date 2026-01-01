@@ -359,6 +359,34 @@ test_match_dry_run_keeps_signed_commit() {
     record_result "$errors" 'dry run keeps signed commit hash'
 }
 
+test_match_dry_run_non_utf8() {
+    # Commit metadata is raw bytes; an invalid UTF-8 name must not crash the preview.
+    local repo_dir commit output exit_status errors=0
+
+    repo_dir=$(mktemp -d "${TMP_DIR}/non_utf8_repo.XXXXXX")
+    git -C "$repo_dir" init >/dev/null
+    commit=$(printf 'tree 4b825dc642cb6eb9a060e54bf8d69288fbee4904\nauthor Bad \xff Name <bad@example.com> 1700000000 +0000\ncommitter Bad \xff Name <bad@example.com> 1700000000 +0000\n\nMessage \xfe\n' |
+        git -C "$repo_dir" hash-object -t commit -w --stdin)
+    git -C "$repo_dir" reset -q --hard "$commit"
+    cp "$SCRIPT" "$repo_dir/"
+    printf '%s\n' "$SCRIPT_NAME" >>"${repo_dir}/.git/info/exclude"
+
+    output=$(cd "$repo_dir" && PAGER="cat" "./${SCRIPT_NAME}" --dry-run HEAD 2>&1)
+    exit_status=$?
+
+    if [[ "$exit_status" -ne 0 ]]; then
+        printf 'Error: --dry-run on non-UTF-8 commit exited with status %s\n' "$exit_status"
+        errors=$((errors + 1))
+    fi
+    if ! grep -q 'AuthorDate:' <<<"$output"; then
+        printf 'Error: --dry-run on non-UTF-8 commit printed no preview\n'
+        errors=$((errors + 1))
+    fi
+
+    rm -rf "$repo_dir"
+    record_result "$errors" 'dry run handles non-UTF-8 metadata'
+}
+
 test_match_rerun_cache() {
     # A second run against the same repo is a known trigger for an upstream
     # git-filter-repo assertion bug unless clean_cache clears its metadata cache first.

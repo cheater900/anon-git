@@ -164,6 +164,7 @@ main() {
     test_match_outside_git_repo
     test_match_annotated_tag
     test_match_dry_run_keeps_signed_commit
+    test_match_dry_run_non_utf8
     test_match_rerun_cache
     test_match_clean_cache_from_subdir
     test_match_trap_cleanup_on_kill

@@ -1395,25 +1395,26 @@ elif striptimezone:
     committer_date = b'%d +0000' % (int(committer_dt.timestamp()),)
 
 if dryrun:
-    f = open(dryrun_file, 'a')
+    f = open(dryrun_file, 'a', encoding='utf-8')
     f.write('Commit:')
 
-    an = commit.author_name.decode()
-    ae = commit.author_email.decode()
+    # Metadata is raw bytes with no guaranteed encoding.
+    an = commit.author_name.decode(errors='replace')
+    ae = commit.author_email.decode(errors='replace')
     ad = parse_git_date(commit.author_date).isoformat()
-    new_an = author_name.decode()
-    new_ae = author_email.decode()
+    new_an = author_name.decode(errors='replace')
+    new_ae = author_email.decode(errors='replace')
     new_ad = parse_git_date(author_date).isoformat()
 
-    cn = commit.committer_name.decode()
-    ce = commit.committer_email.decode()
+    cn = commit.committer_name.decode(errors='replace')
+    ce = commit.committer_email.decode(errors='replace')
     cd = parse_git_date(commit.committer_date).isoformat()
-    new_cn = committer_name.decode()
-    new_ce = committer_email.decode()
+    new_cn = committer_name.decode(errors='replace')
+    new_ce = committer_email.decode(errors='replace')
     new_cd = parse_git_date(committer_date).isoformat()
 
     id = commit.original_id.decode()
-    msg = commit.message.decode()
+    msg = commit.message.decode(errors='replace')
     sep = '\n' + '-' * 80 + '\n'
 
     f.write('%s\n' % id)
