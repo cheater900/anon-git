@@ -18,6 +18,23 @@ DEFAULT_CURRENTBRANCH='0'
 DEFAULT_DRYRUN='0'
 DEFAULT_QUIET='0'
 
+# Scratch files cleaned up by the EXIT trap (cleanup_on_exit) below, so a
+# kill mid-run (Ctrl-C, CI timeout, ...) can't leave them behind — not just
+# the normal success/failure exit paths. Declared here (empty) so the trap
+# can safely run even before setup_dryrun/run_filter_repo populate them.
+dryrun_file=''
+filter_repo_log=''
+
+cleanup_on_exit() {
+    if [[ -n "$dryrun_file" && -f "$dryrun_file" ]]; then
+        rm -f "$dryrun_file"
+    fi
+    if [[ -n "$filter_repo_log" && -f "$filter_repo_log" ]]; then
+        rm -f "$filter_repo_log"
+    fi
+}
+trap cleanup_on_exit EXIT
+
 # ──────────────────────────────────────────────────────────────────────
 # HELP
 #
@@ -743,8 +760,8 @@ clean_cache() {
 # Internal: creates the scratch file the Python commit-callback writes its
 # preview to under --dry-run, so run_filter_repo/print_result can share it
 # via the ANON_GIT_DRYRUN_FILE envvar. Left empty (no file) otherwise.
+# dryrun_file is the global the EXIT trap (cleanup_on_exit) removes.
 setup_dryrun() {
-    dryrun_file=''
     if [[ "${ANON_GIT_DRYRUN}" -eq 1 ]]; then
         dryrun_file=$(mktemp)
     fi
@@ -914,28 +931,25 @@ commit.committer_email = committer_email
 commit.committer_date = committer_date
 "
 
-# Runs git-filter-repo with the callback above, tearing down the scratch log
-# (and dry-run file, if any) on failure.
+# Runs git-filter-repo with the callback above. filter_repo_log (like
+# dryrun_file) is a global the EXIT trap (cleanup_on_exit) removes, on this
+# function's failure exit or any later one.
 run_filter_repo() {
-    local filter_repo_log
     filter_repo_log=$(mktemp)
     if ! git filter-repo --force --commit-callback "$python_commit_callback" --refs HEAD >"$filter_repo_log" 2>&1; then
         printf 'Error: git filter-repo failed:\n' >&2
         cat "$filter_repo_log" >&2
-        rm -f "$filter_repo_log"
-        [[ -n "$dryrun_file" ]] && rm -f "$dryrun_file"
         exit 1
     fi
-    rm -f "$filter_repo_log"
 }
 
 # Prints the dry-run preview (via $PAGER, falling back to cat) or the final
-# success message, and cleans up the dry-run scratch file.
+# success message. dryrun_file itself is removed by the EXIT trap
+# (cleanup_on_exit), not here.
 print_result() {
     if [[ "$ANON_GIT_DRYRUN" == '1' && -f "$dryrun_file" ]]; then
         local pager=${PAGER:-cat}
         command "$pager" "$dryrun_file"
-        rm -f "$dryrun_file"
     elif [[ "$ANON_GIT_QUIET" != '1' ]]; then
         printf 'Done. History has been rewritten.\n'
     fi

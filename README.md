@@ -320,6 +320,7 @@ Now every `git commit` automatically triggers anonymization of that commit's aut
 - To temporarily disable the hook run `chmod -x .git/hooks/post-commit`
 - Consider using environment variables (`export ANON_GIT_NAME="..."` etc.) instead of hard-coding flags in the hook
 - Consider squashing commits or using merge requests from anonymous remotes
+- The script's scratch files (the `--dry-run` preview, `git filter-repo`'s log) are cleaned up by an `EXIT` trap, so killing it mid-run (Ctrl-C, a CI timeout, ...) doesn't leave them behind in `/tmp` either
 
 ## Testing
 

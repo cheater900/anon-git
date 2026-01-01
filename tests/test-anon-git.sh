@@ -1612,6 +1612,71 @@ test_match_outside_git_repo() {
     record_result "$errors" 'running outside a git repository fails cleanly'
 }
 
+test_match_trap_cleanup_on_kill() {
+    # Regression test for the EXIT trap (cleanup_on_exit) that removes
+    # dryrun_file/filter_repo_log if the script is killed mid-run (Ctrl-C, CI
+    # timeout, ...), not just on the normal success/failure exit paths. Uses
+    # a dedicated large repo (git-filter-repo needs a moment to process it)
+    # and points mktemp's TMPDIR at a scratch dir, so leftover scratch files
+    # are trivial to spot and the kill has a window to land mid-run. `exec`
+    # inside the backgrounded subshell replaces it with the script itself, so
+    # $pid is the script's own PID and the signal reaches it directly. If the
+    # run finishes before the kill lands (a fast machine, a loaded one that
+    # never schedules the poll loop in time, ...) the check is inconclusive
+    # rather than a real failure, so that case is skipped, not errored.
+    local repo_dir scratch_tmpdir pid i caught_mid_run leftover errors=0
+
+    repo_dir=$(mktemp -d "${TMP_DIR}/trap_kill_repo.XXXXXX")
+    (
+        cd "$repo_dir" || exit 1
+        git init >/dev/null
+        git config --local user.name "Jordan Blake"
+        git config --local user.email "jordan.blake@example.com"
+        for i in $(seq 1 500); do
+            echo "file ${i}" >"file_${i}.txt"
+            git add "file_${i}.txt" >/dev/null
+            git commit -q -m "Add file_${i}.txt"
+        done
+    )
+    cp "$SCRIPT" "$repo_dir/"
+    chmod +x "${repo_dir}/${SCRIPT_NAME}"
+
+    scratch_tmpdir=$(mktemp -d "${TMP_DIR}/trap_kill_tmpdir.XXXXXX")
+
+    (cd "$repo_dir" && TMPDIR="$scratch_tmpdir" PAGER=cat exec "./${SCRIPT_NAME}" --no-confirm --dry-run --entire-history >/dev/null 2>&1) &
+    pid=$!
+
+    caught_mid_run=0
+    for i in $(seq 1 200); do
+        if ! kill -0 "$pid" 2>/dev/null; then
+            break
+        fi
+        if [[ -n "$(find "$scratch_tmpdir" -type f 2>/dev/null)" ]]; then
+            caught_mid_run=1
+            break
+        fi
+        sleep 0.01
+    done
+
+    if [[ "$caught_mid_run" -eq 1 ]]; then
+        kill -TERM "$pid" 2>/dev/null
+    fi
+    wait "$pid" 2>/dev/null
+
+    if [[ "$caught_mid_run" -eq 0 ]]; then
+        printf 'SKIP EXIT trap cleanup on kill: could not catch the run in progress\n'
+    else
+        leftover=$(find "$scratch_tmpdir" -type f 2>/dev/null | wc -l)
+        if [[ "$leftover" -ne 0 ]]; then
+            printf 'Error: %s scratch file(s) left behind after killing the script mid-run\n' "$leftover"
+            errors=$((errors + 1))
+        fi
+        record_result "$errors" 'EXIT trap cleans up scratch files when killed mid-run'
+    fi
+
+    rm -rf "$repo_dir" "$scratch_tmpdir"
+}
+
 test_match_rerun_cache() {
     # git-filter-repo caches metadata under .git/filter-repo/ after a run; a
     # second run against the same repo is a known trigger for an upstream
@@ -1781,6 +1846,7 @@ main() {
     test_match_malformed_date
     test_match_outside_git_repo
     test_match_rerun_cache
+    test_match_trap_cleanup_on_kill
     test_match_shell_injection_email
     test_match_shell_injection_name
     test_match_merge_commit
