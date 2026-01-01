@@ -36,6 +36,7 @@ main() {
     test_random_dates_neighbor_bounds_contiguous_run
     test_random_dates_no_lower_neighbor_at_history_start
     test_random_dates_no_upper_neighbor_at_history_end
+    test_random_dates_merge_neighbors
     test_script
     test_script --name 'Grace Hopper'
     test_script --name 'Alan Turing' --email 'alan.turing@example.com'

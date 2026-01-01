@@ -14,15 +14,15 @@ extract_random_dates_script() {
 }
 
 # Runs python_compute_random_dates directly against synthetic
-# "<hash> <epoch>" stdin input (bypassing git/git-filter-repo), so its
+# "<hash> <epoch> [parents...]" stdin input (bypassing git/git-filter-repo), so its
 # ordering guarantee can be checked against input a real repo test can't
 # easily produce.
 run_random_dates_script() {
     # $1: granularity envvar to set to '1'. $2: ANON_GIT_ENTIREHISTORY value.
     # $3: space-separated ANON_GIT_TARGET_COMMITS (ignored when $2 is '1').
-    # stdin: "<hash> <epoch>" lines, oldest to newest; adjacency here is what
-    # the script treats as "real neighbors". stdout: "<hash> <epoch> <offset>",
-    # targets only.
+    # stdin: "<hash> <epoch> [parents...]" lines, oldest to newest; parents
+    # and children are what the script treats as "real neighbors". stdout:
+    # "<hash> <epoch> <offset>", targets only.
     local granularity_var="$1" entirehistory="$2" target_commits="$3" python_code
     python_code=$(extract_random_dates_script)
     env ANON_GIT_RANDOMTIME=0 ANON_GIT_RANDOMDAY=0 ANON_GIT_RANDOMMONTH=0 "${granularity_var}=1" \
@@ -30,12 +30,13 @@ run_random_dates_script() {
         python3 -c "$python_code"
 }
 
-# Builds $1 "<hash> <epoch>" lines, $2 seconds apart, from a fixed
-# 2020-01-01 UTC epoch. Hashes named commit_0, commit_1, ...
+# Builds $1 linear "<hash> <epoch> <parent>" lines, $2 seconds apart, from a
+# fixed 2020-01-01 UTC epoch. Hashes named commit_0, commit_1, ...
 build_synthetic_history() {
     local count="$1" spacing="$2" base=1577836800 i
-    for ((i = 0; i < count; i++)); do
-        printf 'commit_%s %s\n' "$i" "$((base + i * spacing))"
+    printf 'commit_0 %s\n' "$base"
+    for ((i = 1; i < count; i++)); do
+        printf 'commit_%s %s commit_%s\n' "$i" "$((base + i * spacing))" "$((i - 1))"
     done
 }
 
@@ -232,6 +233,30 @@ test_random_dates_no_upper_neighbor_at_history_end() {
 # INTEGRATION TEST: same shape as test_flag_keep_partial (flags.sh), for the
 # random-* trio -- only kept calendar fields are asserted unchanged (never
 # asserting a change happened, since randomness could reproduce the original).
+test_random_dates_merge_neighbors() {
+    # Side commit side_1 sits next to main_1 in log order but its real child
+    # is the merge; main_1's skewed date must not stretch side_1's range past it.
+    local history day=86400 base=1577836800 merge_epoch got run errors=0
+
+    merge_epoch=$((base + 2 * day))
+    history=$(printf '%s\n' \
+        "root ${base}" \
+        "side_1 $((base + day)) root" \
+        "main_1 $((base + 20 * day)) root" \
+        "merge ${merge_epoch} main_1 side_1")
+
+    for run in 1 2 3 4 5; do
+        got=$(printf '%s\n' "$history" | run_random_dates_script ANON_GIT_RANDOMDAY 0 'side_1' | random_dates_lookup side_1)
+        if [[ -z "$got" || "$got" -le "$base" || "$got" -ge "$merge_epoch" ]]; then
+            printf 'Error: run %s: side_1 got %s, outside (%s, %s)\n' "$run" "$got" "$base" "$merge_epoch"
+            errors=$((errors + 1))
+            break
+        fi
+    done
+
+    record_result "$errors" 'random dates bounded by parent and merge child'
+}
+
 test_flag_random_partial() {
     # $1: --random-time | --random-day | --random-month
     local flag="$1" random_index commit_hash old_year old_month

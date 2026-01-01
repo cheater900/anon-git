@@ -1117,8 +1117,9 @@ export_rewrite_env() {
 }
 
 # Precomputes one random timestamp per target commit for --random-time/-day/
-# -month: reads full history from stdin (oldest to newest), tags each commit
-# target/anchor/ignored, buckets by the fixed calendar unit, and assigns each
+# -month: reads full history from stdin ("<hash> <epoch> [parents...]"), tags
+# each commit target/anchor (a parent or child of a target)/ignored, buckets
+# by the fixed calendar unit, and assigns each
 # bucket's runs random timestamps bounded by their nearest anchor, preserving
 # relative order. Prints "<hash> <epoch> +0000" lines, targets only. Kept as
 # a plain top-level assignment: the test suite locates it by its exact,
@@ -1161,28 +1162,36 @@ def bucket_bounds(dt):
 
 history = []
 for line in sys.stdin:
-    line = line.strip()
-    if not line:
+    fields = line.split()
+    if not fields:
         continue
-    commit_hash, epoch_str = line.split()
-    history.append((commit_hash, int(epoch_str)))
+    history.append((fields[0], int(fields[1]), fields[2:]))
+
+# Real neighbors are parents and children: across a merge, the commit next
+# in log order can sit on another branch.
+anchors = set()
+for commit_hash, _epoch, parents in history:
+    if commit_hash in target_hashes:
+        anchors.update(parents)
+    elif any(parent in target_hashes for parent in parents):
+        anchors.add(commit_hash)
 
 if entirehistory:
     roles = ['target'] * len(history)
 else:
     roles = []
-    for i, (commit_hash, _epoch) in enumerate(history):
+    for commit_hash, _epoch, _parents in history:
         if commit_hash in target_hashes:
             roles.append('target')
+        elif commit_hash in anchors:
+            roles.append('anchor')
         else:
-            before_is_target = i > 0 and history[i - 1][0] in target_hashes
-            after_is_target = i + 1 < len(history) and history[i + 1][0] in target_hashes
-            roles.append('anchor' if (before_is_target or after_is_target) else 'skip')
+            roles.append('skip')
 
 buckets = defaultdict(list)
 bounds = {}
 
-for (commit_hash, epoch), role in zip(history, roles):
+for (commit_hash, epoch, _parents), role in zip(history, roles):
     if role == 'skip':
         continue
     dt = datetime.fromtimestamp(epoch, tz=timezone.utc)
@@ -1234,7 +1243,7 @@ setup_random_dates() {
 
     random_dates_file=$(mktemp)
 
-    if ! git log --reverse --format='%H %at' HEAD |
+    if ! git log --reverse --format='%H %at %P' HEAD |
         ANON_GIT_RANDOMTIME="$ANON_GIT_RANDOMTIME" ANON_GIT_RANDOMDAY="$ANON_GIT_RANDOMDAY" ANON_GIT_RANDOMMONTH="$ANON_GIT_RANDOMMONTH" \
             ANON_GIT_ENTIREHISTORY="$ANON_GIT_ENTIREHISTORY" ANON_GIT_TARGET_COMMITS="$ANON_GIT_COMMIT" \
             python3 -c "$python_compute_random_dates" >"$random_dates_file"; then
