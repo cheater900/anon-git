@@ -7,4 +7,4 @@
   also reads `~/.gitconfig` and system config, so a global
   `anon-git.keepuser` silently applies to every repo. Change in
   `read_git_config` of both `anon-git.sh/anon-git.sh` and
-  `anon-git.py/src/anon_git/__init__.py`, with a test per implementation.
+  `anon-git.py/src/anon_git/options.py`, with a test per implementation.

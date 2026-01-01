@@ -4,6 +4,7 @@ Derived from git history, newest first.
 
 ## 2026-11-02
 
+- docs(py): document module and test layout
 - refactor(py): split anon_git into modules by concern, tests into unit/integration/e2e
 - docs(py): describe derived flag list in CONTRIBUTING
 - test(py): share DEFAULT_AUTHOR, REWRITE, CLI and no-tty runner via conftest
