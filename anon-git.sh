@@ -13,6 +13,7 @@ DEFAULT_KEEPDATE='0'
 DEFAULT_KEEPYEAR='0'
 DEFAULT_KEEPMONTH='0'
 DEFAULT_KEEPDAY='0'
+DEFAULT_STRIPTIMEZONE='0'
 DEFAULT_ENTIREHISTORY='0'
 DEFAULT_CURRENTBRANCH='0'
 DEFAULT_DRYRUN='0'
@@ -60,6 +61,12 @@ Options:
   --keep-year                     Do not change commit year
   --keep-month                    Do not change commit month (and year)
   --keep-day                      Do not change commit day (and year and month)
+  --strip-timezone                Force the timezone offset to UTC+0000 without changing
+                                   the date/time digits. Used with no other option, also
+                                   leaves author and date/time untouched (only the offset
+                                   changes); combined with other options, those take their
+                                   normal effect and the resulting offset is still forced
+                                   to +0000
   --no-confirm                    Do not prompt for confirmation
   --no-backup                     Do not create backup branch
   --current-branch                Overwrite current branch instead of creating a copy of it
@@ -86,11 +93,12 @@ Priority (highest to lowest):
   1. Command-line flags (--date, --name, --email, --keep-user, --keep-date, ...)
   2. Repo-local git config (git config anon-git.name, anon-git.email, anon-git.date,
      anon-git.keepuser, anon-git.keepdate, anon-git.keepyear, anon-git.keepmonth,
-     anon-git.keepday, anon-git.quiet — --entire-history/--current-branch/--dry-run
-     have no config equivalent, flag/envvar only)
+     anon-git.keepday, anon-git.striptimezone, anon-git.quiet —
+     --entire-history/--current-branch/--dry-run have no config equivalent, flag/envvar only)
   3. Environment variables (ANON_GIT_DATE, ANON_GIT_NAME, ANON_GIT_EMAIL, ANON_GIT_KEEPUSER,
      ANON_GIT_KEEPDATE, ANON_GIT_KEEPYEAR, ANON_GIT_KEEPMONTH, ANON_GIT_KEEPDAY,
-     ANON_GIT_ENTIREHISTORY, ANON_GIT_CURRENTBRANCH, ANON_GIT_DRYRUN, ANON_GIT_QUIET)
+     ANON_GIT_STRIPTIMEZONE, ANON_GIT_ENTIREHISTORY, ANON_GIT_CURRENTBRANCH,
+     ANON_GIT_DRYRUN, ANON_GIT_QUIET)
   4. Hardcoded defaults (${DEFAULT_NAME} <${DEFAULT_EMAIL}>)
 
 Note: --verbose has no ANON_GIT_VERBOSE environment variable or config
@@ -112,6 +120,10 @@ Examples:
 
     # Keep real name/email, only change date
     ./anon-git.sh --keep-user --date "2025-06-15T14:20:00Z"
+
+    # Used alone: keep author and date/time as-is, only force the timezone
+    # offset to UTC+0000 (hides where the committer is, keeps everything else)
+    ./anon-git.sh --strip-timezone HEAD
 
     # Preview what would change before actually rewriting anything
     ./anon-git.sh --dry-run HEAD~2
@@ -180,6 +192,7 @@ list_flags() {
 --keep-year
 --keep-month
 --keep-day
+--strip-timezone
 --no-confirm
 --no-backup
 --current-branch
@@ -452,7 +465,7 @@ read_git_config_bool() {
 # globals that merge_args_with_defaults consults above ANON_GIT_* envvars
 # (repo config wins over an inherited/exported envvar) and below CLI flags
 # (see README's "Repo-local config" section). Deliberately scoped to
-# name/email/date/keep-*/quiet — the
+# name/email/date/keep-*/striptimezone/quiet — the
 # settings that make sense to pin per-repo; --entire-history,
 # --current-branch and --dry-run stay flag/envvar-only, since a silently
 # configured default for any of those would be far more destructive than a
@@ -466,6 +479,7 @@ read_git_config() {
     GITCONFIG_KEEPYEAR=$(read_git_config_bool anon-git.keepyear)
     GITCONFIG_KEEPMONTH=$(read_git_config_bool anon-git.keepmonth)
     GITCONFIG_KEEPDAY=$(read_git_config_bool anon-git.keepday)
+    GITCONFIG_STRIPTIMEZONE=$(read_git_config_bool anon-git.striptimezone)
     GITCONFIG_QUIET=$(read_git_config_bool anon-git.quiet)
 }
 
@@ -481,6 +495,7 @@ parse_args() {
     KEEPYEAR_ARG=""
     KEEPMONTH_ARG=""
     KEEPDAY_ARG=""
+    STRIPTIMEZONE_ARG=""
     NOCONFIRM_ARG=""
     NOBACKUP_ARG=""
     DRYRUN_ARG=""
@@ -535,6 +550,10 @@ parse_args() {
             ;;
         --keep-day)
             KEEPDAY_ARG='1'
+            shift
+            ;;
+        --strip-timezone)
+            STRIPTIMEZONE_ARG='1'
             shift
             ;;
         --no-confirm)
@@ -671,6 +690,7 @@ merge_args_with_defaults() {
     ANON_GIT_KEEPYEAR="${KEEPYEAR_ARG:-${GITCONFIG_KEEPYEAR:-${ANON_GIT_KEEPYEAR:-${DEFAULT_KEEPYEAR}}}}"
     ANON_GIT_KEEPMONTH="${KEEPMONTH_ARG:-${GITCONFIG_KEEPMONTH:-${ANON_GIT_KEEPMONTH:-${DEFAULT_KEEPMONTH}}}}"
     ANON_GIT_KEEPDAY="${KEEPDAY_ARG:-${GITCONFIG_KEEPDAY:-${ANON_GIT_KEEPDAY:-${DEFAULT_KEEPDAY}}}}"
+    ANON_GIT_STRIPTIMEZONE="${STRIPTIMEZONE_ARG:-${GITCONFIG_STRIPTIMEZONE:-${ANON_GIT_STRIPTIMEZONE:-${DEFAULT_STRIPTIMEZONE}}}}"
     ANON_GIT_ENTIREHISTORY="${ENTIREHISTORY_ARG:-${ANON_GIT_ENTIREHISTORY:-${DEFAULT_ENTIREHISTORY}}}"
     ANON_GIT_CURRENTBRANCH="${CURRENTBRANCH_ARG:-${ANON_GIT_CURRENTBRANCH:-${DEFAULT_CURRENTBRANCH}}}"
     ANON_GIT_COMMIT="${COMMIT_ARG:-${DEFAULT_COMMIT}}"
@@ -681,6 +701,25 @@ merge_args_with_defaults() {
     # output back on.
     if [[ "$VERBOSE_ARG" == '1' ]]; then
         ANON_GIT_QUIET='0'
+    fi
+}
+
+# Internal: --strip-timezone used with no other CLI flag means "don't touch
+# author or date/time digits, only relabel the offset to +0000" — i.e. it
+# implicitly behaves like --keep-user --keep-date for that one run (the
+# python commit-callback still performs the offset rewrite for a kept date,
+# see the `elif striptimezone` branch there). Any other CLI flag (--name,
+# --date, --keep-year, ...) opts back into that flag's normal precedence, per
+# --strip-timezone's documented "unless other CLI options are provided"
+# contract. Repo-local config / ANON_GIT_* envvars don't count as "provided"
+# here since they're background defaults, not this invocation's explicit
+# intent — only the *_ARG (CLI-only) globals are checked.
+apply_strip_timezone_alone() {
+    if [[ "$STRIPTIMEZONE_ARG" == '1' && -z "$DATE_ARG" && -z "$NAME_ARG" && -z "$EMAIL_ARG" &&
+        -z "$KEEPUSER_ARG" && -z "$KEEPDATE_ARG" &&
+        -z "$KEEPYEAR_ARG" && -z "$KEEPMONTH_ARG" && -z "$KEEPDAY_ARG" ]]; then
+        ANON_GIT_KEEPUSER='1'
+        ANON_GIT_KEEPDATE='1'
     fi
 }
 
@@ -712,6 +751,7 @@ validate_final_options() {
     validate_bool ANON_GIT_KEEPYEAR "$ANON_GIT_KEEPYEAR"
     validate_bool ANON_GIT_KEEPMONTH "$ANON_GIT_KEEPMONTH"
     validate_bool ANON_GIT_KEEPDAY "$ANON_GIT_KEEPDAY"
+    validate_bool ANON_GIT_STRIPTIMEZONE "$ANON_GIT_STRIPTIMEZONE"
     validate_bool ANON_GIT_ENTIREHISTORY "$ANON_GIT_ENTIREHISTORY"
     validate_bool ANON_GIT_CURRENTBRANCH "$ANON_GIT_CURRENTBRANCH"
     validate_bool ANON_GIT_DRYRUN "$ANON_GIT_DRYRUN"
@@ -748,6 +788,9 @@ verbose_info() {
     fi
     if [[ -n "$KEEPDAY_ARG" ]]; then
         printf 'Using commit date year, month and day (anonymizing only time and tz).\n'
+    fi
+    if [[ -n "$STRIPTIMEZONE_ARG" ]]; then
+        printf 'Forcing timezone offset to UTC+0000 (date/time digits unchanged).\n'
     fi
     printf '\n'
 }
@@ -856,6 +899,7 @@ setup_dryrun() {
 export_rewrite_env() {
     export ANON_GIT_NAME ANON_GIT_EMAIL ANON_GIT_DATE ANON_GIT_COMMIT
     export ANON_GIT_KEEPUSER ANON_GIT_KEEPDATE ANON_GIT_KEEPYEAR ANON_GIT_KEEPMONTH ANON_GIT_KEEPDAY
+    export ANON_GIT_STRIPTIMEZONE
     export ANON_GIT_ENTIREHISTORY ANON_GIT_DRYRUN
     export ANON_GIT_DRYRUN_FILE="${dryrun_file}"
     export TZ=UTC
@@ -879,6 +923,7 @@ keepdate = os.environ['ANON_GIT_KEEPDATE'] == '1'
 keepyear = os.environ['ANON_GIT_KEEPYEAR'] == '1'
 keepmonth = os.environ['ANON_GIT_KEEPMONTH'] == '1'
 keepday = os.environ['ANON_GIT_KEEPDAY'] == '1'
+striptimezone = os.environ['ANON_GIT_STRIPTIMEZONE'] == '1'
 entirehistory = os.environ['ANON_GIT_ENTIREHISTORY'] == '1'
 dryrun = os.environ['ANON_GIT_DRYRUN'] == '1'
 dryrun_file = os.environ.get('ANON_GIT_DRYRUN_FILE', '')
@@ -950,6 +995,15 @@ if not keepdate:
             dt = dt.replace(month=1)
         ts = dt.timestamp()
         offset = '+0000'
+    elif striptimezone:
+        # Keep the date/time digits given by --date (or its default), but
+        # relabel (not convert) the offset to +0000 — same tzinfo=None ->
+        # reinterpret-as-UTC strategy as the keepyear/month/day branch above,
+        # just without zeroing out the smaller fields.
+        dt = parse_target_date(date)
+        dt = dt.replace(tzinfo=None)
+        ts = dt.timestamp()
+        offset = '+0000'
     else:
         dt = parse_target_date(date)
         ts = int(dt.timestamp())
@@ -966,6 +1020,16 @@ if not keepdate:
     date_encoded = b'%d %s' % (ts, offset.encode())
     author_date = date_encoded
     committer_date = date_encoded
+elif striptimezone:
+    # --keep-date (explicit, or implied by --strip-timezone used with no
+    # other option) leaves the date/time digits untouched per field, but
+    # --strip-timezone still relabels each field's offset to +0000 — computed
+    # per author/committer independently (they can differ, e.g. after a
+    # rebase), unlike the shared date_encoded used above.
+    author_dt = parse_git_date(commit.author_date).replace(tzinfo=None)
+    author_date = b'%d +0000' % (int(author_dt.timestamp()),)
+    committer_dt = parse_git_date(commit.committer_date).replace(tzinfo=None)
+    committer_date = b'%d +0000' % (int(committer_dt.timestamp()),)
 
 # don't rewrite history, just pretend
 if dryrun:
@@ -1044,6 +1108,7 @@ main() {
     parse_args "$@"
     reject_incompatible_options
     merge_args_with_defaults
+    apply_strip_timezone_alone
     validate_final_options
     require_target
     verbose_info

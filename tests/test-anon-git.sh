@@ -1568,6 +1568,158 @@ test_flag_quiet() {
     record_result "$errors" 'flag --quiet suppresses informational output'
 }
 
+test_flag_strip_timezone_alone() {
+    # --strip-timezone with no other CLI flag must not change author identity
+    # or the date/time digits -- only the timezone label changes to +0000,
+    # regardless of the commit's original offset (here +0530, chosen so it's
+    # unambiguously not already UTC).
+    local commit_hash old_author old_date_no_tz old_offset exit_status
+    local new_commit_hash new_author new_date_no_tz new_offset errors=0
+
+    echo 'strip timezone alone' >strip_tz_alone_file.txt
+    git add strip_tz_alone_file.txt >/dev/null
+    GIT_AUTHOR_DATE='1600000000 +0530' GIT_COMMITTER_DATE='1600000000 +0530' \
+        git commit -m 'Strip timezone alone test' >/dev/null
+    commit_hash=$(git rev-parse HEAD)
+
+    old_author=$(git show -s --format='%an <%ae>' "$commit_hash")
+    old_date_no_tz=$(git show -s --date=format:'%Y-%m-%d %H:%M:%S' --format='%ad' "$commit_hash")
+    old_offset=$(git show -s --date=format:'%z' --format='%ad' "$commit_hash")
+
+    ./${SCRIPT_NAME} --no-confirm --no-backup --current-branch --strip-timezone "$commit_hash" >/dev/null 2>&1
+    exit_status=$?
+
+    new_commit_hash=$(git rev-parse HEAD)
+    new_author=$(git show -s --format='%an <%ae>' "$new_commit_hash")
+    new_date_no_tz=$(git show -s --date=format:'%Y-%m-%d %H:%M:%S' --format='%ad' "$new_commit_hash")
+    new_offset=$(git show -s --date=format:'%z' --format='%ad' "$new_commit_hash")
+
+    if [[ "$exit_status" -ne 0 ]]; then
+        printf 'Error: --strip-timezone (alone) exited with status %s\n' "$exit_status"
+        errors=$((errors + 1))
+    fi
+    if [[ "$old_offset" == '+0000' ]]; then
+        printf 'Error: test setup bug: commit already had a +0000 offset\n'
+        errors=$((errors + 1))
+    fi
+    if [[ "$new_author" != "$old_author" ]]; then
+        printf 'Error: --strip-timezone (alone) changed author identity (%s -> %s)\n' "$old_author" "$new_author"
+        errors=$((errors + 1))
+    fi
+    if [[ "$new_date_no_tz" != "$old_date_no_tz" ]]; then
+        printf 'Error: --strip-timezone (alone) changed the date/time digits (%s -> %s)\n' "$old_date_no_tz" "$new_date_no_tz"
+        errors=$((errors + 1))
+    fi
+    if [[ "$new_offset" != '+0000' ]]; then
+        printf 'Error: --strip-timezone (alone) did not force the offset to +0000 (got %s)\n' "$new_offset"
+        errors=$((errors + 1))
+    fi
+
+    record_result "$errors" 'flag --strip-timezone alone preserves author/date, forces UTC+0000'
+}
+
+test_flag_strip_timezone_with_keep_date() {
+    # --strip-timezone --keep-date (both explicit) is not the "used alone"
+    # case, but --keep-date already preserves the date/time digits and
+    # --strip-timezone must still force the offset to +0000 on top of that.
+    # Author identity is NOT implied kept here (only --keep-date was given,
+    # not --keep-user), so it still falls back to the default identity.
+    local old_date_no_tz old_offset exit_status
+    local new_author new_date_no_tz new_offset errors=0
+
+    echo 'strip timezone with keep-date' >strip_tz_keepdate_file.txt
+    git add strip_tz_keepdate_file.txt >/dev/null
+    GIT_AUTHOR_DATE='1650000000 -0700' GIT_COMMITTER_DATE='1650000000 -0700' \
+        git commit -m 'Strip timezone with keep-date test' >/dev/null
+
+    old_date_no_tz=$(git show -s --date=format:'%Y-%m-%d %H:%M:%S' --format='%ad' HEAD)
+    old_offset=$(git show -s --date=format:'%z' --format='%ad' HEAD)
+
+    ./${SCRIPT_NAME} --no-confirm --no-backup --current-branch --strip-timezone --keep-date HEAD >/dev/null 2>&1
+    exit_status=$?
+
+    new_author=$(git show -s --format='%an <%ae>' HEAD)
+    new_date_no_tz=$(git show -s --date=format:'%Y-%m-%d %H:%M:%S' --format='%ad' HEAD)
+    new_offset=$(git show -s --date=format:'%z' --format='%ad' HEAD)
+
+    if [[ "$exit_status" -ne 0 ]]; then
+        printf 'Error: --strip-timezone --keep-date exited with status %s\n' "$exit_status"
+        errors=$((errors + 1))
+    fi
+    if [[ "$old_offset" == '+0000' ]]; then
+        printf 'Error: test setup bug: commit already had a +0000 offset\n'
+        errors=$((errors + 1))
+    fi
+    if [[ "$new_author" != "${DEFAULT_NAME} <${DEFAULT_EMAIL}>" ]]; then
+        printf 'Error: --strip-timezone --keep-date unexpectedly preserved author identity (got %s)\n' "$new_author"
+        errors=$((errors + 1))
+    fi
+    if [[ "$new_date_no_tz" != "$old_date_no_tz" ]]; then
+        printf 'Error: --strip-timezone --keep-date changed the date/time digits (%s -> %s)\n' "$old_date_no_tz" "$new_date_no_tz"
+        errors=$((errors + 1))
+    fi
+    if [[ "$new_offset" != '+0000' ]]; then
+        printf 'Error: --strip-timezone --keep-date did not force the offset to +0000 (got %s)\n' "$new_offset"
+        errors=$((errors + 1))
+    fi
+
+    record_result "$errors" 'flag --strip-timezone + --keep-date preserves date digits, forces UTC+0000'
+}
+
+test_flag_strip_timezone_with_date_arg() {
+    # --strip-timezone combined with an explicit --date must use the
+    # date/time digits given by --date, but force the offset to +0000
+    # regardless of the offset given in --date itself.
+    local exit_status new_date errors=0
+
+    ./${SCRIPT_NAME} --no-confirm --no-backup --current-branch \
+        --strip-timezone --date '2025-06-15 14:20:00 +0300' HEAD >/dev/null 2>&1
+    exit_status=$?
+
+    new_date=$(git show -s --date=iso --format='%ad' HEAD)
+
+    if [[ "$exit_status" -ne 0 ]]; then
+        printf 'Error: --strip-timezone --date exited with status %s\n' "$exit_status"
+        errors=$((errors + 1))
+    fi
+    if [[ "$new_date" != '2025-06-15 14:20:00 +0000' ]]; then
+        printf 'Error: --strip-timezone --date did not keep digits with a +0000 offset (got %s)\n' "$new_date"
+        errors=$((errors + 1))
+    fi
+
+    record_result "$errors" 'flag --strip-timezone + --date keeps digits, forces UTC+0000'
+}
+
+test_flag_strip_timezone_not_alone_resets_date() {
+    # Any other CLI flag alongside --strip-timezone (here --name) means the
+    # "used alone" contract no longer applies: the date/time is NOT
+    # implicitly preserved and falls through to the normal default-date path
+    # (already +0000, so --strip-timezone has nothing extra to change there).
+    local exit_status new_author new_date errors=0
+
+    ./${SCRIPT_NAME} --no-confirm --no-backup --current-branch \
+        --strip-timezone --name 'Strip TZ Not Alone' HEAD >/dev/null 2>&1
+    exit_status=$?
+
+    new_author=$(git show -s --format='%an <%ae>' HEAD)
+    new_date=$(git show -s --date=iso --format='%ad' HEAD)
+
+    if [[ "$exit_status" -ne 0 ]]; then
+        printf 'Error: --strip-timezone --name exited with status %s\n' "$exit_status"
+        errors=$((errors + 1))
+    fi
+    if [[ "$new_author" != "Strip TZ Not Alone <${DEFAULT_EMAIL}>" ]]; then
+        printf 'Error: --strip-timezone --name did not change author as expected (got %s)\n' "$new_author"
+        errors=$((errors + 1))
+    fi
+    if [[ "$new_date" != "$DEFAULT_DATE" ]]; then
+        printf 'Error: --strip-timezone with another flag unexpectedly preserved the original date (got %s, expected default %s)\n' "$new_date" "$DEFAULT_DATE"
+        errors=$((errors + 1))
+    fi
+
+    record_result "$errors" 'flag --strip-timezone + another flag is not "alone": date resets to default'
+}
+
 test_flag_verbose_overrides_env_quiet() {
     # --verbose is a CLI-only override that must win over ANON_GIT_QUIET=1,
     # forcing the informational output back on for that one run.
@@ -2256,6 +2408,10 @@ main() {
     test_flag_new_branch
     test_flag_no_backup
     test_flag_quiet
+    test_flag_strip_timezone_alone
+    test_flag_strip_timezone_with_keep_date
+    test_flag_strip_timezone_with_date_arg
+    test_flag_strip_timezone_not_alone_resets_date
     test_flag_verbose_overrides_env_quiet
     test_catch_incompatible_quiet_verbose
     test_flag_install_hook_quiet

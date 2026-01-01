@@ -40,6 +40,7 @@ _anon_git() {
         '--keep-year[Do not change commit year]' \
         '--keep-month[Do not change commit month (and year)]' \
         '--keep-day[Do not change commit day (and year and month)]' \
+        '--strip-timezone[Force timezone offset to UTC+0000 without changing date/time digits]' \
         '--no-confirm[Do not prompt for confirmation]' \
         '--no-backup[Do not create backup branch]' \
         '--current-branch[Overwrite current branch instead of creating a copy]' \
