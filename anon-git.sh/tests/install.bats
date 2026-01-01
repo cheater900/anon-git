@@ -194,6 +194,24 @@ run_installer() {
     assert_equal "$(git diff --cached --name-only)" 'staged.txt'
 }
 
+@test "--install-hook keeps unrelated stash when push saves nothing" {
+    # Dirty submodule content: diff-files reports it, stash push saves
+    # nothing, so the hook must not pop the older stash.
+    local sub=${BATS_TEST_TMPDIR}/sub
+    new_repo "$sub"
+    git -C "$sub" commit -q --allow-empty -m sub
+    git -c protocol.file.allow=always submodule add -q "$sub" sub
+    git commit -q -m 'Add submodule'
+    echo 'stashed' >>file_1.txt
+    git stash push -q
+    ./anon-git.sh --install-hook
+    echo 'new' >sub/new.txt
+    git -C sub add new.txt
+    git commit -q --allow-empty -m 'Commit with dirty submodule' 2>/dev/null
+    assert_equal "$(git stash list | wc -l | tr -d ' ')" 1
+    assert_equal "$(git diff --name-only -- file_1.txt)" ''
+}
+
 @test "--install-hook works from path with shell metacharacters" {
     # Script path with shell metacharacters must survive into the hook.
     local odd_dir="${REPO}/odd \"\$dir\`"

@@ -468,11 +468,16 @@ for state in rebase-merge rebase-apply sequencer CHERRY_PICK_HEAD REVERT_HEAD; d
 done
 
 # A partial commit (git add -p, git commit <path>) leaves a dirty tree,
-# which anon-git refuses; stash it around the run.
+# which anon-git refuses; stash it around the run. Only pop what this push
+# saved: it saves nothing for e.g. a dirty submodule, and popping would then
+# apply an older, unrelated stash.
 stashed=0
 if ! git diff-index --quiet HEAD -- || ! git diff-files --quiet; then
+    stash_before=$(git rev-parse --quiet --verify refs/stash || true)
     git stash push --quiet
-    stashed=1
+    if [[ "$(git rev-parse --quiet --verify refs/stash || true)" != "$stash_before" ]]; then
+        stashed=1
+    fi
 fi
 status=0
 "$anon_git" --no-confirm --no-backup --quiet --current-branch HEAD || status=$?
