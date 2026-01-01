@@ -1,16 +1,14 @@
-"""Rejecting bad input before anything is touched: conflicting flags, bad
-refs, dirty tree, missing values, malformed dates and identities."""
+"""Bad input rejected before anything is touched."""
 
-from datetime import datetime, timedelta, timezone
+import subprocess
 
 import pytest
-from conftest import branch_count, git, head, run_cli
-from hypothesis import given
-from hypothesis import strategies as st
+from helpers import branch_count, git, head, run_cli
 
-import anon_git
+from anon_git.options import parse_args
 
 DATE = "2020-01-01 00:00:00 +0000"
+
 
 INCOMPATIBLE = [
     (["--date", DATE, "--keep-date"], {}),
@@ -122,59 +120,18 @@ def test_rejects_commit_not_reachable_from_head(repo, head_before):
     assert head() == head_before
 
 
-@given(
-    st.datetimes(
-        min_value=datetime(1970, 1, 2), max_value=datetime(9998, 12, 31), timezones=st.just(None)
-    ),
-    st.integers(min_value=-14 * 60, max_value=14 * 60),
-    st.sampled_from(["space", "iso", "isoz"]),
-)
-def test_parse_target_date_round_trips(dt, offset_minutes, form):
-    dt = dt.replace(microsecond=0)
-    tz = timezone(timedelta(minutes=offset_minutes))
-    if form == "isoz":
-        tz = timezone.utc
-    aware = dt.replace(tzinfo=tz)
-    text = {
-        "space": aware.strftime("%Y-%m-%d %H:%M:%S %z"),
-        "iso": aware.isoformat(),
-        "isoz": dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
-    }[form]
-    assert anon_git.parse_target_date(text) == aware
-
-
-@given(st.text(min_size=1))
-def test_validate_identity_rejects_exactly_bad_chars(name):
-    opts = anon_git.Options(
-        name=name,
-        email="a@b",
-        date=anon_git.DEFAULT_DATE,
-        commits=[],
-        **{opt.lower(): False for opt in anon_git.BOOLS},
-        noconfirm=True,
-        nobackup=True,
-        cli_flags={},
-    )
-    bad = any(char in name for char in "<>\n")
-    if bad:
-        with pytest.raises(SystemExit):
-            anon_git.validate_identity(opts)
-        return
-    anon_git.validate_identity(opts)
-
-
 def test_many_targets_resolve_in_one_git_call(repo, monkeypatch):
     revs = [f"HEAD~{i}" for i in range(19)]
     expected = [git("rev-parse", rev) for rev in revs]
     calls = []
-    real_run = anon_git.subprocess.run
+    real_run = subprocess.run
 
     def counting_run(cmd, *args, **kwargs):
         calls.append(cmd)
         return real_run(cmd, *args, **kwargs)
 
-    monkeypatch.setattr(anon_git.subprocess, "run", counting_run)
-    _args, commits = anon_git.parse_args(revs)
+    monkeypatch.setattr(subprocess, "run", counting_run)
+    _args, commits = parse_args(revs)
     assert commits == expected
     assert len(calls) == 1
 

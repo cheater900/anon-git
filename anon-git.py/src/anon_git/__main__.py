@@ -1,3 +1,3 @@
-from anon_git import main
+from anon_git.cli import main
 
 main()

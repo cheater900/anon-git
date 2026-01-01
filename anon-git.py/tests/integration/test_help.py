@@ -1,10 +1,10 @@
-"""--help, --version, and the default-to-help paths."""
+"""--help, --version, --print-completion and the default-to-help paths."""
 
 import re
 
-from conftest import head, run_cli
+from helpers import head, run_cli
 
-import anon_git
+from anon_git.constants import DEFAULT_EMAIL, FLAGS_DROPPED
 
 VERSION_RE = r"^anon-git [0-9]+\.[0-9]+\.[0-9]+\n$"
 
@@ -43,23 +43,11 @@ def test_name_value_not_taken_as_help(repo):
     # `--name --help` sets the name; it must not short-circuit to help.
     result = run_cli("--dry-run", "--name", "--help", "HEAD", env={"PAGER": "cat"})
     assert "Usage:" not in result.stdout
-    assert f"-> --help <{anon_git.DEFAULT_EMAIL}>" in result.stdout
-
-
-def test_help_lists_every_flag():
-    help_text = anon_git.HELP
-    for flag in anon_git.FLAGS:
-        assert flag.rstrip("=") in help_text
-
-
-def test_help_omits_dropped_install_flags():
-    options = anon_git.HELP.split("Options:")[1].split("Arguments:")[0]
-    for flag in anon_git.FLAGS_DROPPED:
-        assert not re.search(rf"^  {flag}\s", options, re.MULTILINE)
+    assert f"-> --help <{DEFAULT_EMAIL}>" in result.stdout
 
 
 def test_dropped_install_flag_points_to_uv(outside_repo):
-    for flag in anon_git.FLAGS_DROPPED:
+    for flag in FLAGS_DROPPED:
         result = run_cli(flag)
         assert result.returncode == 1
         assert "uv tool install" in result.stderr
@@ -79,3 +67,9 @@ def test_dry_run_without_target_shows_help(repo):
     assert result.returncode == 0
     assert "Usage:" in result.stdout
     assert head() == before
+
+
+def test_print_completion_rejects_unknown_shell(outside_repo):
+    result = run_cli("--print-completion", "tcsh")
+    assert result.returncode == 1
+    assert 'unsupported shell "tcsh"' in result.stderr

@@ -1,27 +1,16 @@
-"""Pinned-down edge cases (merges, detached HEAD, odd repos, injection,
-filter-repo cache) and parity with the shell implementation."""
+"""Pinned-down edge cases: merges, detached HEAD, odd repos, injection, filter-repo."""
 
 import os
 import shutil
 import subprocess
 from pathlib import Path
 
+import git_filter_repo as fr
 import pytest
-from conftest import (
-    CLI,
-    REWRITE,
-    commit,
-    commit_author,
-    git,
-    head,
-    new_repo,
-    run_cli,
-    run_cli_without_tty,
-)
+from helpers import CLI, REWRITE, commit_author, git, head, new_repo, run_cli, run_cli_without_tty
 
-import anon_git
-
-SHELL_SCRIPT = Path(__file__).resolve().parents[2] / "anon-git.sh" / "anon-git.sh"
+from anon_git import cli, random_dates
+from anon_git.cli import main, run
 
 
 def merge_side_branch(before_merge=None):
@@ -223,9 +212,9 @@ def test_shell_metacharacters_not_executed(repo, tmp_path, flag, fmt, prefix, su
 def test_filter_repo_failure_reports_log(repo, head_before, monkeypatch, capfd):
     # A commit missing from the random-date table aborts the rewrite with a
     # clear message, not a traceback.
-    monkeypatch.setattr(anon_git, "compute_random_dates", lambda *args, **kwargs: {})
+    monkeypatch.setattr(random_dates, "compute_random_dates", lambda *args, **kwargs: {})
     with pytest.raises(SystemExit) as exc:
-        anon_git.run([*REWRITE, "--random-day", "HEAD"])
+        run([*REWRITE, "--random-day", "HEAD"])
     assert exc.value.code == 1
     stderr = capfd.readouterr().err
     assert "Error: git filter-repo failed:" in stderr
@@ -246,85 +235,13 @@ def test_no_scratch_files_left_behind(repo, tmp_path):
     assert list(scratch.iterdir()) == []
 
 
-# ── parity with anon-git.sh ──────────────────────────────────────────────
-
-PARITY_LOG = "--format=%an%x00%ae%x00%ad%x00%cn%x00%ce%x00%cd%x00%s"
-PARITY_CASES = [
-    ["HEAD"],
-    ["--name", "Ada", "--email", "ada@example.com", "HEAD~2", "HEAD~5"],
-    ["--date", "2020-02-03 04:05:06 -0300", "HEAD~1"],
-    ["--date", "2025-06-15T14:20:00Z", "--keep-user", "HEAD"],
-    ["--keep-date", "--entire-history"],
-    ["--keep-year", "HEAD~3"],
-    ["--keep-month", "--entire-history"],
-    ["--keep-day", "HEAD", "HEAD~4"],
-    ["--strip-timezone", "HEAD~1"],
-    ["--strip-timezone", "--keep-date", "--entire-history"],
-    ["--strip-timezone", "--date", "2025-06-15 14:20:00 +0300", "HEAD"],
-]
-
-
-@pytest.fixture
-def mixed_tz_repo(tmp_path):
-    path = new_repo(tmp_path / "mixed")
-    offsets = ["+0000", "+0530", "-0700", "+0200", "-0330", "+1400"]
-    for i in range(8):
-        commit(
-            f"commit {i}", date=f"{1600000000 + i * 40000} {offsets[i % len(offsets)]}", cwd=path
-        )
-    return path
-
-
-@pytest.mark.skipif(not SHELL_SCRIPT.exists(), reason="anon-git.sh not checked out")
-@pytest.mark.parametrize("args", PARITY_CASES)
-def test_parity_with_shell_implementation(mixed_tz_repo, tmp_path, args):
-    shell_repo = tmp_path / "shell"
-    python_repo = tmp_path / "python"
-    shutil.copytree(mixed_tz_repo, shell_repo)
-    shutil.copytree(mixed_tz_repo, python_repo)
-    shell = subprocess.run(
-        [str(SHELL_SCRIPT), *REWRITE, *args], cwd=shell_repo, capture_output=True, text=True
-    )
-    python = run_cli(*REWRITE, *args, cwd=python_repo)
-    assert shell.returncode == 0, shell.stderr
-    assert python.returncode == 0, python.stderr
-    assert python.stdout == shell.stdout
-    assert git("-C", str(python_repo), "log", PARITY_LOG) == git(
-        "-C", str(shell_repo), "log", PARITY_LOG
-    )
-
-
-@pytest.mark.skipif(not SHELL_SCRIPT.exists(), reason="anon-git.sh not checked out")
-@pytest.mark.parametrize("args", [["--dry-run", "--entire-history"], ["--dry-run", "HEAD~2"]])
-def test_dry_run_preview_parity_with_shell(mixed_tz_repo, args):
-    env = {**os.environ, "PAGER": "cat"}
-    shell = subprocess.run(
-        [str(SHELL_SCRIPT), *args], cwd=mixed_tz_repo, env=env, capture_output=True, text=True
-    )
-    python = run_cli(*args, env={"PAGER": "cat"}, cwd=mixed_tz_repo)
-    assert shell.returncode == 0, shell.stderr
-    assert python.stdout == shell.stdout
-
-
-@pytest.mark.skipif(not SHELL_SCRIPT.exists(), reason="anon-git.sh not checked out")
-def test_help_matches_shell_minus_install_flags():
-    shell = subprocess.run([str(SHELL_SCRIPT), "--help"], capture_output=True, text=True).stdout
-    shell_flags = set(
-        subprocess.run(
-            [str(SHELL_SCRIPT), "--_list-flags"], capture_output=True, text=True
-        ).stdout.split()
-    )
-    assert shell_flags - set(anon_git.FLAGS_DROPPED) == set(anon_git.FLAGS)
-    assert "Usage:" in shell
-
-
 def test_filter_repo_bare_exit_code_not_printed(repo, monkeypatch, capfd):
     def exit_with_code(*_args, **_kwargs):
         raise SystemExit(3)
 
-    monkeypatch.setattr(anon_git.fr.RepoFilter, "run", exit_with_code)
+    monkeypatch.setattr(fr.RepoFilter, "run", exit_with_code)
     with pytest.raises(SystemExit) as exc:
-        anon_git.run([*REWRITE, "HEAD"])
+        run([*REWRITE, "HEAD"])
     assert exc.value.code == 1
     stderr = capfd.readouterr().err
     assert stderr.rstrip().endswith("Error: git filter-repo failed:")
@@ -334,8 +251,8 @@ def test_ctrl_c_reports_interrupt_not_traceback(repo, monkeypatch, capsys):
     def interrupt(_opts):
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(anon_git, "confirm", interrupt)
+    monkeypatch.setattr(cli, "confirm", interrupt)
     with pytest.raises(SystemExit) as exc:
-        anon_git.main(["HEAD"])
+        main(["HEAD"])
     assert exc.value.code == 1
     assert "Interrupted" in capsys.readouterr().err

@@ -8,7 +8,7 @@ requires-python = ">=3.10"
 dependencies = ["git-filter-repo>=2.47"]
 
 [project.scripts]
-anon-git = "anon_git:main"
+anon-git = "anon_git.cli:main"
 
 [dependency-groups]
 dev = ["hypothesis", "pexpect", "pytest", "ruff"]
@@ -22,6 +22,8 @@ packages = ["src/anon_git"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["tests"]
+addopts = ["--import-mode=importlib"]
 
 [tool.ruff]
 line-length = 100

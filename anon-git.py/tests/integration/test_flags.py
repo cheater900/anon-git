@@ -1,12 +1,11 @@
-"""Flags governing how a run behaves: branching, backups, quiet/verbose,
-partial dates, timezone stripping, confirmation."""
+"""Flags governing a run: branching, backups, quiet, partial dates, timezone, prompt."""
 
 import os
 import pty
 import subprocess
 
 import pytest
-from conftest import (
+from helpers import (
     CLI,
     DEFAULT_AUTHOR,
     REWRITE,
@@ -21,7 +20,7 @@ from conftest import (
     run_cli_without_tty,
 )
 
-import anon_git
+from anon_git.constants import DEFAULT_DATE, DEFAULT_EMAIL
 
 
 def branches(pattern):
@@ -141,8 +140,8 @@ def test_strip_timezone_date_keeps_digits_forces_utc(repo):
 def test_strip_timezone_with_other_flag_resets_date(repo):
     result = run_cli(*REWRITE, "--strip-timezone", "--name", "Strip TZ Not Alone", "HEAD")
     assert result.returncode == 0, result.stderr
-    assert commit_author("HEAD") == f"Strip TZ Not Alone <{anon_git.DEFAULT_EMAIL}>"
-    assert git("show", "-s", "--date=iso", "--format=%ad", "HEAD") == anon_git.DEFAULT_DATE
+    assert commit_author("HEAD") == f"Strip TZ Not Alone <{DEFAULT_EMAIL}>"
+    assert git("show", "-s", "--date=iso", "--format=%ad", "HEAD") == DEFAULT_DATE
 
 
 def test_confirmation_n_aborts_y_proceeds(repo, head_before):

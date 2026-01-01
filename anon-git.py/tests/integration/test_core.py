@@ -1,8 +1,7 @@
-"""Rewrites: single target with each identity/date flag mix, multiple
-commits, entire history, dry run."""
+"""Rewrites: identity/date flag mixes, multiple commits, entire history, dry run."""
 
 import pytest
-from conftest import (
+from helpers import (
     COMMIT_COUNT,
     DEFAULT_AUTHOR,
     branch_count,
@@ -16,7 +15,8 @@ from conftest import (
     run_cli,
 )
 
-import anon_git
+from anon_git.constants import DEFAULT_DATE, DEFAULT_EMAIL, DEFAULT_NAME
+from anon_git.utils.dates import parse_target_date
 
 LOG_FORMAT = "--format=%an <%aE> (%ai) %cn <%cE> (%ci)"
 
@@ -62,15 +62,14 @@ def test_rewrite_changes_only_target(repo, args):
         assert (commit_author(target), commit_committer(target)) == old_user
     else:
         expected = (
-            f"{option(args, '--name', anon_git.DEFAULT_NAME)} "
-            f"<{option(args, '--email', anon_git.DEFAULT_EMAIL)}>"
+            f"{option(args, '--name', DEFAULT_NAME)} <{option(args, '--email', DEFAULT_EMAIL)}>"
         )
         assert commit_author(target) == expected
         assert commit_committer(target) == expected
     if "--keep-date" in args:
         assert git("show", "-s", "--format=%ai %ci", target) == old_date
     else:
-        date = anon_git.parse_target_date(option(args, "--date", anon_git.DEFAULT_DATE))
+        date = parse_target_date(option(args, "--date", DEFAULT_DATE))
         expected_date = date.strftime("%Y-%m-%d %H:%M:%S %z")
         assert git("show", "-s", "--format=%ai", target) == expected_date
         assert git("show", "-s", "--format=%ci", target) == expected_date

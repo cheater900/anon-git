@@ -1,16 +1,18 @@
-"""--install-hook / --uninstall-hook: marker guard, core.hooksPath, and the
-generated hook anonymizing each new commit."""
+"""--install-hook / --uninstall-hook and the generated hook."""
 
 import os
 import subprocess
 import sys
 
 import pytest
-from conftest import DEFAULT_AUTHOR, branch_count, commit_author, git, run_cli
+from helpers import DEFAULT_AUTHOR, branch_count, commit_author, git, run_cli
 
-import anon_git
+from anon_git.constants import DEFAULT_DATE, DEFAULT_NAME, HOOK_MARKER
+from anon_git.hooks import install_hook
 
 HOOK_FILE = ".git/hooks/post-commit"
+
+
 FOREIGN_SCRIPT = "#!/bin/sh\necho foreign\n"
 
 
@@ -25,17 +27,17 @@ def read(path):
         return fh.read()
 
 
-def install_hook():
+def run_install_hook():
     result = run_cli("--install-hook")
     assert result.returncode == 0, result.stderr
     return result
 
 
 def test_install_hook_creates_post_commit_hook(repo):
-    install_hook()
+    run_install_hook()
     assert os.access(HOOK_FILE, os.X_OK)
     hook = read(HOOK_FILE)
-    assert anon_git.HOOK_MARKER in hook
+    assert HOOK_MARKER in hook
     assert sys.executable in hook
     # Without --no-backup a backup branch would accumulate per commit.
     assert "--no-backup" in hook
@@ -59,13 +61,13 @@ def test_install_hook_keeps_foreign_hook(repo):
 
 def test_install_hook_uses_core_hooks_path(repo):
     git("config", "--local", "core.hooksPath", ".husky")
-    install_hook()
+    run_install_hook()
     assert os.access(".husky/post-commit", os.X_OK)
     assert not os.path.exists(HOOK_FILE)
 
 
 def test_hook_anonymizes_partial_commit_keeps_changes(repo):
-    install_hook()
+    run_install_hook()
     for name in ("staged.txt", "committed.txt"):
         with open(name, "w") as fh:
             fh.write(f"{name}\n")
@@ -84,44 +86,44 @@ def test_hook_survives_interpreter_path_with_metacharacters(repo, tmp_path, monk
     wrapper = odd_dir / "python"
     wrapper.write_text(f'#!/bin/sh\nexec "{sys.executable}" "$@"\n')
     wrapper.chmod(0o755)
-    monkeypatch.setattr(anon_git.sys, "executable", str(wrapper))
+    monkeypatch.setattr(sys, "executable", str(wrapper))
     with pytest.raises(SystemExit) as exc:
-        anon_git.install_hook()
+        install_hook()
     assert exc.value.code == 0
     git("commit", "-q", "--allow-empty", "-m", "Hooked commit")
-    assert git("show", "-s", "--format=%an", "HEAD") == anon_git.DEFAULT_NAME
+    assert git("show", "-s", "--format=%an", "HEAD") == DEFAULT_NAME
 
 
 def test_hook_skips_rebase(repo):
-    install_hook()
+    run_install_hook()
     result = git("rebase", "-q", "--force-rebase", "HEAD~1")
     assert "Error" not in result
-    assert git("show", "-s", "--format=%an", "HEAD") != anon_git.DEFAULT_NAME
+    assert git("show", "-s", "--format=%an", "HEAD") != DEFAULT_NAME
     assert not os.path.exists(".git/rebase-merge")
 
 
 def test_install_hook_idempotent_over_own_hook(repo):
-    install_hook()
-    install_hook()
+    run_install_hook()
+    run_install_hook()
     assert os.access(HOOK_FILE, os.X_OK)
 
 
 def test_hook_anonymizes_only_new_commit(repo, head_before):
     prior = git("show", "-s", "--pretty=fuller", "--date=iso", "HEAD")
-    install_hook()
+    run_install_hook()
     for i in (21, 22):
         with open(f"file_{i}.txt", "w") as fh:
             fh.write(f"This is file {i}\n")
         git("add", f"file_{i}.txt")
         git("commit", "-q", "-m", f"Add file_{i}.txt")
     assert commit_author("HEAD") == DEFAULT_AUTHOR
-    assert git("show", "-s", "--format=%ai", "HEAD") == anon_git.DEFAULT_DATE
+    assert git("show", "-s", "--format=%ai", "HEAD") == DEFAULT_DATE
     assert git("show", "-s", "--pretty=fuller", "--date=iso", head_before) == prior
     assert branch_count() == 1
 
 
 def test_uninstall_hook_removes_own_hook(repo):
-    install_hook()
+    run_install_hook()
     result = run_cli("--uninstall-hook")
     assert result.returncode == 0, result.stderr
     assert not os.path.exists(HOOK_FILE)
@@ -154,11 +156,11 @@ def test_hook_flags_refuse_symlinked_hook(repo, tmp_path, flag):
     # The link target carries the marker (like a copy of anon-git.sh does);
     # it must still be left alone.
     target = tmp_path / "shared-hook"
-    target.write_text(f"#!/bin/sh\n{anon_git.HOOK_MARKER}\n")
+    target.write_text(f"#!/bin/sh\n{HOOK_MARKER}\n")
     os.symlink(target, HOOK_FILE)
     result = run_cli(flag)
     assert result.returncode == 1
-    assert target.read_text() == f"#!/bin/sh\n{anon_git.HOOK_MARKER}\n"
+    assert target.read_text() == f"#!/bin/sh\n{HOOK_MARKER}\n"
     assert os.path.islink(HOOK_FILE)
 
 
@@ -171,9 +173,9 @@ def test_install_hook_refuses_dangling_symlink(repo, tmp_path):
 
 
 def test_hook_with_missing_install_explains_and_lets_commit_through(repo, monkeypatch):
-    monkeypatch.setattr(anon_git.sys, "executable", "/nonexistent/python")
+    monkeypatch.setattr(sys, "executable", "/nonexistent/python")
     with pytest.raises(SystemExit):
-        anon_git.install_hook()
+        install_hook()
     result = subprocess.run(
         ["git", "commit", "-q", "--allow-empty", "-m", "after uninstall"],
         capture_output=True,

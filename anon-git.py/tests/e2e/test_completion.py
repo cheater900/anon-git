@@ -1,51 +1,17 @@
-"""Shell completion: zsh/fish files list every flag, and TAB really
-completes a flag and a ref in bash, zsh and fish (driven via pexpect)."""
+"""TAB really completes a flag and a ref in bash, zsh and fish (pexpect)."""
 
 import os
-import re
 import shutil
 import sys
-from importlib import resources
 
 import pexpect
 import pytest
-from conftest import git, run_cli
-
-import anon_git
+from helpers import completion_file, git
 
 PROMPT = "COMPLETION_TEST_PROMPT> "
+
+
 REF_MARKER = "anon_git_completion_test_ref"
-
-
-def completion_file(shell):
-    return resources.files("anon_git") / "completions" / anon_git.COMPLETION_FILES[shell]
-
-
-def test_zsh_fish_completions_list_all_flags():
-    # Matched whole, so "date" can't hit "keep-date".
-    zsh = completion_file("zsh").read_text()
-    fish = completion_file("fish").read_text()
-    assert "_list-flags" in completion_file("bash").read_text()
-    for flag in anon_git.FLAGS:
-        name = flag.rstrip("=").lstrip("-")
-        if len(name) <= 1:
-            continue
-        assert re.search(rf"^ *'--{name}=?\[|[{{,]--{name}[,}}]", zsh, re.MULTILINE), name
-        assert re.search(rf"-l {name}( |$)", fish, re.MULTILINE), name
-
-
-def test_completions_omit_dropped_flags():
-    for shell in anon_git.COMPLETION_FILES:
-        text = completion_file(shell).read_text()
-        for flag in anon_git.FLAGS_DROPPED:
-            name = flag.lstrip("-")
-            assert not re.search(rf"'--{name}\[|-l {name} ", text), (shell, flag)
-
-
-def test_print_completion_rejects_unknown_shell(outside_repo):
-    result = run_cli("--print-completion", "tcsh")
-    assert result.returncode == 1
-    assert 'unsupported shell "tcsh"' in result.stderr
 
 
 @pytest.fixture

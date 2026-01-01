@@ -1,11 +1,7 @@
-"""Option resolution: flags > git config anon-git.* > ANON_GIT_* envvars >
-defaults, group ownership and conflicts. Unit tests on the pure functions,
-then end-to-end runs ported from config_priority.bats."""
-
-import itertools
+"""End-to-end priority among flags, git config anon-git.* and ANON_GIT_* envvars."""
 
 import pytest
-from conftest import (
+from helpers import (
     COMMIT_COUNT,
     DEFAULT_AUTHOR,
     REWRITE,
@@ -19,103 +15,12 @@ from conftest import (
     run_cli,
 )
 
-import anon_git
-
-# Every option that decides the date; any two together conflict.
-DATE_OPTIONS = anon_git.GROUP_DATE
-
-
-def sources(arg=None, config=None, env=None):
-    return {"ARG": dict(arg or {}), "GITCONFIG": dict(config or {}), "ANON_GIT": dict(env or {})}
-
-
-def value_for(opt):
-    return "2020-01-01 00:00:00 +0000" if opt == "DATE" else "1"
-
-
-# ── unit: drop_overridden_sources / reject_incompatible_options ──────────
-
-
-@pytest.mark.parametrize("first, second", list(itertools.combinations(DATE_OPTIONS, 2)))
-@pytest.mark.parametrize("source", anon_git.SOURCES)
-def test_two_date_options_same_source_conflict(first, second, source):
-    src = sources()
-    src[source] = {first: value_for(first), second: value_for(second)}
-    errors = anon_git.reject_incompatible_options(anon_git.drop_overridden_sources(src), [])
-    assert len(errors) == 1
-    assert "cannot be used together" in errors[0]
-
-
-@pytest.mark.parametrize("identity", ["NAME", "EMAIL"])
-@pytest.mark.parametrize("source", anon_git.SOURCES)
-def test_keepuser_with_identity_same_source_conflicts(identity, source):
-    src = sources()
-    src[source] = {"KEEPUSER": "1", identity: "x"}
-    errors = anon_git.reject_incompatible_options(anon_git.drop_overridden_sources(src), [])
-    assert errors == [f"Error: --keep-user and --{identity.lower()} cannot be used together"]
-
-
-@pytest.mark.parametrize("high, low", list(itertools.combinations(anon_git.SOURCES, 2)))
-def test_higher_source_owns_date_group(high, low):
-    src = sources()
-    src[high] = {"KEEPDATE": "1"}
-    src[low] = {"DATE": "2020-01-01 00:00:00 +0000"}
-    src = anon_git.drop_overridden_sources(src)
-    assert anon_git.reject_incompatible_options(src, []) == []
-    assert anon_git.merge_args_with_defaults(src)["DATE"] == anon_git.DEFAULT_DATE
-
-
-def test_bool_zero_does_not_own_group():
-    src = anon_git.drop_overridden_sources(sources(config={"KEEPUSER": "0"}, env={"NAME": "Env"}))
-    assert anon_git.merge_args_with_defaults(src)["NAME"] == "Env"
-
-
-def test_quiet_verbose_flags_conflict():
-    errors = anon_git.reject_incompatible_options(sources(arg={"QUIET": "1", "VERBOSE": "1"}), [])
-    assert errors == ["Error: --quiet and --verbose cannot be used together"]
-
-
-def test_verbose_beats_quiet_config_and_env():
-    src = sources(arg={"VERBOSE": "1"}, config={"QUIET": "1"}, env={"QUIET": "1"})
-    assert anon_git.reject_incompatible_options(src, []) == []
-    assert anon_git.merge_args_with_defaults(src)["QUIET"] == "0"
-
-
-def test_entire_history_env_with_commit_conflicts():
-    errors = anon_git.reject_incompatible_options(sources(env={"ENTIREHISTORY": "1"}), ["abc"])
-    assert errors == ["Error: commit(s) argument and --entire-history cannot be used together"]
-
-
-def test_merge_priority_flag_config_env_default():
-    src = sources(
-        arg={"NAME": "Flag"}, config={"NAME": "Config", "EMAIL": "c@x"}, env={"DATE": "d"}
-    )
-    resolved = anon_git.merge_args_with_defaults(src)
-    assert (resolved["NAME"], resolved["EMAIL"], resolved["DATE"]) == ("Flag", "c@x", "d")
-    assert resolved["KEEPUSER"] == "0"
-
-
-def test_strip_timezone_alone_keeps_user_and_date():
-    resolved = anon_git.merge_args_with_defaults(sources())
-    out = anon_git.apply_strip_timezone_alone({"STRIPTIMEZONE": "1", "NOCONFIRM": "1"}, resolved)
-    assert (out["KEEPUSER"], out["KEEPDATE"]) == ("1", "1")
-
-
-@pytest.mark.parametrize("opt", anon_git.GROUP_IDENTITY + anon_git.GROUP_DATE)
-def test_strip_timezone_with_other_flag_keeps_precedence(opt):
-    resolved = anon_git.merge_args_with_defaults(sources())
-    out = anon_git.apply_strip_timezone_alone({"STRIPTIMEZONE": "1", opt: "x"}, resolved)
-    assert out == resolved
-
 
 def test_invalid_bool_envvar_fails(repo, head_before):
     result = run_cli(*REWRITE, "HEAD", env={"ANON_GIT_KEEPUSER": "yes"})
     assert result.returncode == 1
     assert 'must resolve to "0" or "1"' in result.stderr
     assert head() == head_before
-
-
-# ── end to end ───────────────────────────────────────────────────────────
 
 
 def test_dry_run_entire_history_previews_all(repo, head_before):
