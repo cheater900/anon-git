@@ -28,4 +28,6 @@ complete -c anon-git.sh -l current-branch -d 'Overwrite current branch instead o
 complete -c anon-git.sh -l entire-history -d 'Rewrite entire history and not a single commit'
 complete -c anon-git.sh -l dry-run -d 'Show history changes without rewriting it'
 complete -c anon-git.sh -l print-completion -x -a 'bash zsh fish' -d 'Print a shell completion script and exit'
+complete -c anon-git.sh -l install -d 'Copy this script to ~/.local/bin and/or ~/.bin, whichever exist'
+complete -c anon-git.sh -l install-system -d 'Copy this script system-wide to /usr/bin via sudo'
 complete -c anon-git.sh -a '(__anon_git_commits)' -d 'commit'

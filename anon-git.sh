@@ -36,6 +36,9 @@ Options:
   --dry-run                       Show history changes without rewriting it
   --print-completion [SHELL]      Print a shell completion script (bash, zsh, or fish;
                                    defaults to \$SHELL) and exit
+  --install                        Copy this script to ~/.local/bin and/or ~/.bin
+                                   (whichever exist) and warn if neither is on \$PATH
+  --install-system                 Copy this script system-wide to /usr/bin (via sudo)
 
 Arguments:
   commit(s)               Commit(s) to anonymize (can be: hash, HEAD~3, branch, tag, ...)
@@ -84,6 +87,12 @@ Examples:
     ./anon-git.sh --print-completion bash > ~/.local/share/bash-completion/completions/anon-git.sh
     ./anon-git.sh --print-completion zsh  > "\${fpath[1]}/_anon-git.sh"
     ./anon-git.sh --print-completion fish > ~/.config/fish/completions/anon-git.sh.fish
+
+    # Install this script to ~/.local/bin and/or ~/.bin (whichever exist)
+    ./anon-git.sh --install
+
+    # Install this script system-wide to /usr/bin (requires sudo)
+    ./anon-git.sh --install-system
 EOF
     exit 0
 }
@@ -109,6 +118,8 @@ list_flags() {
 --entire-history
 --dry-run
 --print-completion=
+--install
+--install-system
 EOF
     exit 0
 }
@@ -142,6 +153,96 @@ print_completion() {
     exit 0
 }
 
+# Internal: absolute path to this script itself, so the install functions
+# below can copy it regardless of the relative path (./anon-git.sh, a
+# $PATH lookup, ...) it was invoked with.
+script_path() {
+    local script_dir
+    script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")" && pwd)
+    printf '%s/%s\n' "$script_dir" "$(basename -- "${BASH_SOURCE[0]:-$0}")"
+}
+
+# Internal: copies $1 (this script) to $2/anon-git, then warns if $2 is
+# not on $PATH. Prints what it did/failed and returns non-zero on failure
+# instead of exiting, so install_user can attempt every candidate directory.
+install_copy() {
+    local src="$1" dir="$2" target="${2}/anon-git"
+
+    if [[ "$target" -ef "$src" ]]; then
+        printf 'Already installed: %s\n' "$target"
+        return 0
+    fi
+
+    if ! cp -- "$src" "$target"; then
+        printf 'Error: failed to copy to %s\n' "$target" >&2
+        return 1
+    fi
+    chmod +x "$target"
+    printf 'Installed: %s\n' "$target"
+
+    case ":${PATH}:" in
+    *":${dir}:"*) ;;
+    *)
+        printf "Warning: %s is not in your \$PATH.\n" "$dir" >&2
+        printf "  Add it, e.g.: export PATH=\"%s:\$PATH\"\n" "$dir" >&2
+        ;;
+    esac
+
+    return 0
+}
+
+# --install: copies this script to ~/.local/bin and/or ~/.bin, whichever of
+# the two already exist (neither is created), and warns per-directory if it
+# isn't on $PATH.
+install_user() {
+    local src candidates=("${HOME}/.local/bin" "${HOME}/.bin") dir found=0 failures=0
+
+    src=$(script_path)
+
+    for dir in "${candidates[@]}"; do
+        if [[ -d "$dir" ]]; then
+            found=1
+            install_copy "$src" "$dir" || failures=$((failures + 1))
+        fi
+    done
+
+    if [[ "$found" -eq 0 ]]; then
+        printf 'Error: neither %s nor %s exist. Create one (e.g. mkdir -p %s) and re-run --install.\n' \
+            "${candidates[0]}" "${candidates[1]}" "${candidates[0]}" >&2
+        exit 1
+    fi
+
+    [[ "$failures" -eq 0 ]] && exit 0
+    exit 1
+}
+
+# --install-system: copies this script to /usr/bin via sudo, for a
+# system-wide install available to every user/shell.
+install_system() {
+    local src target='/usr/bin/anon-git'
+
+    src=$(script_path)
+
+    if [[ "$target" -ef "$src" ]]; then
+        printf 'Already installed: %s\n' "$target"
+        exit 0
+    fi
+
+    if ! command -v sudo >/dev/null 2>&1; then
+        printf 'Error: sudo not found; cannot perform a system-wide install.\n' >&2
+        exit 1
+    fi
+
+    printf 'Installing to %s (requires sudo)...\n' "$target"
+    if ! sudo cp -- "$src" "$target"; then
+        printf 'Error: failed to copy to %s\n' "$target" >&2
+        exit 1
+    fi
+    sudo chmod 755 "$target"
+    printf 'Installed: %s\n' "$target"
+    exit 0
+}
+
 [[ $# -eq 0 ]] && show_help
 
 args=("$@")
@@ -150,6 +251,8 @@ for ((i = 0; i < ${#args[@]}; i++)); do
     -h | --help) show_help ;;
     --_list-flags) list_flags ;;
     --print-completion) print_completion "${args[i + 1]:-}" ;;
+    --install) install_user ;;
+    --install-system) install_system ;;
     esac
 done
 

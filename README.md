@@ -85,7 +85,8 @@ pip install git-filter-repo
 
 This repository contains a script called `anon-git.sh`, which relies upon `git
 filter-repo`. Download it or copy-paste into a file. Execute it from inside
-a git repository either directly `./anon-git.sh` or from your `$PATH`.
+a git repository either directly `./anon-git.sh` or from your `$PATH` (see
+[Installing anon-git.sh](#installing-anon-gitsh) to put it on your `$PATH`).
 
 **For safety, the script creates a backup branch before rewriting history.**
 
@@ -117,6 +118,9 @@ required — pass `HEAD` explicitly to anonymize the last commit.
   --dry-run                       Show history changes without rewriting them
   --print-completion [SHELL]      Print a shell completion script (bash, zsh, or fish;
                                    defaults to $SHELL) and exit
+  --install                        Copy this script to ~/.local/bin and/or ~/.bin
+                                   (whichever exist) and warn if neither is on $PATH
+  --install-system                 Copy this script system-wide to /usr/bin (via sudo)
 ```
 
 **Priority order** (highest to lowest):
@@ -177,6 +181,26 @@ git log --format=%H --author='Frederic' | xargs ./anon-git.sh
 # Anonymize commits following the Conventional Commits "fix:" prefix
 git log --format=%H --grep='^fix:' | xargs ./anon-git.sh
 ```
+
+### Installing anon-git.sh
+
+Instead of running `./anon-git.sh` from a local checkout, you can copy it onto your `$PATH`:
+
+```bash
+# Copy to ~/.local/bin and/or ~/.bin, whichever of the two already exist
+# (neither is created for you). Warns if the directory it copied to isn't
+# on $PATH.
+./anon-git.sh --install
+
+# System-wide install to /usr/bin, via sudo
+./anon-git.sh --install-system
+```
+
+> [!NOTE]
+> `--install` only copies into `~/.local/bin` and/or `~/.bin` if they already
+> exist; if neither does, create one first (e.g. `mkdir -p ~/.local/bin`) and
+> re-run it. `--install-system` requires `sudo` and is not covered by the test
+> suite (it isn't run as root, and isn't mocked either), so verify it manually.
 
 ### Shell completion
 
@@ -276,3 +300,5 @@ Now every `git commit` automatically triggers anonymization of that commit's aut
 Spins up a disposable git repository in `/tmp`, runs the script against it through a range of flags and edge cases (defaults, `--keep-*`, `--dry-run`, `--entire-history`, `--current-branch`, invalid input, incompatible flags, the uncommitted-changes guard, ...), and prints a pass/fail summary. It cleans up the temp repo on exit.
 
 `tests/test-manually.sh` instead just creates a disposable repo with sample commits and drops you into it, for manual/interactive poking at the script.
+
+`--install` is covered (with `$HOME` pointed at a disposable directory, so it never touches your real `~/.local/bin` or `~/.bin`). `--install-system` is not: it needs `sudo` and a real `/usr/bin`, and the suite intentionally doesn't run as root or mock it — verify it manually.

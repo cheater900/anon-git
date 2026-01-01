@@ -220,7 +220,7 @@ test_python_callback_syntax() {
     check_file="${TMP_DIR}/python_commit_callback_check.py"
     {
         printf 'def _commit_callback(commit, metadata):\n'
-        sed 's/^/    /' <<<"$python_code"
+        printf '%s\n' "    ${python_code//$'\n'/$'\n    '}"
     } >"$check_file"
 
     output=$(python3 -m py_compile "$check_file" 2>&1)
@@ -368,7 +368,7 @@ test_combo_dry_run_entire_history() {
     local before after output exit_status preview_count errors=0
 
     before=$(git rev-parse HEAD)
-    output=$(PAGER=cat ./${SCRIPT_NAME} --dry-run --entire-history 2>&1)
+    output=$(PAGER="cat" ./${SCRIPT_NAME} --dry-run --entire-history 2>&1)
     exit_status=$?
     after=$(git rev-parse HEAD)
     preview_count=$(grep -c '^Commit:' <<<"$output")
@@ -450,7 +450,7 @@ test_flag_dry_run() {
     local before after output exit_status errors=0
 
     before=$(git rev-parse HEAD)
-    output=$(PAGER=cat ./${SCRIPT_NAME} --dry-run HEAD 2>&1)
+    output=$(PAGER="cat" ./${SCRIPT_NAME} --dry-run HEAD 2>&1)
     exit_status=$?
     after=$(git rev-parse HEAD)
 
@@ -500,6 +500,188 @@ test_flag_env_vars() {
     fi
 
     record_result "$errors" 'ANON_GIT_* envvars overwrite defaults'
+}
+
+test_flag_install_local_bin() {
+    # --install must copy the running script into ~/.local/bin when it
+    # exists, mark it executable, and warn (on stderr) if that directory
+    # isn't on $PATH. Uses a disposable $HOME so this never touches the
+    # real ~/.local/bin. --install-system is intentionally not tested here:
+    # it needs sudo and a real /usr/bin, and we don't want to run as root
+    # or mock it.
+    local fake_home target output exit_status errors=0
+
+    fake_home=$(mktemp -d "${TMP_DIR}/fake_home.XXXXXX")
+    mkdir -p "${fake_home}/.local/bin"
+    target="${fake_home}/.local/bin/anon-git"
+
+    output=$(HOME="$fake_home" PATH="/usr/bin:/bin" ./${SCRIPT_NAME} --install 2>&1)
+    exit_status=$?
+
+    if [[ "$exit_status" -ne 0 ]]; then
+        printf 'Error: --install exited with status %s\n' "$exit_status"
+        errors=$((errors + 1))
+    fi
+    if [[ ! -x "$target" ]]; then
+        printf 'Error: %s was not created or is not executable\n' "$target"
+        errors=$((errors + 1))
+    fi
+    if ! cmp -s "$target" "./${SCRIPT_NAME}"; then
+        printf 'Error: installed copy at %s does not match the source script\n' "$target"
+        errors=$((errors + 1))
+    fi
+    if ! grep -qi "not in your \$PATH" <<<"$output"; then
+        printf "Error: expected a \$PATH warning when %s/.local/bin is not on \$PATH\n" "$fake_home"
+        errors=$((errors + 1))
+    fi
+
+    rm -rf "$fake_home"
+
+    record_result "$errors" 'flag --install copies to ~/.local/bin'
+}
+
+test_flag_install_bin_fallback() {
+    # Falls back to ~/.bin when ~/.local/bin doesn't exist.
+    local fake_home target exit_status errors=0
+
+    fake_home=$(mktemp -d "${TMP_DIR}/fake_home.XXXXXX")
+    mkdir -p "${fake_home}/.bin"
+    target="${fake_home}/.bin/anon-git"
+
+    HOME="$fake_home" PATH="/usr/bin:/bin" ./${SCRIPT_NAME} --install >/dev/null 2>&1
+    exit_status=$?
+
+    if [[ "$exit_status" -ne 0 ]]; then
+        printf 'Error: --install exited with status %s\n' "$exit_status"
+        errors=$((errors + 1))
+    fi
+    if [[ ! -x "$target" ]]; then
+        printf 'Error: %s was not created or is not executable\n' "$target"
+        errors=$((errors + 1))
+    fi
+    if [[ -e "${fake_home}/.local/bin" ]]; then
+        printf 'Error: --install created ~/.local/bin even though it did not exist\n'
+        errors=$((errors + 1))
+    fi
+
+    rm -rf "$fake_home"
+
+    record_result "$errors" 'flag --install falls back to ~/.bin'
+}
+
+test_flag_install_both_dirs() {
+    # Copies to both ~/.local/bin and ~/.bin when both exist.
+    local fake_home local_target bin_target exit_status errors=0
+
+    fake_home=$(mktemp -d "${TMP_DIR}/fake_home.XXXXXX")
+    mkdir -p "${fake_home}/.local/bin" "${fake_home}/.bin"
+    local_target="${fake_home}/.local/bin/anon-git"
+    bin_target="${fake_home}/.bin/anon-git"
+
+    HOME="$fake_home" PATH="/usr/bin:/bin" ./${SCRIPT_NAME} --install >/dev/null 2>&1
+    exit_status=$?
+
+    if [[ "$exit_status" -ne 0 ]]; then
+        printf 'Error: --install exited with status %s\n' "$exit_status"
+        errors=$((errors + 1))
+    fi
+    if [[ ! -x "$local_target" ]]; then
+        printf 'Error: %s was not created\n' "$local_target"
+        errors=$((errors + 1))
+    fi
+    if [[ ! -x "$bin_target" ]]; then
+        printf 'Error: %s was not created\n' "$bin_target"
+        errors=$((errors + 1))
+    fi
+
+    rm -rf "$fake_home"
+
+    record_result "$errors" 'flag --install copies to both ~/.local/bin and ~/.bin when both exist'
+}
+
+test_flag_install_path_already_set() {
+    # No $PATH warning when the target directory is already on $PATH.
+    local fake_home output exit_status errors=0
+
+    fake_home=$(mktemp -d "${TMP_DIR}/fake_home.XXXXXX")
+    mkdir -p "${fake_home}/.local/bin"
+
+    output=$(HOME="$fake_home" PATH="${fake_home}/.local/bin:/usr/bin:/bin" ./${SCRIPT_NAME} --install 2>&1)
+    exit_status=$?
+
+    if [[ "$exit_status" -ne 0 ]]; then
+        printf 'Error: --install exited with status %s\n' "$exit_status"
+        errors=$((errors + 1))
+    fi
+    if grep -qi "not in your \$PATH" <<<"$output"; then
+        printf "Error: unexpected \$PATH warning when the directory is already on \$PATH\n"
+        errors=$((errors + 1))
+    fi
+
+    rm -rf "$fake_home"
+
+    record_result "$errors" "flag --install skips the \$PATH warning when already on \$PATH"
+}
+
+test_flag_install_no_target_dir() {
+    # Neither ~/.local/bin nor ~/.bin exists: --install must fail cleanly
+    # without creating either directory.
+    local fake_home output exit_status errors=0
+
+    fake_home=$(mktemp -d "${TMP_DIR}/fake_home.XXXXXX")
+
+    output=$(HOME="$fake_home" PATH="/usr/bin:/bin" ./${SCRIPT_NAME} --install 2>&1)
+    exit_status=$?
+
+    if [[ "$exit_status" -eq 0 ]]; then
+        printf 'Error: --install with no target directory did not fail as expected\n'
+        errors=$((errors + 1))
+    fi
+    if [[ -e "${fake_home}/.local/bin" || -e "${fake_home}/.bin" ]]; then
+        printf 'Error: --install created a directory that did not previously exist\n'
+        errors=$((errors + 1))
+    fi
+    if ! grep -qi 'neither' <<<"$output"; then
+        printf 'Error: expected an explanatory error message when no target directory exists\n'
+        errors=$((errors + 1))
+    fi
+
+    rm -rf "$fake_home"
+
+    record_result "$errors" 'flag --install fails cleanly when neither target directory exists'
+}
+
+test_flag_install_idempotent() {
+    # Running --install again from the just-installed copy (same path, same
+    # inode) should report "Already installed" rather than overwrite it and
+    # re-warn about $PATH.
+    local fake_home target first_exit second_output second_exit errors=0
+
+    fake_home=$(mktemp -d "${TMP_DIR}/fake_home.XXXXXX")
+    mkdir -p "${fake_home}/.local/bin"
+    target="${fake_home}/.local/bin/anon-git"
+
+    HOME="$fake_home" PATH="/usr/bin:/bin" ./${SCRIPT_NAME} --install >/dev/null 2>&1
+    first_exit=$?
+    second_output=$(HOME="$fake_home" PATH="/usr/bin:/bin" "$target" --install 2>&1)
+    second_exit=$?
+
+    if [[ "$first_exit" -ne 0 ]]; then
+        printf 'Error: initial --install exited with status %s\n' "$first_exit"
+        errors=$((errors + 1))
+    fi
+    if [[ "$second_exit" -ne 0 ]]; then
+        printf 'Error: re-running --install from the installed copy exited with status %s\n' "$second_exit"
+        errors=$((errors + 1))
+    fi
+    if ! grep -qi 'already installed' <<<"$second_output"; then
+        printf 'Error: re-running --install from the installed copy did not report "Already installed"\n'
+        errors=$((errors + 1))
+    fi
+
+    rm -rf "$fake_home"
+
+    record_result "$errors" 'flag --install is idempotent when re-run from the installed copy'
 }
 
 test_show_help() {
@@ -817,7 +999,7 @@ test_match_dry_run_without_target_shows_help() {
     local before after output exit_status errors=0
 
     before=$(git rev-parse HEAD)
-    output=$(PAGER=cat ./${SCRIPT_NAME} --dry-run 2>&1)
+    output=$(PAGER="cat" ./${SCRIPT_NAME} --dry-run 2>&1)
     exit_status=$?
     after=$(git rev-parse HEAD)
 
@@ -1034,6 +1216,12 @@ main() {
     test_flag_current_branch_backup
     test_flag_dry_run
     test_flag_env_vars
+    test_flag_install_local_bin
+    test_flag_install_bin_fallback
+    test_flag_install_both_dirs
+    test_flag_install_path_already_set
+    test_flag_install_no_target_dir
+    test_flag_install_idempotent
     test_show_help
     test_show_help_inside_dirty_repo
     test_flag_keep_partial --keep-year

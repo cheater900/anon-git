@@ -5,6 +5,12 @@ TEST_COMPLETION_SCRIPT := "tests/test-anon-git-completion.sh"
 default:
     @just --list
 
+all:
+    just lint
+    just format
+    just test
+    just test-completion
+
 # Run the test suite
 test:
     ./{{TEST_SCRIPT}}
