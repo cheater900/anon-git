@@ -502,6 +502,95 @@ test_flag_env_vars() {
     record_result "$errors" 'ANON_GIT_* envvars overwrite defaults'
 }
 
+test_flag_env_var_entirehistory() {
+    # ANON_GIT_ENTIREHISTORY=1 must behave like --entire-history even
+    # without the flag (isolates the env-var path from the flag path
+    # already covered by test_entire_history).
+    local exit_status mismatches errors=0
+
+    ANON_GIT_ENTIREHISTORY=1 ./${SCRIPT_NAME} --no-confirm --no-backup --current-branch >/dev/null 2>&1
+    exit_status=$?
+
+    mismatches=$(git log --format='%an <%ae>' | grep --invert-match --count "^${DEFAULT_NAME} <${DEFAULT_EMAIL}>\$")
+
+    if [[ "$exit_status" -ne 0 ]]; then
+        printf 'Error: ANON_GIT_ENTIREHISTORY=1 run exited with status %s\n' "$exit_status"
+        errors=$((errors + 1))
+    fi
+    if [[ "$mismatches" -ne 0 ]]; then
+        printf 'Error: ANON_GIT_ENTIREHISTORY=1 left %s commit(s) with a non-default author\n' "$mismatches"
+        errors=$((errors + 1))
+    fi
+
+    record_result "$errors" 'ANON_GIT_ENTIREHISTORY=1 rewrites entire history without the flag'
+}
+
+test_flag_env_var_currentbranch() {
+    # ANON_GIT_CURRENTBRANCH=1 must rewrite HEAD in place (like
+    # --current-branch) instead of creating a new branch.
+    local before_head after_head branch_before branch_after exit_status errors=0
+
+    before_head=$(git rev-parse HEAD)
+    branch_before=$(git branch --show-current)
+
+    ANON_GIT_CURRENTBRANCH=1 ./${SCRIPT_NAME} --no-confirm --no-backup --name 'Barbara Liskov' HEAD >/dev/null 2>&1
+    exit_status=$?
+
+    after_head=$(git rev-parse HEAD)
+    branch_after=$(git branch --show-current)
+
+    if [[ "$exit_status" -ne 0 ]]; then
+        printf 'Error: ANON_GIT_CURRENTBRANCH=1 run exited with status %s\n' "$exit_status"
+        errors=$((errors + 1))
+    fi
+    if [[ "$after_head" == "$before_head" ]]; then
+        printf 'Error: ANON_GIT_CURRENTBRANCH=1 did not rewrite HEAD\n'
+        errors=$((errors + 1))
+    fi
+    if [[ "$branch_after" != "$branch_before" ]]; then
+        printf 'Error: ANON_GIT_CURRENTBRANCH=1 switched to a new branch instead of rewriting in place\n'
+        errors=$((errors + 1))
+    fi
+
+    record_result "$errors" 'ANON_GIT_CURRENTBRANCH=1 rewrites in place without the flag'
+}
+
+test_flag_env_var_dryrun() {
+    # ANON_GIT_DRYRUN=1 must behave like --dry-run: preview only, no branch
+    # created, HEAD untouched. Regression test: the resolve-args line for
+    # ANON_GIT_DRYRUN previously only considered the --dry-run flag or the
+    # hardcoded default, silently ignoring the environment variable.
+    local before after branches_before branches_after output exit_status errors=0
+
+    before=$(git rev-parse HEAD)
+    branches_before=$(git branch --format='%(refname:short)' | sort)
+
+    output=$(PAGER="cat" ANON_GIT_DRYRUN=1 ./${SCRIPT_NAME} HEAD 2>&1)
+    exit_status=$?
+
+    after=$(git rev-parse HEAD)
+    branches_after=$(git branch --format='%(refname:short)' | sort)
+
+    if [[ "$exit_status" -ne 0 ]]; then
+        printf 'Error: ANON_GIT_DRYRUN=1 run exited with status %s\n' "$exit_status"
+        errors=$((errors + 1))
+    fi
+    if [[ "$before" != "$after" ]]; then
+        printf 'Error: ANON_GIT_DRYRUN=1 modified HEAD\n'
+        errors=$((errors + 1))
+    fi
+    if [[ "$branches_before" != "$branches_after" ]]; then
+        printf 'Error: ANON_GIT_DRYRUN=1 created a new branch instead of only previewing\n'
+        errors=$((errors + 1))
+    fi
+    if ! grep -q 'AuthorDate:' <<<"$output"; then
+        printf 'Error: ANON_GIT_DRYRUN=1 output missing expected preview content\n'
+        errors=$((errors + 1))
+    fi
+
+    record_result "$errors" 'ANON_GIT_DRYRUN=1 previews without rewriting, without the flag'
+}
+
 test_flag_install_local_bin() {
     # --install must copy the running script into ~/.local/bin when it
     # exists, mark it executable, and warn (on stderr) if that directory
@@ -1400,6 +1489,9 @@ main() {
     test_flag_current_branch_backup
     test_flag_dry_run
     test_flag_env_vars
+    test_flag_env_var_entirehistory
+    test_flag_env_var_currentbranch
+    test_flag_env_var_dryrun
     test_flag_install_local_bin
     test_flag_install_bin_fallback
     test_flag_install_both_dirs
