@@ -1126,6 +1126,9 @@ python_compute_random_dates="
 import os
 import random
 import sys
+
+# OS entropy: Mersenne Twister output is recoverable from enough samples.
+rng = random.SystemRandom()
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
@@ -1223,9 +1226,9 @@ for key, members in buckets.items():
             # timestamp -- git allows identical author dates.
             picks = [lower] * count
         elif count <= span + 1:
-            picks = sorted(random.sample(range(lower, upper + 1), count))
+            picks = sorted(rng.sample(range(lower, upper + 1), count))
         else:
-            picks = sorted(random.randint(lower, upper) for _ in range(count))
+            picks = sorted(rng.randint(lower, upper) for _ in range(count))
         for (_original_epoch, member_hash, _role), new_epoch in zip(run, picks):
             print('%s %d +0000' % (member_hash, new_epoch))
 "
