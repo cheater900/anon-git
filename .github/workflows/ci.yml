@@ -7,7 +7,11 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -18,16 +22,30 @@ jobs:
           echo "$HOME/.local/bin" >>"$GITHUB_PATH"
 
       - name: Install git-filter-repo
-        run: pip install --user git-filter-repo
+        run: python3 -m pip install --user git-filter-repo
 
-      - name: Install expect (shell-completion tests)
+      - name: Install expect (Linux, shell-completion tests)
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y expect
+
+      - name: Install expect (macOS, shell-completion tests)
+        if: runner.os == 'macOS'
+        run: brew install expect
 
       - name: Install shfmt
         env:
           SHFMT_VERSION: v3.13.1
         run: |
-          curl -fsSL "https://github.com/mvdan/sh/releases/download/${SHFMT_VERSION}/shfmt_${SHFMT_VERSION}_linux_amd64" -o "$HOME/.local/bin/shfmt"
+          # Resolve the release asset for whichever OS/arch this job is
+          # running on (macos-latest runners are arm64; ubuntu-latest is
+          # amd64), instead of hardcoding a single linux_amd64 binary.
+          os=$(uname -s | tr '[:upper:]' '[:lower:]')
+          arch=$(uname -m)
+          case "$arch" in
+          x86_64) arch=amd64 ;;
+          aarch64 | arm64) arch=arm64 ;;
+          esac
+          curl -fsSL "https://github.com/mvdan/sh/releases/download/${SHFMT_VERSION}/shfmt_${SHFMT_VERSION}_${os}_${arch}" -o "$HOME/.local/bin/shfmt"
           chmod +x "$HOME/.local/bin/shfmt"
 
       - name: Install just
