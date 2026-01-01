@@ -16,6 +16,10 @@ COMMIT_COUNT=20
 TEST_USER_NAME='Jordan Blake'
 TEST_USER_EMAIL='jordan.blake@example.com'
 
+# The user's own ANON_GIT_*, pager or global git config must not leak in.
+unset PAGER "${!ANON_GIT_@}"
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+
 setup() {
     REPO=${BATS_TEST_TMPDIR}/repo
     cp -a "$REPO_TEMPLATE" "$REPO"

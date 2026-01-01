@@ -2,6 +2,10 @@
 
 Derived from git history, newest first.
 
+## 2026-11-04
+
+- test(sh): isolate tests from user's git config, ANON_GIT_*, PAGER
+
 ## 2026-11-02
 
 - docs(py): move CONTRIBUTING to docs/DEVELOPMENT, add KNOWN_ISSUES
