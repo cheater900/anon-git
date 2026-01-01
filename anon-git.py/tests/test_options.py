@@ -7,19 +7,19 @@ import itertools
 import pytest
 from conftest import (
     COMMIT_COUNT,
+    DEFAULT_AUTHOR,
+    REWRITE,
     branch_count,
     commit_author,
     git,
     head,
     history_authors,
     pick_random_index,
+    preview_count,
     run_cli,
 )
 
 import anon_git
-
-DEFAULT_AUTHOR = f"{anon_git.DEFAULT_NAME} <{anon_git.DEFAULT_EMAIL}>"
-REWRITE = ("--no-confirm", "--no-backup", "--current-branch")
 
 # Every option that decides the date; any two together conflict.
 DATE_OPTIONS = anon_git.GROUP_DATE
@@ -116,10 +116,6 @@ def test_invalid_bool_envvar_fails(repo, head_before):
 
 
 # ── end to end ───────────────────────────────────────────────────────────
-
-
-def preview_count(output):
-    return sum(line.startswith("Commit:") for line in output.splitlines())
 
 
 def test_dry_run_entire_history_previews_all(repo, head_before):

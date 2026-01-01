@@ -4,15 +4,23 @@ filter-repo cache) and parity with the shell implementation."""
 import os
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
-from conftest import commit, commit_author, git, head, new_repo, run_cli
+from conftest import (
+    CLI,
+    REWRITE,
+    commit,
+    commit_author,
+    git,
+    head,
+    new_repo,
+    run_cli,
+    run_cli_without_tty,
+)
 
 import anon_git
 
-REWRITE = ("--no-confirm", "--no-backup", "--current-branch")
 SHELL_SCRIPT = Path(__file__).resolve().parents[2] / "anon-git.sh" / "anon-git.sh"
 
 
@@ -46,13 +54,7 @@ def test_detached_head_check_runs_before_confirmation(repo, head_before):
     # No terminal and no --no-confirm: the detached-HEAD error must win over
     # the prompt, so nothing waits for a "y" that can't be acted on.
     git("checkout", "-q", "--detach", "HEAD")
-    result = subprocess.run(
-        [sys.executable, "-m", "anon_git", "--current-branch", "HEAD"],
-        stdin=subprocess.DEVNULL,
-        capture_output=True,
-        text=True,
-        start_new_session=True,
-    )
+    result = run_cli_without_tty("--current-branch", "HEAD")
     assert result.returncode == 1
     assert "HEAD is detached" in result.stderr
     assert head() == head_before
@@ -116,9 +118,7 @@ def test_bare_repo_fails_with_work_tree_message(repo, tmp_path):
 
 def test_unset_home_keeps_startup_working(outside_repo):
     env = {k: v for k, v in os.environ.items() if k != "HOME"}
-    result = subprocess.run(
-        [sys.executable, "-m", "anon_git", "--version"], env=env, capture_output=True
-    )
+    result = subprocess.run([*CLI, "--version"], env=env, capture_output=True)
     assert result.returncode == 0
 
 

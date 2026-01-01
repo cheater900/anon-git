@@ -6,11 +6,10 @@ import subprocess
 import sys
 
 import pytest
-from conftest import branch_count, commit_author, git, run_cli
+from conftest import DEFAULT_AUTHOR, branch_count, commit_author, git, run_cli
 
 import anon_git
 
-DEFAULT_AUTHOR = f"{anon_git.DEFAULT_NAME} <{anon_git.DEFAULT_EMAIL}>"
 HOOK_FILE = ".git/hooks/post-commit"
 FOREIGN_SCRIPT = "#!/bin/sh\necho foreign\n"
 

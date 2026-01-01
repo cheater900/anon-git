@@ -9,9 +9,15 @@ import sys
 
 import pytest
 
+import anon_git
+
 COMMIT_COUNT = 20
 TEST_USER_NAME = "Jordan Blake"
 TEST_USER_EMAIL = "jordan.blake@example.com"
+DEFAULT_AUTHOR = f"{anon_git.DEFAULT_NAME} <{anon_git.DEFAULT_EMAIL}>"
+CLI = [sys.executable, "-m", "anon_git"]
+# Rewrite the current branch in place: no prompt, no backup branch.
+REWRITE = ("--no-confirm", "--no-backup", "--current-branch")
 
 
 def git(*args, cwd=None, env=None):
@@ -39,13 +45,28 @@ def run_cli(*args, env=None, input=None, cwd=None):
     """Runs anon-git in a subprocess, like a user would."""
     full_env = {**os.environ, **(env or {})}
     return subprocess.run(
-        [sys.executable, "-m", "anon_git", *args],
+        [*CLI, *args],
         cwd=cwd,
         env=full_env,
         input=input,
         capture_output=True,
         text=True,
     )
+
+
+def run_cli_without_tty(*args):
+    """New session: no controlling terminal, so /dev/tty can't be opened."""
+    return subprocess.run(
+        [*CLI, *args],
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        start_new_session=True,
+    )
+
+
+def preview_count(output):
+    return sum(line.startswith("Commit:") for line in output.splitlines())
 
 
 def commit_author(rev):

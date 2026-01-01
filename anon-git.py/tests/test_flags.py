@@ -4,10 +4,12 @@ partial dates, timezone stripping, confirmation."""
 import os
 import pty
 import subprocess
-import sys
 
 import pytest
 from conftest import (
+    CLI,
+    DEFAULT_AUTHOR,
+    REWRITE,
     branch_count,
     commit,
     commit_author,
@@ -16,13 +18,10 @@ from conftest import (
     head,
     pick_random_index,
     run_cli,
+    run_cli_without_tty,
 )
 
 import anon_git
-
-DEFAULT_AUTHOR = f"{anon_git.DEFAULT_NAME} <{anon_git.DEFAULT_EMAIL}>"
-REWRITE = ("--no-confirm", "--no-backup", "--current-branch")
-CLI = [sys.executable, "-m", "anon_git"]
 
 
 def branches(pattern):
@@ -162,13 +161,7 @@ def test_declined_confirmation_creates_no_branch(repo):
 
 
 def test_confirmation_without_terminal_hints_no_confirm(repo, head_before):
-    result = subprocess.run(
-        [*CLI, "--no-backup", "--current-branch", "HEAD"],
-        stdin=subprocess.DEVNULL,
-        capture_output=True,
-        text=True,
-        start_new_session=True,
-    )
+    result = run_cli_without_tty("--no-backup", "--current-branch", "HEAD")
     assert result.returncode == 1
     assert "--no-confirm" in result.stderr
     assert head() == head_before

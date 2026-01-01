@@ -4,6 +4,7 @@ commits, entire history, dry run."""
 import pytest
 from conftest import (
     COMMIT_COUNT,
+    DEFAULT_AUTHOR,
     branch_count,
     commit_author,
     commit_committer,
@@ -11,12 +12,12 @@ from conftest import (
     head,
     history_authors,
     pick_random_index,
+    preview_count,
     run_cli,
 )
 
 import anon_git
 
-DEFAULT_AUTHOR = f"{anon_git.DEFAULT_NAME} <{anon_git.DEFAULT_EMAIL}>"
 LOG_FORMAT = "--format=%an <%aE> (%ai) %cn <%cE> (%ci)"
 
 
@@ -123,4 +124,4 @@ def test_dry_run_previews_without_rewrite(repo, head_before, pager):
 def test_dry_run_without_pager_prints_preview(repo):
     result = run_cli("--dry-run", "--entire-history")
     assert result.returncode == 0, result.stderr
-    assert sum(line.startswith("Commit:") for line in result.stdout.splitlines()) == COMMIT_COUNT
+    assert preview_count(result.stdout) == COMMIT_COUNT

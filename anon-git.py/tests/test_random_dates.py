@@ -5,7 +5,7 @@ import random
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from conftest import commit, commit_date, git, new_repo, pick_random_index, run_cli
+from conftest import REWRITE, commit, commit_date, git, new_repo, pick_random_index, run_cli
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -18,7 +18,6 @@ SECONDS_PER_DAY = 86400
 EPOCH_2019 = 1546300800
 EPOCH_2020 = 1577836800
 KEPT_UNITS = [anon_git.KEPT_DAY, anon_git.KEPT_MONTH, anon_git.KEPT_YEAR]
-REWRITE = ("--no-confirm", "--no-backup", "--current-branch")
 
 
 def linear_history(count, spacing, base=EPOCH_2020, offset="+0000"):

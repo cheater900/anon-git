@@ -4,6 +4,7 @@ Derived from git history, newest first.
 
 ## 2026-11-02
 
+- test(py): share DEFAULT_AUTHOR, REWRITE, CLI and no-tty runner via conftest
 - refactor(py): check detached HEAD before prompting, name preview and tty helpers
 - refactor(py): split random-date bucketing into named steps, gather date helpers
 - refactor(py): group constants and types at top, derive flag list, share git config helper
