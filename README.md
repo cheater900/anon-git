@@ -63,7 +63,7 @@ Many privacy & freedom-oriented projects would prefer contributors to avoid leak
 
 ## Pre-requisites
 
-Both scripts are based on `git filter-repo` (much faster & safer than `filter-branch`).
+The script is based on `git filter-repo` (much faster & safer than `filter-branch`).
 
 **You must have `git-filter-repo` installed:**
 
@@ -83,11 +83,11 @@ pip install git-filter-repo
 
 ## Usage
 
-This repository contains a script called `anon-git`, which relies upon `git
-filter-repo`. Download it or copy-paste into a file. Execute them from inside
+This repository contains a script called `anon-git.sh`, which relies upon `git
+filter-repo`. Download it or copy-paste into a file. Execute it from inside
 a git repository either directly `./anon-git.sh` or from your `$PATH`.
 
-**For safety, the script creates a backup branch before rewriting history.
+**For safety, the script creates a backup branch before rewriting history.**
 
 Rewrite **one commit** (author, committer, dates).
 
@@ -119,8 +119,13 @@ Rewrite **one commit** (author, committer, dates).
 **Priority order** (highest to lowest):
 
 1. Command-line flags
-2. Environment variables (`ANON_GIT_DATE`, `ANON_GIT_NAME`, `ANON_GIT_EMAIL`, `ANON_GIT_KEEPUSER`, `ANON_GIT_KEEPDATE`)
+2. Environment variables (`ANON_GIT_DATE`, `ANON_GIT_NAME`, `ANON_GIT_EMAIL`, `ANON_GIT_KEEPUSER`, `ANON_GIT_KEEPDATE`, `ANON_GIT_KEEPYEAR`, `ANON_GIT_KEEPMONTH`, `ANON_GIT_KEEPDAY`)
 3. Hardcoded defaults
+
+> [!WARNING]
+> `--name`, `--email` and `--date` (and their `ANON_GIT_*` environment variable
+> equivalents) are not meant to carry untrusted input — don't wire user-controlled
+> values (e.g. from CI variables or another service) into them.
 
 ### Examples
 
@@ -139,6 +144,18 @@ Rewrite **one commit** (author, committer, dates).
 
 # Keep real name/email, only change date
 ./anon-git.sh --keep-user --date "2025-06-15T14:20:00Z"
+
+# Preview what would change before actually rewriting anything
+./anon-git.sh --dry-run HEAD~2
+
+# Anonymize the whole repo before its first push to a remote
+./anon-git.sh --entire-history --current-branch
+
+# Keep the commit's day (and month/year) but scrub the time-of-day and timezone
+./anon-git.sh --keep-day HEAD~2
+
+# Use environment variables instead of flags (handy for hooks/CI)
+ANON_GIT_NAME="Anon" ANON_GIT_EMAIL="anon@localhost" ./anon-git.sh --keep-date
 ```
 
 More examples using built-in filters provided by `git` in order to pick a set of
@@ -149,13 +166,13 @@ commits matching the filter:
 ./anon-git.sh HEAD~{0..9}
 
 # Anonymize commits within a specific date range
-git log --format=%H after='2023-01-01' --before='2024-01-01' | xargs ./anon-git
+git log --format=%H --after='2023-01-01' --before='2024-01-01' | xargs ./anon-git.sh
 
 # Anonymize commits where the commit author matches a pattern
-git log --format=%H author='Frederic' | xargs ./anon-git
+git log --format=%H --author='Frederic' | xargs ./anon-git.sh
 
-# Anonymize commits where the commit message matches a message
-git log --format=%H grep='Some regex to match the commit message' | xargs ./anon-git
+# Anonymize commits following the Conventional Commits "fix:" prefix
+git log --format=%H --grep='^fix:' | xargs ./anon-git.sh
 ```
 
 ### Using anonymize-git-commit as a post-commit hook
@@ -225,6 +242,18 @@ Now every `git commit` automatically triggers anonymization of that commit's aut
 - If you pushed before using the script, you'll need `git push --force-with-lease` afterward (dangerous on shared branches!)
 - The flags `--keep-user` and `--keep-date` are useful for partial anonymization
 - Timestamps must be in a format `git` understands (ISO 8601 with timezone recommended)
+- The script runs `git filter-repo --force`, which skips filter-repo's own "is this repo safe to rewrite" check (normally it refuses to run outside of a fresh clone). This is safe here because the script always rewrites a new/backup branch first — but it does mean you're relying on that branch, not on filter-repo, to protect your other branches/history.
+- Rewriting a commit invalidates any GPG signature on it (same as `git filter-branch`/`git rebase`); re-sign afterward if you sign your commits
 - To temporarily disable the hook run `chmod -x .git/hooks/post-commit`
 - Consider using environment variables (`export ANON_GIT_NAME="..."` etc.) instead of hard-coding flags in the hook
 - Consider squashing commits or using merge requests from anonymous remotes
+
+## Testing
+
+```bash
+./tests/test-anon-git.sh
+```
+
+Spins up a disposable git repository in `/tmp`, runs the script against it through a range of flags and edge cases (defaults, `--keep-*`, `--dry-run`, `--entire-history`, `--current-branch`, invalid input, incompatible flags, the uncommitted-changes guard, ...), and prints a pass/fail summary. It cleans up the temp repo on exit.
+
+`tests/test-manually.sh` instead just creates a disposable repo with sample commits and drops you into it, for manual/interactive poking at the script.
