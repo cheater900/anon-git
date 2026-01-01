@@ -13,7 +13,6 @@ load test_helper
 @test "--version and -v print version" {
     # Handled in handle_early_options, before safety checks, so it must work
     # even outside a repository and print a version string.
-    local no_repo_dir=${BATS_TEST_TMPDIR}/norepo
     run ./anon-git.sh --version
     assert_success
     assert_output --regexp '^anon-git [0-9]+\.[0-9]+\.[0-9]+$'
@@ -21,9 +20,7 @@ load test_helper
     assert_success
     assert_output --regexp '^anon-git [0-9]+\.[0-9]+\.[0-9]+$'
     # Mirrors "outside git repo fails cleanly" (regression.bats).
-    mkdir "$no_repo_dir"
-    cp ./anon-git.sh "$no_repo_dir/"
-    cd "$no_repo_dir"
+    cd_outside_repo
     run ./anon-git.sh --version
     assert_success
 }

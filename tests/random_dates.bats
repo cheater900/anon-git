@@ -60,10 +60,7 @@ assert_log_chronological() {
 # Builds a repo in $1 of $2 commits, $3 seconds apart from epoch $4.
 build_dated_repo() {
     local dir=$1 count=$2 spacing=$3 base=$4 i ts
-    git init -q "$dir"
-    git -C "$dir" config --local user.name "Jordan Blake"
-    git -C "$dir" config --local user.email "jordan.blake@example.com"
-    cp "$SCRIPT" "$dir/"
+    new_repo "$dir"
     for ((i = 0; i < count; i++)); do
         ts=$((base + i * spacing))
         echo "file $i" >"${dir}/file_${i}.txt"

@@ -20,15 +20,6 @@ merge_side_branch() {
     git merge -q --no-ff -m 'Merge feature branch' feature
 }
 
-# Inits an empty repo in $1 holding a copy of the script.
-new_repo() {
-    git init -q "$1"
-    git -C "$1" config --local user.name "Jordan Blake"
-    git -C "$1" config --local user.email "jordan.blake@example.com"
-    cp "$SCRIPT" "$1/"
-    printf 'anon-git.sh\n' >>"$1/.git/info/exclude"
-}
-
 file_count() {
     find "$1" -type f | wc -l | tr -d ' '
 }
@@ -92,9 +83,7 @@ add_main_ancestor() {
 }
 
 @test "outside git repo fails cleanly" {
-    mkdir "${BATS_TEST_TMPDIR}/norepo"
-    cp ./anon-git.sh "${BATS_TEST_TMPDIR}/norepo/"
-    cd "${BATS_TEST_TMPDIR}/norepo"
+    cd_outside_repo
     run --separate-stderr ./anon-git.sh --no-confirm
     assert_failure
     assert_stderr --partial 'git repository'

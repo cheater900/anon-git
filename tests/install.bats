@@ -22,13 +22,6 @@ run_installer() {
     run env HOME="$FAKE_HOME" PATH=/usr/bin:/bin "$@"
 }
 
-# Copies the script to a dir outside any git repo and cds there.
-cd_outside_repo() {
-    mkdir "${BATS_TEST_TMPDIR}/norepo"
-    cp ./anon-git.sh "${BATS_TEST_TMPDIR}/norepo/"
-    cd "${BATS_TEST_TMPDIR}/norepo" || return
-}
-
 @test "--install copies to ~/.local/bin" {
     make_fake_home .local/bin
     run_installer ./anon-git.sh --install

@@ -9,6 +9,13 @@ bats_load_library bats-support
 bats_load_library bats-assert
 bats_load_library bats-file
 
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+SCRIPT_NAME=anon-git.sh
+SCRIPT=${SCRIPT_DIR}/${SCRIPT_NAME}
+COMMIT_COUNT=20
+TEST_USER_NAME='Jordan Blake'
+TEST_USER_EMAIL='jordan.blake@example.com'
+
 setup() {
     REPO=${BATS_TEST_TMPDIR}/repo
     cp -a "$REPO_TEMPLATE" "$REPO"
@@ -17,6 +24,23 @@ setup() {
     # doesn't report the tree as dirty.
     git update-index -q --refresh
     HEAD_BEFORE=$(git rev-parse HEAD)
+}
+
+# Inits an empty repo in $1 holding an untracked, git-excluded copy of the
+# script.
+new_repo() {
+    git init -q "$1"
+    git -C "$1" config --local user.name "$TEST_USER_NAME"
+    git -C "$1" config --local user.email "$TEST_USER_EMAIL"
+    cp "$SCRIPT" "$1/"
+    printf '%s\n' "$SCRIPT_NAME" >>"$1/.git/info/exclude"
+}
+
+# Copies the script to a dir outside any git repo and cds there.
+cd_outside_repo() {
+    mkdir "${BATS_TEST_TMPDIR}/norepo"
+    cp "$SCRIPT" "${BATS_TEST_TMPDIR}/norepo/"
+    cd "${BATS_TEST_TMPDIR}/norepo" || return
 }
 
 assert_head_unchanged() {
