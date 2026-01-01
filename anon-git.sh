@@ -701,7 +701,8 @@ parse_args() {
                 printf 'Error: Commit "%s" does not exist or is not a commit object.\n' "${1}" >&2
                 exit 1
             fi
-            ref=$(git rev-parse "$1")
+            # ^{commit} peels annotated tags, whose own hash never matches a commit.
+            ref=$(git rev-parse "${1}^{commit}")
             COMMITS_ARG=("${COMMITS_ARG[@]}" "$ref")
             COMMIT_ARG="${COMMITS_ARG[*]}"
             shift

@@ -155,6 +155,7 @@ main() {
     test_match_dry_run_without_target_shows_help
     test_match_malformed_date
     test_match_outside_git_repo
+    test_match_annotated_tag
     test_match_rerun_cache
     test_match_trap_cleanup_on_kill
     test_match_shell_injection_email

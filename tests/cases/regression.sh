@@ -281,6 +281,27 @@ test_match_trap_cleanup_on_kill() {
     rm -rf "$repo_dir" "$scratch_tmpdir"
 }
 
+test_match_annotated_tag() {
+    local tag_name="annotated_$$" exit_status new_author errors=0
+
+    git tag -a -m 'Annotated tag' "$tag_name" HEAD
+    ./"${SCRIPT_NAME}" --no-confirm --no-backup --current-branch --name 'Tag Target' "$tag_name" >/dev/null 2>&1
+    exit_status=$?
+    new_author=$(git show -s --format='%an' HEAD)
+    git tag -d "$tag_name" >/dev/null
+
+    if [[ "$exit_status" -ne 0 ]]; then
+        printf 'Error: annotated tag target exited with status %s\n' "$exit_status"
+        errors=$((errors + 1))
+    fi
+    if [[ "$new_author" != 'Tag Target' ]]; then
+        printf 'Error: annotated tag target not rewritten (author "%s")\n' "$new_author"
+        errors=$((errors + 1))
+    fi
+
+    record_result "$errors" 'annotated tag target rewritten'
+}
+
 test_match_rerun_cache() {
     # A second run against the same repo is a known trigger for an upstream
     # git-filter-repo assertion bug unless clean_cache clears its metadata cache first.
