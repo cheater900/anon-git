@@ -38,13 +38,48 @@ If you change `show_help()`'s `Options:` section (new/renamed/reworded flag), ru
 
 A new flag touches several places; grep for an existing similar flag (e.g. `--dry-run`) to find them all, but roughly:
 
-1. `anon-git.sh`: `show_help()` (usage text), `list_flags()` (the `--_list-flags` source of truth), the `case` in `parse_args()`, and wherever the resulting value is consumed.
-2. `completions/_anon-git.sh` (zsh) and `completions/anon-git.sh.fish` — hand-maintained, since they carry per-flag descriptions that `--_list-flags` can't express. `completions/anon-git.bash` needs no change; it calls `--_list-flags` dynamically.
-3. `tests/test-anon-git-completion.sh`'s `test_completion_flags` will fail if zsh/fish drift from `--_list-flags` — that's the tripwire for step 2.
-4. `README.md`: the `### Options` block, and an example if the flag isn't obvious from its description.
-5. `tests/test-anon-git.sh`: at least one test exercising the new flag, plus incompatibility tests if it conflicts with existing flags (see `test_catch_incompatible` and its call sites in `main()`).
-6. If the flag has an `ANON_GIT_*` environment variable equivalent, it needs a spot in `merge_args_with_defaults()`'s three-tier `${FLAG_ARG:-${ANON_GIT_X:-${DEFAULT_X}}}` fallback, a mention in the "Priority" list in both `show_help()` and `README.md`, and — if it can conflict with another option — a `*_set` computation in `reject_incompatible_options()` (see the comment at the top of that function for why it must run *before* `merge_args_with_defaults`, not after).
+1. `anon-git.sh`: `show_help()` (usage text), `list_flags()` (the
+   `--_list-flags` source of truth), the `case` in `parse_args()`, and wherever
+   the resulting value is consumed.
+2. `completions/_anon-git.sh` (zsh) and `completions/anon-git.sh.fish` —
+   hand-maintained, since they carry per-flag descriptions that `--_list-flags`
+   can't express. `completions/anon-git.bash` needs no change; it calls
+   `--_list-flags` dynamically.
+3. `tests/test-anon-git-completion.sh`'s `test_completion_flags` will fail if
+   zsh/fish drift from `--_list-flags` — that's the tripwire for step 2.
+4. `README.md`: the `### Options` block, and an example if the flag isn't
+   obvious from its description.
+5. `tests/test-anon-git.sh`: at least one test exercising the new flag, plus
+   incompatibility tests if it conflicts with existing flags (see
+   `test_catch_incompatible` and its call sites in `main()`).
+6. If the flag has an `ANON_GIT_*` environment variable equivalent, it needs a
+   spot in `merge_args_with_defaults()`'s three-tier
+   `${FLAG_ARG:-${ANON_GIT_X:-${DEFAULT_X}}}` fallback, a mention in the
+   "Priority" list in both `show_help()` and `README.md`, and — if it can
+   conflict with another option — a `*_set` computation in
+   `reject_incompatible_options()` (see the comment at the top of that function
+   for why it must run *before* `merge_args_with_defaults`, not after).
+
+## Testing
+
+Run the main test:
+
+```bash
+./tests/test-anon-git.sh
+```
+
+Spins up a disposable git repository in `/tmp`, runs the script against it
+through a range of flags and edge cases (defaults, `--keep-*`, `--dry-run`,
+`--entire-history`, `--current-branch`, invalid input, incompatible combinations
+— flags, `ANON_GIT_*` envvars, and mixes of both -- the uncommitted-changes
+guard, ...), and prints a pass/fail summary. It cleans up the temp repo on exit.
+
+The test `tests/test-manually.sh` creates a disposable repo with sample commits
+and drops you into it, for manual/interactive poking at the script.
 
 ## Commit messages
 
-This repo loosely follows Conventional Commits: `type: short imperative description`, lowercase, no trailing period. Types used so far: `feat`, `fix`, `docs`, `chore`, `refact`, `ci`, `break` (breaking change). Keep the subject line short; put any "why" in a body if it's not obvious from the diff.
+This repo loosely follows Conventional Commits: `type: short imperative
+description`, lowercase, no trailing period. Types used so far: `feat`, `fix`,
+`docs`, `chore`, `refact`, `ci`, `break` (breaking change). Keep the subject
+line short; put any "why" in a body if it's not obvious from the diff.
