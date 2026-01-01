@@ -4,6 +4,7 @@ Derived from git history, newest first.
 
 ## 2026-11-02
 
+- fix(py): make post-commit hook explain a removed install instead of failing
 - fix(py): resolve and check many target commits in one git call each
 - fix(py): refuse symlinked post-commit hook instead of writing through it
 - ci: run anon-git.py lint, format, tests; document Python implementation

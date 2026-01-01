@@ -2,6 +2,7 @@
 generated hook anonymizing each new commit."""
 
 import os
+import subprocess
 import sys
 
 import pytest
@@ -168,3 +169,17 @@ def test_install_hook_refuses_dangling_symlink(repo, tmp_path):
     result = run_cli("--install-hook")
     assert result.returncode == 1
     assert not target.exists()
+
+
+def test_hook_with_missing_install_explains_and_lets_commit_through(repo, monkeypatch):
+    monkeypatch.setattr(anon_git.sys, "executable", "/nonexistent/python")
+    with pytest.raises(SystemExit):
+        anon_git.install_hook()
+    result = subprocess.run(
+        ["git", "commit", "-q", "--allow-empty", "-m", "after uninstall"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0
+    assert "/nonexistent/python missing, not anonymized" in result.stderr
+    assert git("log", "-1", "--format=%s") == "after uninstall"

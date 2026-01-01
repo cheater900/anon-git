@@ -395,6 +395,13 @@ def hook_is_ours(hook_file):
 
 
 HOOK_BODY = """
+# The install this hook calls is gone (e.g. `uv tool uninstall anon-git`):
+# say so instead of failing every commit with a bare "No such file".
+if [[ ! -x "${anon_git[0]}" ]]; then
+    printf 'anon-git: %s missing, not anonymized; re-run --install-hook.\\n' "${anon_git[0]}" >&2
+    exit 0
+fi
+
 # Rewriting HEAD mid-sequence would derail the rebase/cherry-pick/revert.
 for state in rebase-merge rebase-apply sequencer CHERRY_PICK_HEAD REVERT_HEAD; do
     if [[ -e "$(git rev-parse --git-path "$state")" ]]; then
