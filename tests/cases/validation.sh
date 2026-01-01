@@ -42,7 +42,7 @@ test_catch_incompatible() {
     # any mix. Covers flag-vs-flag, envvar-vs-envvar, and mixed conflicts
     # with one function, since a conflict must be rejected the same way
     # regardless of which side came from a flag vs. its envvar.
-    local before after exit_status errors=0 envvars=() cli_args=() arg label
+    local before after output exit_status errors=0 envvars=() cli_args=() arg label
 
     for arg in "$@"; do
         if [[ "$arg" == ANON_GIT_*=* ]]; then
@@ -57,7 +57,7 @@ test_catch_incompatible() {
     [[ "$label" == 'catch incompatible' ]] && label="${label} (defaults)"
 
     before=$(git rev-parse HEAD)
-    env "${envvars[@]}" ./"${SCRIPT_NAME}" --no-confirm --no-backup "${cli_args[@]}" >/dev/null 2>&1
+    output=$(env "${envvars[@]}" ./"${SCRIPT_NAME}" --no-confirm --no-backup "${cli_args[@]}" 2>&1)
     exit_status=$?
     after=$(git rev-parse HEAD)
 
@@ -67,6 +67,10 @@ test_catch_incompatible() {
     fi
     if [[ "$before" != "$after" ]]; then
         printf 'Error: repository was modified despite incompatible "%s"\n' "$*"
+        errors=$((errors + 1))
+    fi
+    if ! grep -q 'cannot be used together' <<<"$output"; then
+        printf 'Error: "%s" failed without conflict message (got: %s)\n' "$*" "$output"
         errors=$((errors + 1))
     fi
 
