@@ -8,7 +8,7 @@
 - [`just`](https://github.com/casey/just) — runs the recipes below
 - [`shellcheck`](https://www.shellcheck.net/) — used by `just lint`
 - [`shfmt`](https://github.com/mvdan/sh) — used by `just format`
-- `expect` — only needed for `just test-completion` (drives real bash/zsh/fish shells to check tab-completion)
+- `expect` — only needed for the completion tests in `just test`/`just test-completion` (drives real bash/zsh/fish shells to check tab-completion)
 
 ## Workflow
 
@@ -17,7 +17,7 @@ just lint             # bash -n + shellcheck
 just format           # shfmt -w, 4-space indent
 just test             # tests/test_anon_git.sh + tests/test_anon_git_completion.sh
 just test-completion  # just the completion tests
-just all              # lint, format, test, test-completion, in order
+just all              # lint, format, test, in order
 just sync-docs        # regenerate README's ### Options block from `anon-git.sh --help`
 ```
 

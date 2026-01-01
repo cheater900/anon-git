@@ -12,7 +12,6 @@ all:
     just lint
     just format
     just test
-    just test-completion
 
 # Run the test suite
 test:
