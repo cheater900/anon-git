@@ -4,6 +4,7 @@ Derived from git history, newest first.
 
 ## 2026-11-04
 
+- fix(sh): make post-commit hook explain a moved script instead of failing
 - fix(sh): hook pops only stash it pushed
 - fix(sh): check detached HEAD before prompting
 - test(py): drop conflict and dry-run cases duplicated elsewhere

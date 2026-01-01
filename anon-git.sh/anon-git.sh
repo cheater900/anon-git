@@ -459,6 +459,13 @@ anon_git=$(printf '%q' "$src")
 EOF
     cat >>"$hook_file" <<'EOF'
 
+# The script this hook calls is gone (moved, or --uninstall): say so instead
+# of failing every commit with a bare "No such file".
+if [[ ! -x "$anon_git" ]]; then
+    printf 'anon-git: %s missing, not anonymized; re-run --install-hook.\n' "$anon_git" >&2
+    exit 0
+fi
+
 # Rewriting HEAD mid-sequence would derail the rebase/cherry-pick/revert.
 for state in rebase-merge rebase-apply sequencer CHERRY_PICK_HEAD REVERT_HEAD; do
     if [[ -e "$(git rev-parse --git-path "$state")" ]]; then

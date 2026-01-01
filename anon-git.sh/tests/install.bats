@@ -212,6 +212,15 @@ run_installer() {
     assert_equal "$(git diff --name-only -- file_1.txt)" ''
 }
 
+@test "--install-hook with moved script explains, lets commit through" {
+    ./anon-git.sh --install-hook
+    mv ./anon-git.sh "${BATS_TEST_TMPDIR}/"
+    run --separate-stderr git commit -q --allow-empty -m 'after move'
+    assert_success
+    assert_stderr --partial "${REPO}/anon-git.sh missing, not anonymized"
+    assert_equal "$(git log -1 --format=%s)" 'after move'
+}
+
 @test "--install-hook works from path with shell metacharacters" {
     # Script path with shell metacharacters must survive into the hook.
     local odd_dir="${REPO}/odd \"\$dir\`"
