@@ -494,26 +494,6 @@ def uninstall_hook():
 # OPTIONS
 
 
-# Dies unless inside a git repo with a clean working tree. Everything after
-# this can assume a usable repo.
-def safety_checks():
-    if not git_ok("rev-parse", "--git-dir"):
-        fail("AnonGit must be run inside a git repository.")
-    # Bare repo or inside .git: the dirty-tree check below would misreport.
-    if git("rev-parse", "--is-inside-work-tree") != "true":
-        fail(
-            "Error: AnonGit must be run inside a work tree "
-            "(not a bare repository or .git directory)."
-        )
-    if not git_ok("rev-parse", "--quiet", "--verify", "HEAD"):
-        fail("Error: repository has no commits yet; nothing to anonymize.")
-    if not git_ok("diff-index", "--quiet", "HEAD", "--") or not git_ok("diff-files", "--quiet"):
-        fail(
-            "Repository has uncommitted changes. "
-            "Commit or stash first to prevent losing the changes."
-        )
-
-
 # Returns (git exit status, value). Status 1 means the key is unset.
 def git_config_get(key, *flags):
     result = subprocess.run(["git", "config", *flags, "--get", key], capture_output=True, text=True)
@@ -719,7 +699,7 @@ def build_options(argv, environ):
 
 
 # ──────────────────────────────────────────────────────────────────────
-# VALIDATION
+# DATES
 
 
 def parse_target_date(date_str):
@@ -734,6 +714,57 @@ def parse_target_date(date_str):
         if match:
             normalized = f"{match.group(1)} {match.group(2).replace(':', '')}"
     return datetime.strptime(normalized, "%Y-%m-%d %H:%M:%S %z")
+
+
+def parse_git_date(date_bytes):
+    unix_ts, offset = date_bytes.decode().split()
+    sign = 1 if offset.startswith("+") else -1
+    offset = offset.lstrip("+-")
+    if len(offset) not in (4, 6):
+        raise ValueError("unsupported timezone format")
+    tz_offset = timedelta(
+        hours=int(offset[:2]), minutes=int(offset[2:4]), seconds=int(offset[4:] or 0)
+    )
+    return datetime.fromtimestamp(float(unix_ts), tz=timezone(sign * tz_offset))
+
+
+# Same digits, relabeled (not converted) as UTC.
+def as_utc_epoch(dt):
+    return int(dt.replace(tzinfo=timezone.utc).timestamp())
+
+
+# Wall-clock date/time in the commit's own offset, labeled UTC: the output is
+# +0000, so bucket bounds must be these digits read as UTC.
+def local_datetime(epoch, offset):
+    return parse_git_date(f"{epoch} {offset}".encode()).replace(tzinfo=timezone.utc)
+
+
+def utc_git_date(epoch):
+    return b"%d +0000" % epoch
+
+
+# ──────────────────────────────────────────────────────────────────────
+# VALIDATION
+
+
+# Dies unless inside a git repo with a clean working tree. Everything after
+# this can assume a usable repo.
+def safety_checks():
+    if not git_ok("rev-parse", "--git-dir"):
+        fail("AnonGit must be run inside a git repository.")
+    # Bare repo or inside .git: the dirty-tree check below would misreport.
+    if git("rev-parse", "--is-inside-work-tree") != "true":
+        fail(
+            "Error: AnonGit must be run inside a work tree "
+            "(not a bare repository or .git directory)."
+        )
+    if not git_ok("rev-parse", "--quiet", "--verify", "HEAD"):
+        fail("Error: repository has no commits yet; nothing to anonymize.")
+    if not git_ok("diff-index", "--quiet", "HEAD", "--") or not git_ok("diff-files", "--quiet"):
+        fail(
+            "Repository has uncommitted changes. "
+            "Commit or stash first to prevent losing the changes."
+        )
 
 
 # Without a commit target or --entire-history, show help instead of silently
@@ -895,13 +926,13 @@ def clean_cache():
 
 
 # dt: UTC-labeled date. Returns (bucket key, start epoch, end epoch) of the
-# calendar unit --random-* keeps.
-def bucket_bounds(dt, granularity):
-    if granularity == "month":
+# calendar unit kept.
+def bucket_bounds(dt, kept_unit):
+    if kept_unit == KEPT_YEAR:
         start = datetime(dt.year, 1, 1, tzinfo=timezone.utc)
         end = datetime(dt.year, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
         return (dt.year,), int(start.timestamp()), int(end.timestamp())
-    if granularity == "day-of-month":
+    if kept_unit == KEPT_MONTH:
         start = datetime(dt.year, dt.month, 1, tzinfo=timezone.utc)
         if dt.month == 12:
             next_month_start = datetime(dt.year + 1, 1, 1, tzinfo=timezone.utc)
@@ -910,79 +941,81 @@ def bucket_bounds(dt, granularity):
         end = next_month_start - timedelta(seconds=1)
         return (dt.year, dt.month), int(start.timestamp()), int(end.timestamp())
     start = datetime(dt.year, dt.month, dt.day, tzinfo=timezone.utc)
-    end = start + timedelta(hours=23, minutes=59, seconds=59)
+    end = start + timedelta(days=1, seconds=-1)
     return (dt.year, dt.month, dt.day), int(start.timestamp()), int(end.timestamp())
 
 
-# Wall-clock date/time in the commit's own offset, labeled UTC: the output is
-# +0000, so bucket bounds must be these digits read as UTC.
-def local_datetime(epoch, offset):
-    sign = -1 if offset.startswith("-") else 1
-    seconds = sign * (int(offset[1:3]) * 3600 + int(offset[3:5]) * 60)
-    return datetime.fromtimestamp(epoch + seconds, tz=timezone.utc)
-
-
-# One random epoch per target. history: [(hash, epoch, offset, parents)],
-# oldest first, parents before children. Tags each commit target/anchor (a
-# parent or child of a target)/skip, buckets by the commit's local calendar
-# unit (what `git log` shows, as --keep-* uses), and gives each bucket's runs
-# of targets sorted random epochs bounded by their nearest anchor.
-def compute_random_dates(history, targets, granularity, entire, rng=None):
-    rng = rng or random.SystemRandom()
-    # Real neighbors are parents and children: across a merge, the commit
-    # next in log order can sit on another branch.
+# Real neighbors are parents and children: across a merge, the commit next
+# in log order can sit on another branch.
+def find_anchors(history, targets):
     anchors = set()
-    for commit_hash, _epoch, _offset, parents in history:
-        if commit_hash in targets:
-            anchors.update(parents)
-        elif any(parent in targets for parent in parents):
-            anchors.add(commit_hash)
+    for commit in history:
+        if commit.hash in targets:
+            anchors.update(commit.parents)
+        elif any(parent in targets for parent in commit.parents):
+            anchors.add(commit.hash)
+    return anchors
+
+
+# Groups targets and anchors by the calendar unit each must stay in: the
+# commit's local unit (what `git log` shows, as --keep-* uses); an anchor
+# also bounds targets whose bucket holds its real instant. Returns
+# [(sorted members, (start epoch, end epoch))].
+def bucket_members(history, targets, kept_unit, entire):
+    anchors = find_anchors(history, targets)
     buckets = defaultdict(list)
     bounds = {}
-    # History index breaks epoch ties, so a parent sorts before its
-    # same-second child.
-    for index, (commit_hash, epoch, offset, _parents) in enumerate(history):
-        if entire or commit_hash in targets:
-            role = "target"
-        elif commit_hash in anchors:
-            role = "anchor"
-        else:
+    for index, commit in enumerate(history):
+        is_target = entire or commit.hash in targets
+        if not is_target and commit.hash not in anchors:
             continue
-        keys = {bucket_bounds(local_datetime(epoch, offset), granularity)}
-        if role == "anchor":
-            # Also bound targets whose bucket holds this anchor's real instant.
-            keys.add(bucket_bounds(datetime.fromtimestamp(epoch, tz=timezone.utc), granularity))
+        keys = {bucket_bounds(local_datetime(commit.epoch, commit.offset), kept_unit)}
+        if not is_target:
+            real_instant = datetime.fromtimestamp(commit.epoch, tz=timezone.utc)
+            keys.add(bucket_bounds(real_instant, kept_unit))
         for key, start, end in keys:
-            buckets[key].append((epoch, index, commit_hash, role))
+            buckets[key].append(BucketMember(commit.epoch, index, commit.hash, is_target))
             bounds[key] = (start, end)
+    return [(sorted(members), bounds[key]) for key, members in buckets.items()]
+
+
+# count sorted random epochs in [lower, upper], kept within the bucket.
+def pick_epochs(lower, upper, bucket, count, rng):
+    bucket_start, bucket_end = bucket
+    if upper < lower:
+        # No room between anchors, or an anchor outside the bucket. Share the
+        # nearest in-bucket timestamp: git allows identical dates, the
+        # calendar unit must not change.
+        return [min(max(lower - 1, bucket_start), bucket_end)] * count
+    if count <= upper - lower + 1:
+        return sorted(rng.sample(range(lower, upper + 1), count))
+    return sorted(rng.randint(lower, upper) for _ in range(count))
+
+
+# One random epoch per target, {hash: epoch}. history: [HistoryCommit],
+# oldest first, parents before children; the history index breaks epoch
+# ties so a parent sorts before its same-second child. Each run of targets
+# between two anchors gets sorted epochs strictly between them.
+def compute_random_dates(history, targets, kept_unit, entire, rng=None):
+    rng = rng or random.SystemRandom()
     picked = {}
-    for key, members in buckets.items():
-        bucket_start, bucket_end = bounds[key]
-        members.sort()
+    for members, bucket in bucket_members(history, targets, kept_unit, entire):
+        bucket_start, bucket_end = bucket
         i = 0
         lower = bucket_start
         while i < len(members):
-            epoch, _index, _hash, role = members[i]
-            if role == "anchor":
-                lower = max(epoch + 1, bucket_start)
+            if not members[i].is_target:
+                lower = max(members[i].epoch + 1, bucket_start)
                 i += 1
                 continue
             run_start = i
-            while i < len(members) and members[i][3] == "target":
+            while i < len(members) and members[i].is_target:
                 i += 1
             run = members[run_start:i]
-            upper = min(members[i][0] - 1, bucket_end) if i < len(members) else bucket_end
-            if upper < lower:
-                # No room between anchors, or an anchor outside the bucket.
-                # Share the nearest in-bucket timestamp: git allows identical
-                # dates, the calendar unit must not change.
-                picks = [min(max(lower - 1, bucket_start), bucket_end)] * len(run)
-            elif len(run) <= upper - lower + 1:
-                picks = sorted(rng.sample(range(lower, upper + 1), len(run)))
-            else:
-                picks = sorted(rng.randint(lower, upper) for _ in run)
-            for (_epoch, _index, member_hash, _role), new_epoch in zip(run, picks, strict=True):
-                picked[member_hash] = new_epoch
+            upper = min(members[i].epoch - 1, bucket_end) if i < len(members) else bucket_end
+            epochs = pick_epochs(lower, upper, bucket, len(run), rng)
+            for member, epoch in zip(run, epochs, strict=True):
+                picked[member.hash] = epoch
     return picked
 
 
@@ -992,40 +1025,23 @@ def read_history():
     )
     history = []
     for line in log.splitlines():
-        fields = line.split()
-        history.append((fields[0], int(fields[1]), fields[2], fields[3:]))
+        commit_hash, epoch, offset, *parents = line.split()
+        history.append(HistoryCommit(commit_hash, int(epoch), offset, parents))
     return history
 
 
-def random_granularity(opts):
+def kept_calendar_unit(opts):
     if opts.randommonth:
-        return "month"
+        return KEPT_YEAR
     if opts.randomday:
-        return "day-of-month"
+        return KEPT_MONTH
     if opts.randomtime:
-        return "time-of-day"
+        return KEPT_DAY
     return None
 
 
 # ──────────────────────────────────────────────────────────────────────
 # REWRITE
-
-
-def parse_git_date(date_bytes):
-    unix_ts, offset = date_bytes.decode().split()
-    sign = 1 if offset.startswith("+") else -1
-    offset = offset.lstrip("+-")
-    if len(offset) not in (4, 6):
-        raise ValueError("unsupported timezone format")
-    tz_offset = timedelta(
-        hours=int(offset[:2]), minutes=int(offset[2:4]), seconds=int(offset[4:] or 0)
-    )
-    return datetime.fromtimestamp(float(unix_ts), tz=timezone(sign * tz_offset))
-
-
-# Same digits, relabeled (not converted) as UTC.
-def as_utc_epoch(dt):
-    return int(dt.replace(tzinfo=timezone.utc).timestamp())
 
 
 def target_date_bytes(opts, commit, random_dates):
@@ -1035,7 +1051,7 @@ def target_date_bytes(opts, commit, random_dates):
             raise SystemExit(
                 f"anon-git: no precomputed random date for commit {commit.original_id.decode()}"
             )
-        return b"%d +0000" % epoch
+        return utc_git_date(epoch)
     if opts.keepyear or opts.keepmonth or opts.keepday:
         # Keep the calendar date as seen, re-anchored to midnight UTC, so
         # only time/tz leak.
@@ -1044,10 +1060,10 @@ def target_date_bytes(opts, commit, random_dates):
             dt = dt.replace(day=1)
         if opts.keepyear:
             dt = dt.replace(month=1)
-        return b"%d +0000" % as_utc_epoch(dt)
+        return utc_git_date(as_utc_epoch(dt))
     dt = parse_target_date(opts.date)
     if opts.striptimezone:
-        return b"%d +0000" % as_utc_epoch(dt)
+        return utc_git_date(as_utc_epoch(dt))
     offset_seconds = int(dt.utcoffset().total_seconds())
     sign = "+" if offset_seconds >= 0 else "-"
     hours, minutes = divmod(abs(offset_seconds) // 60, 60)
@@ -1105,7 +1121,7 @@ def make_commit_callback(opts, random_dates, preview):
             # Digits untouched, each offset relabeled to +0000 independently
             # (author and committer can differ, e.g. after a rebase).
             for field in ("author_date", "committer_date"):
-                new[field] = b"%d +0000" % as_utc_epoch(parse_git_date(getattr(commit, field)))
+                new[field] = utc_git_date(as_utc_epoch(parse_git_date(getattr(commit, field))))
         if opts.dryrun:
             preview.append(preview_entry(commit, new))
             return
@@ -1181,11 +1197,11 @@ def run(argv):
     confirm(opts)
     backup_branch(opts)
     clean_cache()
-    granularity = None if opts.keepdate else random_granularity(opts)
+    kept_unit = None if opts.keepdate else kept_calendar_unit(opts)
     random_dates = None
-    if granularity:
+    if kept_unit:
         random_dates = compute_random_dates(
-            read_history(), set(opts.commits), granularity, opts.entirehistory
+            read_history(), set(opts.commits), kept_unit, opts.entirehistory
         )
     preview = []
     run_filter_repo(opts, make_commit_callback(opts, random_dates, preview))
