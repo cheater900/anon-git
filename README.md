@@ -13,22 +13,23 @@ timestamps or email leaking information about them. Specifically, anon-git can:
 - Anonymize metadata using arbitrary values for user name, user email and date
 - Anonymize just the timestamps (keep authorship) or the username (keep timestamp)
 - Anonymize timestamps partially: preserve the commit year, month, or day while anonymizing the rest (hour & timezone)
-- Anonymize timestamps by *randomizing* month, day, or time instead of zeroing them (never the year), while keeping commits in their original relative order
+- Anonymize timestamps by _randomizing_ month, day, or time instead of zeroing them (never the year), while keeping commits in their original relative order
 
 ## Implementations
 
 | Path                           | Purpose                                                                               |
 | ------------------------------ | ------------------------------------------------------------------------------------- |
 | [`anon-git.sh/`](anon-git.sh/) | Bash implementation: one standalone script, easy to audit, copy and run. **Default.** |
-| [`anon-git.py/`](anon-git.py/) | Python implementation (planned): same options and behavior, installs via `uv tool`.   |
+| [`anon-git.py/`](anon-git.py/) | Python implementation: same options and behavior, installs via `uv tool install`.     |
 
 Use `anon-git.sh` unless you need the Python version. See
 [`anon-git.sh/README.md`](anon-git.sh/README.md) for usage, options and
-install steps.
+install steps, and [`anon-git.py/README.md`](anon-git.py/README.md) for what
+the Python version does differently.
 
 ## Docs
 
-- [`docs/ROADMAP.md`](docs/ROADMAP.md): planned work, including the Python port
+- [`docs/ROADMAP.md`](docs/ROADMAP.md): planned work
 - [`docs/CHANGELOG.md`](docs/CHANGELOG.md): change history
 
 ## License

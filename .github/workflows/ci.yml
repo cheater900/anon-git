@@ -78,3 +78,45 @@ jobs:
         env:
           BATS_LIB_PATH: ${{ runner.temp }}/bats-libs
         run: just test
+
+  python:
+    defaults:
+      run:
+        working-directory: anon-git.py
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install zsh, fish (Linux, shell-completion tests)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y zsh fish
+
+      - name: Install fish (macOS, shell-completion tests)
+        if: runner.os == 'macOS'
+        run: brew install fish
+
+      - name: Install just
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >>"$GITHUB_PATH"
+          curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to "$HOME/.local/bin"
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: just lint
+        run: just lint
+
+      - name: just format-check
+        run: just format-check
+
+      - name: just test
+        run: just test

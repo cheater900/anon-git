@@ -4,6 +4,7 @@ Derived from git history, newest first.
 
 ## 2026-11-02
 
+- ci: run anon-git.py lint, format, tests; document Python implementation
 - test: add anon-git.py regression tests, parity tests against anon-git.sh
 - test: cover anon-git.py post-commit hook install, run, uninstall
 - test: cover anon-git.py random dates with unit, property, end-to-end tests
