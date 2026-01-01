@@ -72,6 +72,24 @@ test_flag_install_print_completion() {
     record_result "$errors" 'flag --install ships completions for installed copy'
 }
 
+test_flag_install_as_flag_value() {
+    local fake_home errors=0
+
+    fake_home=$(mktemp -d "${TMP_DIR}/fake_home.XXXXXX")
+    mkdir -p "${fake_home}/.local/bin"
+
+    HOME="$fake_home" PAGER="cat" ./"${SCRIPT_NAME}" --dry-run --name --install HEAD >/dev/null 2>&1
+
+    if [[ -e "${fake_home}/.local/bin/anon-git" ]]; then
+        printf 'Error: --install given as --name value ran the installer\n'
+        errors=$((errors + 1))
+    fi
+
+    rm -rf "$fake_home"
+
+    record_result "$errors" '--install as --name value not run'
+}
+
 test_flag_install_bin_fallback() {
     local fake_home target exit_status errors=0
 

@@ -572,6 +572,8 @@ handle_early_options() {
     local args=("$@") i
     for ((i = 0; i < ${#args[@]}; i++)); do
         case "${args[i]}" in
+        # Skip the value, so `--name --install` doesn't run the installer.
+        --date | --name | --email) i=$((i + 1)) ;;
         -h | --help) show_help ;;
         -v | --version) show_version ;;
         --_list-flags) list_flags ;;
