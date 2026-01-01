@@ -52,6 +52,19 @@ cleanup_on_exit() {
 }
 trap cleanup_on_exit EXIT
 
+# Internal: sets the variable named $1 to a new scratch file. The name is
+# stored before the file exists: with `x=$(mktemp)` a kill between file
+# creation and assignment would leave a file the EXIT trap can't see.
+make_scratch_file() {
+    local path
+    path=$(mktemp -u)
+    printf -v "$1" '%s' "$path"
+    (
+        set -C
+        : >"$path"
+    )
+}
+
 # ──────────────────────────────────────────────────────────────────────
 # HELP
 #
@@ -1045,7 +1058,7 @@ clean_cache() {
 # EXIT trap (cleanup_on_exit).
 setup_dryrun() {
     if [[ "$ANON_GIT_DRYRUN" == '1' ]]; then
-        dryrun_file=$(mktemp)
+        make_scratch_file dryrun_file
     fi
 }
 
@@ -1192,7 +1205,7 @@ setup_random_dates() {
         return
     fi
 
-    random_dates_file=$(mktemp)
+    make_scratch_file random_dates_file
 
     if ! git log --reverse --format='%H %at %P' HEAD |
         ANON_GIT_RANDOMTIME="$ANON_GIT_RANDOMTIME" ANON_GIT_RANDOMDAY="$ANON_GIT_RANDOMDAY" ANON_GIT_RANDOMMONTH="$ANON_GIT_RANDOMMONTH" \
@@ -1402,7 +1415,7 @@ run_filter_repo() {
     if [[ "$ANON_GIT_DRYRUN" == '1' ]]; then
         dryrun_args=(--dry-run)
     fi
-    filter_repo_log=$(mktemp)
+    make_scratch_file filter_repo_log
     if ! git filter-repo --force ${dryrun_args[@]+"${dryrun_args[@]}"} --commit-callback "${python_parse_target_date}${python_commit_callback}" --refs HEAD >"$filter_repo_log" 2>&1; then
         printf 'Error: git filter-repo failed:\n' >&2
         cat "$filter_repo_log" >&2

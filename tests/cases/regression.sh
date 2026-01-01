@@ -267,61 +267,53 @@ test_match_clean_cache_from_subdir() {
 
 test_match_trap_cleanup_on_kill() {
     # The EXIT trap (cleanup_on_exit) must remove scratch files even when
-    # killed mid-run. Uses a large repo (gives filter-repo time to run) and a
-    # dedicated TMPDIR to spot leftovers easily. `exec` in the backgrounded
-    # subshell makes $pid the script's own PID. If the run finishes before
-    # the kill lands, the check is inconclusive and skipped, not errored.
-    local repo_dir scratch_tmpdir pid i caught_mid_run leftover errors=0
+    # killed mid-run. The PAGER marks the point where every scratch file
+    # exists, then sleeps so the kill lands mid-run; bash runs the trap once
+    # the pager returns. A dedicated TMPDIR makes leftovers easy to spot.
+    # `exec` in the backgrounded subshell makes $pid the script's own PID.
+    local repo_dir scratch_tmpdir ready_file pid leftover errors=0
 
     repo_dir=$(mktemp -d "${TMP_DIR}/trap_kill_repo.XXXXXX")
-    (
-        cd "$repo_dir" || exit 1
-        git init >/dev/null
-        git config --local user.name "Jordan Blake"
-        git config --local user.email "jordan.blake@example.com"
-        for i in $(seq 1 500); do
-            echo "file ${i}" >"file_${i}.txt"
-            git add "file_${i}.txt" >/dev/null
-            git commit -q -m "Add file_${i}.txt"
-        done
-    )
+    git -C "$repo_dir" init >/dev/null
+    git -C "$repo_dir" config --local user.name "Jordan Blake"
+    git -C "$repo_dir" config --local user.email "jordan.blake@example.com"
+    git -C "$repo_dir" commit -q --allow-empty -m 'Initial commit'
     cp "$SCRIPT" "$repo_dir/"
     chmod +x "${repo_dir}/${SCRIPT_NAME}"
 
     scratch_tmpdir=$(mktemp -d "${TMP_DIR}/trap_kill_tmpdir.XXXXXX")
+    ready_file="${TMP_DIR}/trap_kill_ready"
 
-    (cd "$repo_dir" && TMPDIR="$scratch_tmpdir" PAGER=cat exec "./${SCRIPT_NAME}" --no-confirm --dry-run --entire-history >/dev/null 2>&1) &
+    (cd "$repo_dir" && TMPDIR="$scratch_tmpdir" PAGER="touch '${ready_file}'; sleep 1; :" \
+        exec "./${SCRIPT_NAME}" --no-confirm --dry-run --random-day --entire-history >/dev/null 2>&1) &
     pid=$!
 
-    caught_mid_run=0
-    for i in $(seq 1 200); do
-        if ! kill -0 "$pid" 2>/dev/null; then
+    for _ in $(seq 1 100); do
+        if [[ -e "$ready_file" ]]; then
             break
         fi
-        if [[ -n "$(find "$scratch_tmpdir" -type f 2>/dev/null)" ]]; then
-            caught_mid_run=1
-            break
-        fi
-        sleep 0.01
+        sleep 0.1
     done
 
-    if [[ "$caught_mid_run" -eq 1 ]]; then
-        kill -TERM "$pid" 2>/dev/null
+    if [[ ! -e "$ready_file" ]]; then
+        printf 'Error: run never reached the pager\n'
+        errors=$((errors + 1))
     fi
+    if [[ "$(find "$scratch_tmpdir" -type f | wc -l)" -ne 3 ]]; then
+        printf 'Error: expected 3 scratch files mid-run, found %s\n' "$(find "$scratch_tmpdir" -type f | wc -l)"
+        errors=$((errors + 1))
+    fi
+    kill -TERM "$pid" 2>/dev/null
     wait "$pid" 2>/dev/null
 
-    if [[ "$caught_mid_run" -eq 0 ]]; then
-        printf 'SKIP EXIT trap cleanup on kill: could not catch the run in progress\n'
-    else
-        leftover=$(find "$scratch_tmpdir" -type f 2>/dev/null | wc -l)
-        if [[ "$leftover" -ne 0 ]]; then
-            printf 'Error: %s scratch file(s) left behind after killing the script mid-run\n' "$leftover"
-            errors=$((errors + 1))
-        fi
-        record_result "$errors" 'EXIT trap cleans scratch files when killed mid-run'
+    leftover=$(find "$scratch_tmpdir" -type f | wc -l)
+    if [[ "$leftover" -ne 0 ]]; then
+        printf 'Error: %s scratch file(s) left behind after killing the script mid-run\n' "$leftover"
+        errors=$((errors + 1))
     fi
 
-    rm -rf "$repo_dir" "$scratch_tmpdir"
+    rm -rf "$repo_dir" "$scratch_tmpdir" "$ready_file"
+    record_result "$errors" 'EXIT trap cleans scratch files when killed mid-run'
 }
 
 test_match_annotated_tag() {
