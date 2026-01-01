@@ -121,7 +121,8 @@ test_flag_env_vars() {
     local random_index new_commit_hash exit_status commit_info errors=0
     local env_name='Grace Murray' env_email='grace.murray@example.com' env_date='2019-05-05 00:00:00 +0000'
 
-    random_index=$(($(od -An -N2 -tu2 </dev/urandom) % (COMMIT_COUNT - 1)))
+    pick_random_index
+    random_index=$PICKED_INDEX
 
     ANON_GIT_NAME="$env_name" ANON_GIT_EMAIL="$env_email" ANON_GIT_DATE="$env_date" \
         ./"${SCRIPT_NAME}" --no-confirm --no-backup --current-branch "HEAD~${random_index}" >/dev/null 2>&1

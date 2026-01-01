@@ -46,6 +46,12 @@ init_repo() {
     cp -a .git "$REPO_TEMPLATE"
 }
 
+pick_random_index() {
+    # Sets PICKED_INDEX to a random HEAD~N target, reported by record_result
+    # on failure; set TEST_RANDOM_INDEX to replay it.
+    PICKED_INDEX=${TEST_RANDOM_INDEX:-$(($(od -An -N2 -tu2 </dev/urandom) % (COMMIT_COUNT - 1)))}
+}
+
 restore_repo() {
     # Each test starts from the same fresh history, so one test's leftovers
     # can't cascade into the next.
@@ -111,7 +117,8 @@ test_script() {
     done
     expected_author="${expected_name} <${expected_email}>"
 
-    random_index=$(($(od -An -N2 -tu2 </dev/urandom) % (COMMIT_COUNT - 1)))
+    pick_random_index
+    random_index=$PICKED_INDEX
 
     # Logs of every other commit, to verify only the target one changes.
     commit_hash=$(git rev-parse "HEAD~${random_index}")
@@ -195,6 +202,10 @@ record_result() {
     fi
     TOTAL_ERRORS=$((TOTAL_ERRORS + errors))
     printf '%s Test %02d » test %s\n' "$status" "$CURRENT_TEST_INDEX" "$label"
+    if [[ "$errors" -ne 0 && -n "${PICKED_INDEX:-}" ]]; then
+        printf '   target HEAD~%s, replay with TEST_RANDOM_INDEX=%s\n' "$PICKED_INDEX" "$PICKED_INDEX"
+    fi
+    PICKED_INDEX=''
     restore_repo
 }
 

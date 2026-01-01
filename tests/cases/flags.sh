@@ -64,7 +64,8 @@ test_flag_keep_partial() {
     local flag="$1" random_index commit_hash old_year old_month old_day
     local new_commit_hash new_year new_month new_day exit_status errors=0
 
-    random_index=$(($(od -An -N2 -tu2 </dev/urandom) % (COMMIT_COUNT - 1)))
+    pick_random_index
+    random_index=$PICKED_INDEX
     commit_hash=$(git rev-parse "HEAD~${random_index}")
     old_year=$(git show -s --date=format:'%Y' --format='%ad' "$commit_hash")
     old_month=$(git show -s --date=format:'%m' --format='%ad' "$commit_hash")
