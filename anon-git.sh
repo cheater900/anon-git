@@ -730,6 +730,14 @@ parse_args() {
     done
 }
 
+# Internal: prints '1' if bool option $1 is on from any source.
+bool_set() {
+    local arg="${1}_ARG" cfg="GITCONFIG_${1}" env="ANON_GIT_${1}"
+    if [[ -n "${!arg}" || "${!cfg:-}" == '1' || "${!env:-}" == '1' ]]; then
+        printf '1'
+    fi
+}
+
 check_incompatible() {
     local flag1="$1"
     local flag2="$3"
@@ -786,56 +794,33 @@ source_var() {
 # merge_args_with_defaults overwrites these envvar names with the
 # fully-resolved value, so an unset envvar still reads as empty.
 reject_incompatible_options() {
-    local date_set name_set email_set opt arg cfg env
-    local keepuser_set keepdate_set keepyear_set keepmonth_set keepday_set
-    local randomtime_set randomday_set randommonth_set entirehistory_set
+    local date_set name_set email_set keepuser_set entirehistory_set flag joined
+    local date_flags=()
 
     flag_errors=0
 
     date_set="${DATE_ARG:-${GITCONFIG_DATE:-${ANON_GIT_DATE:-}}}"
     name_set="${NAME_ARG:-${GITCONFIG_NAME:-${ANON_GIT_NAME:-}}}"
     email_set="${EMAIL_ARG:-${GITCONFIG_EMAIL:-${ANON_GIT_EMAIL:-}}}"
-    for opt in KEEPUSER KEEPDATE KEEPYEAR KEEPMONTH KEEPDAY RANDOMTIME RANDOMDAY RANDOMMONTH ENTIREHISTORY; do
-        arg="${opt}_ARG" cfg="GITCONFIG_${opt}" env="ANON_GIT_${opt}"
-        printf -v "$(to_lower "$opt")_set" '%s' ''
-        if [[ -n "${!arg}" || "${!cfg:-}" == '1' || "${!env:-}" == '1' ]]; then
-            printf -v "$(to_lower "$opt")_set" '%s' '1'
-        fi
-    done
+    keepuser_set=$(bool_set KEEPUSER)
+    entirehistory_set=$(bool_set ENTIREHISTORY)
 
     check_incompatible --keep-user "$keepuser_set" --name "$name_set"
     check_incompatible --keep-user "$keepuser_set" --email "$email_set"
-    check_incompatible --date "$date_set" --keep-date "$keepdate_set"
-    check_incompatible --date "$date_set" --keep-year "$keepyear_set"
-    check_incompatible --date "$date_set" --keep-month "$keepmonth_set"
-    check_incompatible --date "$date_set" --keep-day "$keepday_set"
-    check_incompatible --date "$date_set" --random-time "$randomtime_set"
-    check_incompatible --date "$date_set" --random-day "$randomday_set"
-    check_incompatible --date "$date_set" --random-month "$randommonth_set"
-    check_incompatible --keep-date "$keepdate_set" --keep-year "$keepyear_set"
-    check_incompatible --keep-date "$keepdate_set" --keep-month "$keepmonth_set"
-    check_incompatible --keep-date "$keepdate_set" --keep-day "$keepday_set"
-    check_incompatible --keep-date "$keepdate_set" --random-time "$randomtime_set"
-    check_incompatible --keep-date "$keepdate_set" --random-day "$randomday_set"
-    check_incompatible --keep-date "$keepdate_set" --random-month "$randommonth_set"
-    check_incompatible --keep-year "$keepyear_set" --keep-month "$keepmonth_set"
-    check_incompatible --keep-year "$keepyear_set" --keep-day "$keepday_set"
-    check_incompatible --keep-month "$keepmonth_set" --keep-day "$keepday_set"
-    # random-* and keep-year/-month/-day both dictate a fill strategy (zero
-    # vs. random) for the unkept fields, so cross-pairing is a real conflict.
-    check_incompatible --keep-year "$keepyear_set" --random-time "$randomtime_set"
-    check_incompatible --keep-year "$keepyear_set" --random-day "$randomday_set"
-    check_incompatible --keep-year "$keepyear_set" --random-month "$randommonth_set"
-    check_incompatible --keep-month "$keepmonth_set" --random-time "$randomtime_set"
-    check_incompatible --keep-month "$keepmonth_set" --random-day "$randomday_set"
-    check_incompatible --keep-month "$keepmonth_set" --random-month "$randommonth_set"
-    check_incompatible --keep-day "$keepday_set" --random-time "$randomtime_set"
-    check_incompatible --keep-day "$keepday_set" --random-day "$randomday_set"
-    check_incompatible --keep-day "$keepday_set" --random-month "$randommonth_set"
-    # Three granularities of the same thing: only one at a time.
-    check_incompatible --random-time "$randomtime_set" --random-day "$randomday_set"
-    check_incompatible --random-time "$randomtime_set" --random-month "$randommonth_set"
-    check_incompatible --random-day "$randomday_set" --random-month "$randommonth_set"
+    # --date, --keep-* and --random-* each decide the whole date: one at most.
+    if [[ -n "$date_set" ]]; then
+        date_flags+=(--date)
+    fi
+    for flag in --keep-date --keep-year --keep-month --keep-day --random-time --random-day --random-month; do
+        if [[ -n "$(bool_set "$(flag_option "$flag")")" ]]; then
+            date_flags+=("$flag")
+        fi
+    done
+    if [[ ${#date_flags[@]} -gt 1 ]]; then
+        joined=$(printf '%s and ' "${date_flags[@]}")
+        printf 'Error: %s cannot be used together\n' "${joined% and }" >&2
+        flag_errors=1
+    fi
     # CLI-only: no ANON_GIT_COMMIT envvar exists.
     check_incompatible "commit(s) argument" "$COMMIT_ARG" --entire-history "$entirehistory_set"
     # Not a real conflict: `ANON_GIT_QUIET=1 --verbose` is the intended way to
