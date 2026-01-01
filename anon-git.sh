@@ -13,7 +13,7 @@ DEFAULT_NAME='Anon'
 DEFAULT_EMAIL='anon@localhost'
 
 show_help() {
-    cat << EOF
+    cat <<EOF
 Anonymizes git commit metadata.
 
 Usage:
@@ -34,6 +34,8 @@ Options:
   --current-branch                Overwrite current branch instead of creating a copy of it
   --entire-history                Rewrite entire history and not a single commit
   --dry-run                       Show history changes without rewriting it
+  --print-completion [SHELL]      Print a shell completion script (bash, zsh, or fish;
+                                   defaults to \$SHELL) and exit
 
 Arguments:
   commit(s)               Commit(s) to anonymize (can be: hash, HEAD~3, branch, tag, ...)
@@ -77,13 +79,75 @@ Examples:
 
     # Anonymize commits following the Conventional Commits "fix:" prefix
     git log --format=%H --grep='^fix:' | xargs ./anon-git.sh
+
+    # Install shell completion (shell inferred from \$SHELL if omitted)
+    ./anon-git.sh --print-completion bash > ~/.local/share/bash-completion/completions/anon-git.sh
+    ./anon-git.sh --print-completion zsh  > "\${fpath[1]}/_anon-git.sh"
+    ./anon-git.sh --print-completion fish > ~/.config/fish/completions/anon-git.sh.fish
 EOF
     exit 0
 }
 
-for arg in "$@"; do
-    case "$arg" in
-        -h|--help) show_help ;;
+# Internal/undocumented: prints one flag per line (value-taking flags end in
+# "="), so shell completion scripts have a single source of truth for the
+# flag list instead of hardcoding it (and silently drifting out of sync).
+list_flags() {
+    cat <<'EOF'
+-h
+--help
+--date=
+--name=
+--email=
+--keep-user
+--keep-date
+--keep-year
+--keep-month
+--keep-day
+--no-confirm
+--no-backup
+--current-branch
+--entire-history
+--dry-run
+--print-completion=
+EOF
+    exit 0
+}
+
+# Internal: prints the requested shell's completion script to stdout and
+# exits. The completion scripts are static files shipped next to this
+# script (see completions/), not generated, so this is just a convenience
+# `cat` with shell-name resolution (defaulting to $SHELL) and validation.
+print_completion() {
+    local shell="$1" script_dir completion_file
+
+    [[ -n "$shell" ]] || shell="${SHELL##*/}"
+
+    script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")" && pwd)
+    case "$shell" in
+    bash) completion_file="${script_dir}/completions/anon-git.bash" ;;
+    zsh) completion_file="${script_dir}/completions/_anon-git.sh" ;;
+    fish) completion_file="${script_dir}/completions/anon-git.sh.fish" ;;
+    *)
+        printf 'Error: unsupported shell "%s" (expected bash, zsh, or fish)\n' "$shell" >&2
+        exit 1
+        ;;
+    esac
+
+    if [[ ! -f "$completion_file" ]]; then
+        printf 'Error: completion script not found: %s\n' "$completion_file" >&2
+        exit 1
+    fi
+
+    cat -- "$completion_file"
+    exit 0
+}
+
+args=("$@")
+for ((i = 0; i < ${#args[@]}; i++)); do
+    case "${args[i]}" in
+    -h | --help) show_help ;;
+    --_list-flags) list_flags ;;
+    --print-completion) print_completion "${args[i + 1]:-}" ;;
     esac
 done
 
@@ -140,75 +204,84 @@ COMMITS_ARG=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --date)
-            [[ $# -ge 2 ]] || { printf 'Error: %s requires a value\n' "$1" >&2; exit 1; }
-            DATE_ARG="$2"
-            shift 2
-            ;;
-        --name)
-            [[ $# -ge 2 ]] || { printf 'Error: %s requires a value\n' "$1" >&2; exit 1; }
-            NAME_ARG="$2"
-            shift 2
-            ;;
-        --email)
-            [[ $# -ge 2 ]] || { printf 'Error: %s requires a value\n' "$1" >&2; exit 1; }
-            EMAIL_ARG="$2"
-            shift 2
-            ;;
-        --keep-user)
-            KEEPUSER_ARG='1'
-            shift
-            ;;
-        --keep-date)
-            KEEPDATE_ARG='1'
-            shift
-            ;;
-        --keep-year)
-            KEEPYEAR_ARG='1'
-            shift
-            ;;
-        --keep-month)
-            KEEPMONTH_ARG='1'
-            shift
-            ;;
-        --keep-day)
-            KEEPDAY_ARG='1'
-            shift
-            ;;
-        --no-confirm)
-            NOCONFIRM_ARG='1'
-            shift
-            ;;
-        --no-backup)
-            NOBACKUP_ARG='1'
-            shift
-            ;;
-        --entire-history)
-            ENTIREHISTORY_ARG='1'
-            shift
-            ;;
-        --current-branch)
-            CURRENTBRANCH_ARG='1'
-            shift
-            ;;
-        --dry-run)
-            DRYRUN_ARG='1'
-            shift
-            ;;
-        -*)
-            printf 'Unknown option: %s\n' "$1" >&2
+    --date)
+        [[ $# -ge 2 ]] || {
+            printf 'Error: %s requires a value\n' "$1" >&2
             exit 1
-            ;;
-        *)
-            if ! git rev-parse --quiet --verify "${1}^{commit}" >/dev/null 2>&1; then
-                printf 'Error: Commit "%s" does not exist or is not a commit object.\n' "${1}" >&2
-                exit 1
-            fi
-            ref=$(git rev-parse "$1")
-            COMMITS_ARG=("${COMMITS_ARG[@]}" "$ref")
-            COMMIT_ARG="${COMMITS_ARG[*]}"
-            shift
-            ;;
+        }
+        DATE_ARG="$2"
+        shift 2
+        ;;
+    --name)
+        [[ $# -ge 2 ]] || {
+            printf 'Error: %s requires a value\n' "$1" >&2
+            exit 1
+        }
+        NAME_ARG="$2"
+        shift 2
+        ;;
+    --email)
+        [[ $# -ge 2 ]] || {
+            printf 'Error: %s requires a value\n' "$1" >&2
+            exit 1
+        }
+        EMAIL_ARG="$2"
+        shift 2
+        ;;
+    --keep-user)
+        KEEPUSER_ARG='1'
+        shift
+        ;;
+    --keep-date)
+        KEEPDATE_ARG='1'
+        shift
+        ;;
+    --keep-year)
+        KEEPYEAR_ARG='1'
+        shift
+        ;;
+    --keep-month)
+        KEEPMONTH_ARG='1'
+        shift
+        ;;
+    --keep-day)
+        KEEPDAY_ARG='1'
+        shift
+        ;;
+    --no-confirm)
+        NOCONFIRM_ARG='1'
+        shift
+        ;;
+    --no-backup)
+        NOBACKUP_ARG='1'
+        shift
+        ;;
+    --entire-history)
+        ENTIREHISTORY_ARG='1'
+        shift
+        ;;
+    --current-branch)
+        CURRENTBRANCH_ARG='1'
+        shift
+        ;;
+    --dry-run)
+        DRYRUN_ARG='1'
+        shift
+        ;;
+    -*)
+        printf 'Unknown option: %s\n' "$1" >&2
+        exit 1
+        ;;
+    *)
+        if ! git rev-parse --quiet --verify "${1}^{commit}" >/dev/null 2>&1; then
+            printf 'Error: Commit "%s" does not exist or is not a commit object.\n' "${1}" >&2
+            exit 1
+        fi
+        ref=$(git rev-parse "$1")
+        COMMITS_ARG=("${COMMITS_ARG[@]}" "$ref")
+        COMMIT_ARG="${COMMITS_ARG[*]}"
+        shift
+        ;;
     esac
 done
 
@@ -227,18 +300,18 @@ check_incompatible() {
     fi
 }
 
-check_incompatible --keep-user  "$KEEPUSER_ARG"  --name           "$NAME_ARG"
-check_incompatible --keep-user  "$KEEPUSER_ARG"  --email          "$EMAIL_ARG"
-check_incompatible --date       "$DATE_ARG"      --keep-date      "$KEEPDATE_ARG"
-check_incompatible --date       "$DATE_ARG"      --keep-year      "$KEEPYEAR_ARG"
-check_incompatible --date       "$DATE_ARG"      --keep-month     "$KEEPMONTH_ARG"
-check_incompatible --date       "$DATE_ARG"      --keep-day       "$KEEPDAY_ARG"
-check_incompatible --keep-date  "$KEEPDATE_ARG"  --keep-year      "$KEEPYEAR_ARG"
-check_incompatible --keep-date  "$KEEPDATE_ARG"  --keep-month     "$KEEPMONTH_ARG"
-check_incompatible --keep-date  "$KEEPDATE_ARG"  --keep-day       "$KEEPDAY_ARG"
-check_incompatible --keep-year  "$KEEPYEAR_ARG"  --keep-month     "$KEEPMONTH_ARG"
-check_incompatible --keep-year  "$KEEPYEAR_ARG"  --keep-day       "$KEEPDAY_ARG"
-check_incompatible --keep-month "$KEEPMONTH_ARG" --keep-day       "$KEEPDAY_ARG"
+check_incompatible --keep-user "$KEEPUSER_ARG" --name "$NAME_ARG"
+check_incompatible --keep-user "$KEEPUSER_ARG" --email "$EMAIL_ARG"
+check_incompatible --date "$DATE_ARG" --keep-date "$KEEPDATE_ARG"
+check_incompatible --date "$DATE_ARG" --keep-year "$KEEPYEAR_ARG"
+check_incompatible --date "$DATE_ARG" --keep-month "$KEEPMONTH_ARG"
+check_incompatible --date "$DATE_ARG" --keep-day "$KEEPDAY_ARG"
+check_incompatible --keep-date "$KEEPDATE_ARG" --keep-year "$KEEPYEAR_ARG"
+check_incompatible --keep-date "$KEEPDATE_ARG" --keep-month "$KEEPMONTH_ARG"
+check_incompatible --keep-date "$KEEPDATE_ARG" --keep-day "$KEEPDAY_ARG"
+check_incompatible --keep-year "$KEEPYEAR_ARG" --keep-month "$KEEPMONTH_ARG"
+check_incompatible --keep-year "$KEEPYEAR_ARG" --keep-day "$KEEPDAY_ARG"
+check_incompatible --keep-month "$KEEPMONTH_ARG" --keep-day "$KEEPDAY_ARG"
 check_incompatible "commit(s) argument" "$COMMIT_ARG" --entire-history "$ENTIREHISTORY_ARG"
 
 [[ "$flag_errors" -ne 0 ]] && exit 1
@@ -280,14 +353,14 @@ validate_bool() {
     fi
 }
 
-validate_bool ANON_GIT_KEEPUSER       "$ANON_GIT_KEEPUSER"
-validate_bool ANON_GIT_KEEPDATE       "$ANON_GIT_KEEPDATE"
-validate_bool ANON_GIT_KEEPYEAR       "$ANON_GIT_KEEPYEAR"
-validate_bool ANON_GIT_KEEPMONTH      "$ANON_GIT_KEEPMONTH"
-validate_bool ANON_GIT_KEEPDAY        "$ANON_GIT_KEEPDAY"
-validate_bool ANON_GIT_ENTIREHISTORY  "$ANON_GIT_ENTIREHISTORY"
-validate_bool ANON_GIT_CURRENTBRANCH  "$ANON_GIT_CURRENTBRANCH"
-validate_bool ANON_GIT_DRYRUN         "$ANON_GIT_DRYRUN"
+validate_bool ANON_GIT_KEEPUSER "$ANON_GIT_KEEPUSER"
+validate_bool ANON_GIT_KEEPDATE "$ANON_GIT_KEEPDATE"
+validate_bool ANON_GIT_KEEPYEAR "$ANON_GIT_KEEPYEAR"
+validate_bool ANON_GIT_KEEPMONTH "$ANON_GIT_KEEPMONTH"
+validate_bool ANON_GIT_KEEPDAY "$ANON_GIT_KEEPDAY"
+validate_bool ANON_GIT_ENTIREHISTORY "$ANON_GIT_ENTIREHISTORY"
+validate_bool ANON_GIT_CURRENTBRANCH "$ANON_GIT_CURRENTBRANCH"
+validate_bool ANON_GIT_DRYRUN "$ANON_GIT_DRYRUN"
 
 # ──────────────────────────────────────────────────────────────────────
 # VERBOSE INFO
@@ -568,4 +641,3 @@ if [[ "$ANON_GIT_DRYRUN" == '1' && -f "$dryrun_file" ]]; then
 else
     printf 'Done. History has been rewritten.\n'
 fi
-

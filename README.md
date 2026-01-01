@@ -115,6 +115,8 @@ required — pass `HEAD` explicitly to anonymize the last commit.
   --entire-history                Rewrite entire history and not a single commit
   --current-branch                Overwrite current branch and not a copy of it
   --dry-run                       Show history changes without rewriting them
+  --print-completion [SHELL]      Print a shell completion script (bash, zsh, or fish;
+                                   defaults to $SHELL) and exit
 ```
 
 **Priority order** (highest to lowest):
@@ -174,6 +176,22 @@ git log --format=%H --author='Frederic' | xargs ./anon-git.sh
 
 # Anonymize commits following the Conventional Commits "fix:" prefix
 git log --format=%H --grep='^fix:' | xargs ./anon-git.sh
+```
+
+### Shell completion
+
+Tab-completion scripts for bash, zsh, and fish are hand-written and live in `completions/` (they don't need `git filter-repo`, only `anon-git.sh` itself and, for completing commit refs, `git`). The flag list they offer comes from the script's own `--_list-flags` (bash) or is kept in sync with it (zsh/fish; checked by the test suite), so there's one source of truth even though each shell's completion format is hand-maintained separately.
+
+Print any of them with `--print-completion [bash|zsh|fish]` (the shell is inferred from `$SHELL` if omitted) instead of hunting for the file in `completions/`:
+
+```bash
+# Install for your current shell
+./anon-git.sh --print-completion bash > ~/.local/share/bash-completion/completions/anon-git.sh
+./anon-git.sh --print-completion zsh  > "${fpath[1]}/_anon-git.sh"   # must be a dir already in $fpath
+./anon-git.sh --print-completion fish > ~/.config/fish/completions/anon-git.sh.fish
+
+# Or just try it out in the current shell session (bash/zsh)
+source <(./anon-git.sh --print-completion)
 ```
 
 ### Using anonymize-git-commit as a post-commit hook
