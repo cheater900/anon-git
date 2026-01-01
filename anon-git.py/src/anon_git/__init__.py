@@ -385,7 +385,11 @@ def hook_file_path():
     return os.path.join(top, hooks_dir, "post-commit")
 
 
+# A symlink is never ours: writing through it would overwrite its target
+# (e.g. a copy of anon-git.sh, which contains the marker text).
 def hook_is_ours(hook_file):
+    if os.path.islink(hook_file) or not os.path.isfile(hook_file):
+        return False
     with open(hook_file, encoding="utf-8", errors="replace") as fh:
         return HOOK_MARKER in fh.read()
 
@@ -422,7 +426,7 @@ def install_hook():
     if not git_ok("rev-parse", "--show-toplevel"):
         fail("Error: --install-hook must be run inside a git repository.")
     hook_file = hook_file_path()
-    if os.path.isfile(hook_file) and not hook_is_ours(hook_file):
+    if os.path.lexists(hook_file) and not hook_is_ours(hook_file):
         fail(
             f"Error: {hook_file} already exists and was not installed by anon-git.\n"
             "  Remove or back it up first, then re-run --install-hook."
@@ -453,7 +457,7 @@ def uninstall_hook():
     if not git_ok("rev-parse", "--show-toplevel"):
         fail("Error: --uninstall-hook must be run inside a git repository.")
     hook_file = hook_file_path()
-    if not os.path.isfile(hook_file):
+    if not os.path.lexists(hook_file):
         print(f"No post-commit hook installed at {hook_file}")
         sys.exit(0)
     if not hook_is_ours(hook_file):

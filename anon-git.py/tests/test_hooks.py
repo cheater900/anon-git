@@ -147,3 +147,24 @@ def test_install_flag_as_name_value_not_run(repo):
     result = run_cli("--dry-run", "--name", "--install-hook", "HEAD", env={"PAGER": "cat"})
     assert result.returncode == 0, result.stderr
     assert not os.path.exists(HOOK_FILE)
+
+
+@pytest.mark.parametrize("flag", ["--install-hook", "--uninstall-hook"])
+def test_hook_flags_refuse_symlinked_hook(repo, tmp_path, flag):
+    # The link target carries the marker (like a copy of anon-git.sh does);
+    # it must still be left alone.
+    target = tmp_path / "shared-hook"
+    target.write_text(f"#!/bin/sh\n{anon_git.HOOK_MARKER}\n")
+    os.symlink(target, HOOK_FILE)
+    result = run_cli(flag)
+    assert result.returncode == 1
+    assert target.read_text() == f"#!/bin/sh\n{anon_git.HOOK_MARKER}\n"
+    assert os.path.islink(HOOK_FILE)
+
+
+def test_install_hook_refuses_dangling_symlink(repo, tmp_path):
+    target = tmp_path / "missing"
+    os.symlink(target, HOOK_FILE)
+    result = run_cli("--install-hook")
+    assert result.returncode == 1
+    assert not target.exists()
