@@ -7,6 +7,15 @@
 
 load test_helper
 
+HOOK_FILE=.git/hooks/post-commit
+FOREIGN_SCRIPT=$'#!/bin/sh\necho foreign'
+
+# Writes an executable non-anon-git script to $1.
+write_foreign_script() {
+    printf '%s\n' "$FOREIGN_SCRIPT" >"$1"
+    chmod +x "$1"
+}
+
 # Creates $FAKE_HOME with subdirs $@ (e.g. .local/bin .bin).
 make_fake_home() {
     local dir
@@ -112,7 +121,7 @@ run_installer() {
 
 @test "--uninstall keeps foreign file" {
     make_fake_home .local/bin
-    printf '#!/bin/sh\necho foreign\n' >"${FAKE_HOME}/.local/bin/anon-git"
+    write_foreign_script "${FAKE_HOME}/.local/bin/anon-git"
     run_installer ./anon-git.sh --uninstall
     assert_failure
     assert_file_exists "${FAKE_HOME}/.local/bin/anon-git"
@@ -137,12 +146,11 @@ run_installer() {
 }
 
 @test "--install-hook creates post-commit hook" {
-    local hook_file=${REPO}/.git/hooks/post-commit
     run ./anon-git.sh --install-hook
     assert_success
-    assert_file_executable "$hook_file"
-    assert_file_contains "$hook_file" 'Installed by anon-git'
-    run cat "$hook_file"
+    assert_file_executable "$HOOK_FILE"
+    assert_file_contains "$HOOK_FILE" 'Installed by anon-git'
+    run cat "$HOOK_FILE"
     assert_output --partial "${REPO}/anon-git.sh"
     # Without --no-backup a backup branch would accumulate per commit.
     assert_output --partial '--no-backup'
@@ -156,12 +164,10 @@ run_installer() {
 }
 
 @test "--install-hook keeps foreign hook" {
-    local hook_file=${REPO}/.git/hooks/post-commit
-    printf '#!/bin/sh\necho foreign\n' >"$hook_file"
-    chmod +x "$hook_file"
+    write_foreign_script "$HOOK_FILE"
     run ./anon-git.sh --install-hook
     assert_failure
-    assert_equal "$(cat "$hook_file")" $'#!/bin/sh\necho foreign'
+    assert_equal "$(cat "$HOOK_FILE")" "$FOREIGN_SCRIPT"
     assert_output --partial 'already exists'
 }
 
@@ -171,7 +177,7 @@ run_installer() {
     run ./anon-git.sh --install-hook
     assert_success
     assert_file_executable "${REPO}/.husky/post-commit"
-    assert_file_not_exists "${REPO}/.git/hooks/post-commit"
+    assert_file_not_exists "$HOOK_FILE"
 }
 
 @test "--install-hook anonymizes partial commit, keeps changes" {
@@ -213,7 +219,7 @@ run_installer() {
     assert_success
     run ./anon-git.sh --install-hook
     assert_success
-    assert_file_executable "${REPO}/.git/hooks/post-commit"
+    assert_file_executable "$HOOK_FILE"
 }
 
 @test "--install-hook anonymizes only new commit" {
@@ -238,7 +244,7 @@ run_installer() {
     # Must not spam output on every git commit.
     ./anon-git.sh --install-hook
     # Not assert_file_contains: its grep reads "--quiet" as an option.
-    run cat "${REPO}/.git/hooks/post-commit"
+    run cat "$HOOK_FILE"
     assert_output --partial '--quiet'
 }
 
@@ -246,7 +252,7 @@ run_installer() {
     ./anon-git.sh --install-hook
     run ./anon-git.sh --uninstall-hook
     assert_success
-    assert_file_not_exists "${REPO}/.git/hooks/post-commit"
+    assert_file_not_exists "$HOOK_FILE"
     assert_output --partial 'Removed post-commit hook'
 }
 
@@ -265,11 +271,9 @@ run_installer() {
 }
 
 @test "--uninstall-hook keeps foreign hook" {
-    local hook_file=${REPO}/.git/hooks/post-commit
-    printf '#!/bin/sh\necho foreign\n' >"$hook_file"
-    chmod +x "$hook_file"
+    write_foreign_script "$HOOK_FILE"
     run ./anon-git.sh --uninstall-hook
     assert_failure
-    assert_equal "$(cat "$hook_file")" $'#!/bin/sh\necho foreign'
+    assert_equal "$(cat "$HOOK_FILE")" "$FOREIGN_SCRIPT"
     assert_output --partial 'not installed by anon-git'
 }
