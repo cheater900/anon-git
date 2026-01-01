@@ -114,8 +114,9 @@ main() {
     test_flag_install_hook_creates_hook
     test_flag_install_hook_requires_git_repo
     test_flag_install_hook_preserves_foreign_hook
-    test_flag_install_hook_warns_on_hookspath
-    test_flag_install_hook_no_warning_without_hookspath
+    test_flag_install_hook_honors_hookspath
+    test_flag_install_hook_partial_commit
+    test_flag_install_hook_skips_rebase
     test_flag_install_hook_idempotent
     test_flag_install_hook_anonymizes_next_commit
     test_show_help

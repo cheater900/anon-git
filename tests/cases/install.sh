@@ -379,14 +379,12 @@ test_flag_install_hook_preserves_foreign_hook() {
     record_result "$errors" 'flag --install-hook keeps foreign hook'
 }
 
-test_flag_install_hook_warns_on_hookspath() {
-    # git honors core.hooksPath over <git-dir>/hooks when set, so a hook
-    # written to the standard location would silently never fire. Must warn
-    # but still succeed and write the file, so it stays regenerable.
+test_flag_install_hook_honors_hookspath() {
+    # git runs hooks from core.hooksPath when set, so the hook must land there.
     local repo_dir hook_file output exit_status errors=0
 
     repo_dir=$(new_hook_test_repo)
-    hook_file="${repo_dir}/.git/hooks/post-commit"
+    hook_file="${repo_dir}/.husky/post-commit"
     (cd "$repo_dir" && git config --local core.hooksPath .husky)
 
     output=$(cd "$repo_dir" && "./${SCRIPT_NAME}" --install-hook 2>&1)
@@ -397,44 +395,90 @@ test_flag_install_hook_warns_on_hookspath() {
         errors=$((errors + 1))
     fi
     if [[ ! -x "$hook_file" ]]; then
-        printf 'Error: %s was not created despite core.hooksPath being set\n' "$hook_file"
+        printf 'Error: %s was not created\n' "$hook_file"
         errors=$((errors + 1))
     fi
-    if ! grep -qi 'core.hookspath' <<<"$output"; then
-        printf 'Error: expected a core.hooksPath warning not found\n'
-        errors=$((errors + 1))
-    fi
-    if ! grep -qF '.husky' <<<"$output"; then
-        printf 'Error: warning did not mention the configured hooksPath value\n'
+    if [[ -e "${repo_dir}/.git/hooks/post-commit" ]]; then
+        printf 'Error: hook written to .git/hooks despite core.hooksPath\n'
         errors=$((errors + 1))
     fi
 
     rm -rf "$repo_dir"
 
-    record_result "$errors" 'flag --install-hook warns when core.hooksPath set'
+    record_result "$errors" 'flag --install-hook installs into core.hooksPath'
 }
 
-test_flag_install_hook_no_warning_without_hookspath() {
-    # Sibling to the test above: pins down the non-noisy default.
+test_flag_install_hook_partial_commit() {
+    # A partial commit leaves unstaged and staged changes behind; the hook
+    # must still anonymize HEAD and restore both.
+    local repo_dir author unstaged staged errors=0
+
+    repo_dir=$(new_hook_test_repo)
+    (
+        cd "$repo_dir" || exit 1
+        "./${SCRIPT_NAME}" --install-hook >/dev/null 2>&1
+        echo 'staged' >staged.txt
+        echo 'committed' >committed.txt
+        git add staged.txt committed.txt
+        echo 'unstaged' >>file_1.txt
+        git commit -m 'Partial commit' committed.txt >/dev/null 2>&1
+    )
+    author=$(git -C "$repo_dir" show -s --format='%an <%ae>' HEAD)
+    unstaged=$(git -C "$repo_dir" diff --name-only)
+    staged=$(git -C "$repo_dir" diff --cached --name-only)
+
+    if [[ "$author" != "${DEFAULT_NAME} <${DEFAULT_EMAIL}>" ]]; then
+        printf 'Error: partial commit not anonymized (author "%s")\n' "$author"
+        errors=$((errors + 1))
+    fi
+    if [[ "$unstaged" != 'file_1.txt' ]]; then
+        printf 'Error: unstaged change lost (got "%s")\n' "$unstaged"
+        errors=$((errors + 1))
+    fi
+    if [[ "$staged" != 'staged.txt' ]]; then
+        printf 'Error: staged change lost (got "%s")\n' "$staged"
+        errors=$((errors + 1))
+    fi
+
+    rm -rf "$repo_dir"
+
+    record_result "$errors" 'flag --install-hook anonymizes partial commit, keeps changes'
+}
+
+test_flag_install_hook_skips_rebase() {
     local repo_dir output exit_status errors=0
 
     repo_dir=$(new_hook_test_repo)
-
-    output=$(cd "$repo_dir" && "./${SCRIPT_NAME}" --install-hook 2>&1)
+    output=$(
+        cd "$repo_dir" || exit 1
+        echo 'file 2' >file_2.txt
+        git add file_2.txt
+        git commit -q -m 'Add file_2.txt'
+        "./${SCRIPT_NAME}" --install-hook >/dev/null 2>&1
+        git rebase -q --force-rebase HEAD~1 2>&1
+    )
     exit_status=$?
 
     if [[ "$exit_status" -ne 0 ]]; then
-        printf 'Error: --install-hook exited with status %s\n' "$exit_status"
+        printf 'Error: rebase with hook installed exited with status %s\n' "$exit_status"
         errors=$((errors + 1))
     fi
-    if grep -qi 'core.hookspath' <<<"$output"; then
-        printf 'Error: unexpected core.hooksPath warning when it is not set\n'
+    if [[ "$(git -C "$repo_dir" show -s --format='%an' HEAD)" == "$DEFAULT_NAME" ]]; then
+        printf 'Error: hook rewrote HEAD mid-rebase\n'
+        errors=$((errors + 1))
+    fi
+    if [[ -d "${repo_dir}/.git/rebase-merge" ]]; then
+        printf 'Error: rebase left in progress\n'
+        errors=$((errors + 1))
+    fi
+    if grep -q 'Error' <<<"$output"; then
+        printf 'Error: hook failed during rebase: %s\n' "$output"
         errors=$((errors + 1))
     fi
 
     rm -rf "$repo_dir"
 
-    record_result "$errors" 'flag --install-hook silent when core.hooksPath unset'
+    record_result "$errors" 'flag --install-hook skips rebase'
 }
 
 test_flag_install_hook_idempotent() {

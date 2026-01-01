@@ -359,20 +359,31 @@ install_system() {
 # without clobbering a hook the user wrote themselves.
 HOOK_MARKER='# Installed by anon-git --install-hook'
 
+# Internal: prints the absolute post-commit hook path git actually runs.
+# `--git-path hooks` honors core.hooksPath and resolves to the common dir in
+# a linked worktree; a relative result is relative to the top-level dir.
+hook_file_path() {
+    local top hooks_dir
+
+    top=$(git rev-parse --show-toplevel)
+    hooks_dir=$(git -C "$top" rev-parse --git-path hooks)
+    if [[ "$hooks_dir" != /* ]]; then
+        hooks_dir="${top}/${hooks_dir}"
+    fi
+    printf '%s/post-commit\n' "$hooks_dir"
+}
+
 # --install-hook: installs a post-commit hook that re-anonymizes HEAD in
 # place after every commit, with --no-backup (would accumulate one branch
-# per commit) and --quiet. Warns but still installs if core.hooksPath is
-# set, since git would look there instead and the hook would never fire.
+# per commit) and --quiet.
 install_hook() {
-    local git_dir hooks_dir hook_file src hooks_path
+    local hook_file src
 
-    if ! git_dir=$(git rev-parse --git-dir 2>/dev/null); then
+    if ! git rev-parse --show-toplevel >/dev/null 2>&1; then
         printf 'Error: --install-hook must be run inside a git repository.\n' >&2
         exit 1
     fi
-    git_dir=$(cd -- "$git_dir" && pwd)
-    hooks_dir="${git_dir}/hooks"
-    hook_file="${hooks_dir}/post-commit"
+    hook_file=$(hook_file_path)
 
     if [[ -f "$hook_file" ]] && ! grep -qF "$HOOK_MARKER" "$hook_file"; then
         printf 'Error: %s already exists and was not installed by anon-git.\n' "$hook_file" >&2
@@ -380,17 +391,8 @@ install_hook() {
         exit 1
     fi
 
-    # Still installs at the standard location so it stays idempotent and the
-    # file is there for manual relocation.
-    hooks_path=$(git config --get core.hooksPath 2>/dev/null || true)
-    if [[ -n "$hooks_path" ]]; then
-        printf 'Warning: core.hooksPath is set to "%s"; git looks there for hooks, not %s.\n' "$hooks_path" "$hooks_dir" >&2
-        printf '  This hook will not fire until you either unset core.hooksPath or\n' >&2
-        printf '  move/symlink %s into "%s" yourself.\n' "$hook_file" "$hooks_path" >&2
-    fi
-
     src=$(script_path)
-    mkdir -p "$hooks_dir"
+    mkdir -p "$(dirname -- "$hook_file")"
     cat >"$hook_file" <<EOF
 #!/usr/bin/env bash
 $HOOK_MARKER
@@ -401,7 +403,31 @@ $HOOK_MARKER
 # --verbose to bring it back. Regenerate with: $src --install-hook
 
 set -e
-"$src" --no-confirm --no-backup --quiet --current-branch HEAD
+anon_git="$src"
+EOF
+    cat >>"$hook_file" <<'EOF'
+
+# Rewriting HEAD mid-sequence would derail the rebase/cherry-pick/revert.
+for state in rebase-merge rebase-apply sequencer CHERRY_PICK_HEAD REVERT_HEAD; do
+    if [[ -e "$(git rev-parse --git-path "$state")" ]]; then
+        printf 'anon-git: %s in progress, commit not anonymized.\n' "$state" >&2
+        exit 0
+    fi
+done
+
+# A partial commit (git add -p, git commit <path>) leaves a dirty tree,
+# which anon-git refuses; stash it around the run.
+stashed=0
+if ! git diff-index --quiet HEAD -- || ! git diff-files --quiet; then
+    git stash push --quiet
+    stashed=1
+fi
+status=0
+"$anon_git" --no-confirm --no-backup --quiet --current-branch HEAD || status=$?
+if [[ "$stashed" -eq 1 ]]; then
+    git stash pop --quiet --index
+fi
+exit "$status"
 EOF
     chmod +x "$hook_file"
     printf 'Installed post-commit hook: %s\n' "$hook_file"
@@ -464,15 +490,13 @@ uninstall_all() {
 # --uninstall-hook: guarded by the same HOOK_MARKER check install_hook uses,
 # so a hook this script didn't create is never touched.
 uninstall_hook() {
-    local git_dir hooks_dir hook_file
+    local hook_file
 
-    if ! git_dir=$(git rev-parse --git-dir 2>/dev/null); then
+    if ! git rev-parse --show-toplevel >/dev/null 2>&1; then
         printf 'Error: --uninstall-hook must be run inside a git repository.\n' >&2
         exit 1
     fi
-    git_dir=$(cd -- "$git_dir" && pwd)
-    hooks_dir="${git_dir}/hooks"
-    hook_file="${hooks_dir}/post-commit"
+    hook_file=$(hook_file_path)
 
     if [[ ! -f "$hook_file" ]]; then
         printf 'No post-commit hook installed at %s\n' "$hook_file"

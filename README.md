@@ -254,7 +254,7 @@ a post-commit hook instead:
 ./anon-git.sh --install-hook
 ```
 
-This writes `.git/hooks/post-commit`, which anonymizes only the commit you just
+This writes a `post-commit` hook, which anonymizes only the commit you just
 made (`HEAD`), using `--current-branch --no-backup --quiet` so it rewrites in
 place rather than creating a new branch (or a backup branch) after every commit,
 and doesn't print "Anonymizing commit(s): ..." / "Done." on top of git's own
@@ -264,9 +264,13 @@ recover the pre-hook state if something goes wrong. Re-running `--install-hook`
 safely refreshes a hook it created, but refuses to overwrite a pre-existing
 hook it didn't write (remove or back that one up first).
 
-If `core.hooksPath` is set (common with husky/pre-commit/lefthook), git looks
-there instead of `.git/hooks`, so the installed hook won't fire. `--install-hook`
-still writes it, but warns and tells you where git is actually looking.
+The hook goes wherever git runs hooks from: `core.hooksPath` if set (common
+with husky/pre-commit/lefthook), and the shared hooks dir from a linked worktree.
+
+During a rebase, cherry-pick or revert the hook skips the rewrite, since
+rewriting `HEAD` mid-sequence would derail it; anonymize those commits
+afterwards. A partial commit (`git add -p`, `git commit <path>`) leaves a dirty
+tree, so the hook stashes leftover changes around the rewrite and restores them.
 
 Remove it again with `--uninstall-hook`, which refuses to touch a `post-commit`
 hook it didn't write (same safety check as above, just in reverse):
