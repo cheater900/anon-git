@@ -346,6 +346,30 @@ test_flag_env_var_entirehistory() {
     record_result "$errors" 'ANON_GIT_ENTIREHISTORY=1 rewrites entire history without flag'
 }
 
+test_catch_env_var_entirehistory_with_commit() {
+    local before after output exit_status errors=0
+
+    before=$(git rev-parse HEAD)
+    output=$(ANON_GIT_ENTIREHISTORY=1 ./"${SCRIPT_NAME}" --no-confirm --no-backup --current-branch HEAD 2>&1)
+    exit_status=$?
+    after=$(git rev-parse HEAD)
+
+    if [[ "$exit_status" -eq 0 ]]; then
+        printf 'Error: ANON_GIT_ENTIREHISTORY=1 with commit argument did not fail\n'
+        errors=$((errors + 1))
+    fi
+    if ! grep -q 'cannot be used together' <<<"$output"; then
+        printf 'Error: expected "cannot be used together" message not found\n'
+        errors=$((errors + 1))
+    fi
+    if [[ "$before" != "$after" ]]; then
+        printf 'Error: HEAD changed despite conflict\n'
+        errors=$((errors + 1))
+    fi
+
+    record_result "$errors" 'ANON_GIT_ENTIREHISTORY=1 with commit argument rejected'
+}
+
 test_flag_env_var_currentbranch() {
     # Must rewrite HEAD in place (like --current-branch), not on a new branch.
     local before_head after_head branch_before branch_after exit_status errors=0

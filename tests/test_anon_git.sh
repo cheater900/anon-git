@@ -99,6 +99,7 @@ main() {
     test_gitconfig_catch_incompatible
     test_gitconfig_quiet
     test_flag_env_var_entirehistory
+    test_catch_env_var_entirehistory_with_commit
     test_flag_env_var_currentbranch
     test_flag_env_var_dryrun
     test_flag_install_local_bin

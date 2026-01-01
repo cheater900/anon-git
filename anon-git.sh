@@ -729,7 +729,7 @@ check_incompatible() {
 reject_incompatible_options() {
     local date_set name_set email_set
     local keepuser_set keepdate_set keepyear_set keepmonth_set keepday_set
-    local randomtime_set randomday_set randommonth_set
+    local randomtime_set randomday_set randommonth_set entirehistory_set
 
     flag_errors=0
 
@@ -744,6 +744,7 @@ reject_incompatible_options() {
     randomtime_set="$RANDOMTIME_ARG"
     randomday_set="$RANDOMDAY_ARG"
     randommonth_set="$RANDOMMONTH_ARG"
+    entirehistory_set="$ENTIREHISTORY_ARG"
     [[ "${ANON_GIT_KEEPUSER:-}" == '1' ]] && keepuser_set='1'
     [[ "${ANON_GIT_KEEPDATE:-}" == '1' ]] && keepdate_set='1'
     [[ "${ANON_GIT_KEEPYEAR:-}" == '1' ]] && keepyear_set='1'
@@ -752,6 +753,7 @@ reject_incompatible_options() {
     [[ "${ANON_GIT_RANDOMTIME:-}" == '1' ]] && randomtime_set='1'
     [[ "${ANON_GIT_RANDOMDAY:-}" == '1' ]] && randomday_set='1'
     [[ "${ANON_GIT_RANDOMMONTH:-}" == '1' ]] && randommonth_set='1'
+    [[ "${ANON_GIT_ENTIREHISTORY:-}" == '1' ]] && entirehistory_set='1'
     [[ "${GITCONFIG_KEEPUSER:-}" == '1' ]] && keepuser_set='1'
     [[ "${GITCONFIG_KEEPDATE:-}" == '1' ]] && keepdate_set='1'
     [[ "${GITCONFIG_KEEPYEAR:-}" == '1' ]] && keepyear_set='1'
@@ -795,7 +797,7 @@ reject_incompatible_options() {
     check_incompatible --random-time "$randomtime_set" --random-month "$randommonth_set"
     check_incompatible --random-day "$randomday_set" --random-month "$randommonth_set"
     # CLI-only: no ANON_GIT_COMMIT envvar exists.
-    check_incompatible "commit(s) argument" "$COMMIT_ARG" --entire-history "$ENTIREHISTORY_ARG"
+    check_incompatible "commit(s) argument" "$COMMIT_ARG" --entire-history "$entirehistory_set"
     # Not a real conflict: `ANON_GIT_QUIET=1 --verbose` is the intended way to
     # un-silence a quiet default for one run.
     check_incompatible --quiet "$QUIET_ARG" --verbose "$VERBOSE_ARG"
@@ -886,12 +888,12 @@ verbose_info() {
     if [[ "$ANON_GIT_QUIET" == '1' ]]; then
         return
     fi
-    if [[ -z "$ENTIREHISTORY_ARG" ]]; then
+    if [[ "$ANON_GIT_ENTIREHISTORY" != '1' ]]; then
         local short_commit
         short_commit=$(echo "$ANON_GIT_COMMIT" | xargs -n 1 git rev-parse --short | tr '\n' ' ')
         printf 'Anonymizing commit(s): %s\n' "$short_commit"
     fi
-    if [[ -n "$ENTIREHISTORY_ARG" ]]; then
+    if [[ "$ANON_GIT_ENTIREHISTORY" == '1' ]]; then
         printf 'Anonymizing entire history!\n'
     fi
     if [[ -n "$KEEPUSER_ARG" ]]; then
