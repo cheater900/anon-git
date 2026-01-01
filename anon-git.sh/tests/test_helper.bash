@@ -47,6 +47,11 @@ cd_outside_repo() {
     cd "${BATS_TEST_TMPDIR}/norepo" || return
 }
 
+run_without_tty() {
+    # New session: no controlling terminal, so /dev/tty can't be opened.
+    python3 -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' "$@"
+}
+
 assert_head_unchanged() {
     assert_equal "$(git rev-parse HEAD)" "$HEAD_BEFORE"
 }

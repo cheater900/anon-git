@@ -30,11 +30,6 @@ sys.exit(os.waitstatus_to_exitcode(os.waitpid(pid, 0)[1]))
 ' "$@"
 }
 
-run_without_tty() {
-    # New session: no controlling terminal, so /dev/tty can't be opened.
-    python3 -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' "$@"
-}
-
 @test "--current-branch creates backup" {
     local backup_branch
     run ./anon-git.sh --no-confirm --current-branch --name 'Edsger Dijkstra' HEAD

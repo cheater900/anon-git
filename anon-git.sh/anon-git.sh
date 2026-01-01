@@ -938,6 +938,15 @@ require_reachable() {
     done
 }
 
+# --current-branch rewrites the checked-out branch, so there must be one.
+# Checked before confirm, so nothing waits for a "y" that can't be acted on.
+require_branch_to_overwrite() {
+    if [[ "$ANON_GIT_CURRENTBRANCH" == '1' && -z "$(git branch --show-current)" ]]; then
+        printf 'Error: HEAD is detached, so there is no current branch to overwrite. Drop --current-branch or check out a branch first.\n' >&2
+        exit 1
+    fi
+}
+
 # Pre-1970 is rejected: git writes the negative timestamp, but fsck (and
 # so most hosts on push) rejects the commit as badDate.
 validate_date() {
@@ -1017,10 +1026,6 @@ backup_branch() {
     local current_branch branch_label timestamp new_branch backup_branch_name switch_target
 
     current_branch=$(git branch --show-current)
-    if [[ -z "$current_branch" && "$ANON_GIT_CURRENTBRANCH" == '1' ]]; then
-        printf 'Error: HEAD is detached, so there is no current branch to overwrite. Drop --current-branch or check out a branch first.\n' >&2
-        exit 1
-    fi
     branch_label="${current_branch:-detached-$(git rev-parse --short HEAD)}"
     # Colon-free (git ref names disallow ":"); PID + $RANDOM suffix for
     # uniqueness within the same second, avoiding GNU-only date %N.
@@ -1500,6 +1505,7 @@ main() {
     validate_date
     validate_identity
     require_reachable
+    require_branch_to_overwrite
     verbose_info
     confirm
     backup_branch

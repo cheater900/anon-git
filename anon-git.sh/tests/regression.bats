@@ -32,6 +32,25 @@ file_count() {
     assert_output --partial 'detached'
 }
 
+@test "detached HEAD check runs before confirmation" {
+    # No terminal and no --no-confirm: the detached-HEAD error must win over
+    # the prompt, so nothing waits for a "y" that can't be acted on.
+    git checkout -q --detach HEAD
+    run run_without_tty ./anon-git.sh --current-branch HEAD </dev/null
+    assert_failure
+    assert_output --partial 'HEAD is detached'
+    assert_head_unchanged
+}
+
+@test "detached HEAD new branch named after commit" {
+    local short
+    git checkout -q --detach HEAD
+    short=$(git rev-parse --short HEAD)
+    run ./anon-git.sh --no-confirm HEAD
+    assert_success
+    assert_regex "$(git branch --show-current)" "^detached-${short}_anonymized_"
+}
+
 @test "--entire-history handles merge commits" {
     merge_side_branch
     run ./anon-git.sh --no-confirm --no-backup --current-branch --entire-history --name 'Merge Tester'
