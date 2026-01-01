@@ -116,9 +116,9 @@ required — pass `HEAD` explicitly to anonymize the last commit.
   --keep-day                      Do not change commit day (and year and month)
   --no-confirm                    Do not prompt for confirmation
   --no-backup                     Do not create backup branch
+  --current-branch                Overwrite current branch instead of creating a copy of it
   --entire-history                Rewrite entire history and not a single commit
-  --current-branch                Overwrite current branch and not a copy of it
-  --dry-run                       Show history changes without rewriting them
+  --dry-run                       Show history changes without rewriting it
   --quiet                         Suppress informational output (errors/safety warnings still print)
   --verbose                       Force informational output, overriding --quiet,
                                    ANON_GIT_QUIET, or a repo-local quiet config
@@ -334,7 +334,7 @@ Spins up a disposable git repository in `/tmp`, runs the script against it throu
 
 `--install` and `--install-hook` are covered (`--install` with `$HOME` pointed at a disposable directory, so it never touches your real `~/.local/bin` or `~/.bin`; `--install-hook` against disposable repos separate from the suite's own, so an installed hook can't fire during later tests). `--install-system` is not: it needs `sudo` and a real `/usr/bin`, and the suite intentionally doesn't run as root or mock it — verify it manually.
 
-A [`justfile`](justfile) wraps the day-to-day commands (`just test`, `just lint`, `just format`, `just test-completion`, `just all`); see [CONTRIBUTING.md](CONTRIBUTING.md) for the full development workflow.
+A [`justfile`](justfile) wraps the day-to-day commands (`just test`, `just lint`, `just format`, `just test-completion`, `just all`, `just sync-docs`); see [CONTRIBUTING.md](CONTRIBUTING.md) for the full development workflow.
 
 ## License
 

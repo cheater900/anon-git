@@ -1,6 +1,7 @@
 SCRIPT := "anon-git.sh"
 TEST_SCRIPT := "tests/test-anon-git.sh"
 TEST_COMPLETION_SCRIPT := "tests/test-anon-git-completion.sh"
+README := "README.md"
 
 default:
     @just --list
@@ -36,3 +37,23 @@ format-check:
 # Run the CI workflow locally via `act` (https://github.com/nektos/act); only ubuntu-latest, act can't run the macos-latest job
 ci-local:
     act push --job test --matrix os:ubuntu-latest
+
+# Regenerate README's ### Options code block from `anon-git.sh --help`'s own Options section, so the two can't silently drift apart
+sync-docs:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    options=$(./{{SCRIPT}} --help | sed -n '/^Options:$/,/^$/p' | sed '1d;$d')
+    awk -v options="$options" '
+        /^### Options$/ {
+            print
+            getline; print   # blank line between the heading and the fence
+            getline; print   # opening ``` fence
+            print options
+            while ((getline line) > 0) {
+                if (line == "```") { print line; break }
+            }
+            next
+        }
+        { print }
+    ' {{README}} >{{README}}.tmp
+    mv {{README}}.tmp {{README}}

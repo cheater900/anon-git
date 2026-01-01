@@ -18,9 +18,12 @@ just format           # shfmt -w, 4-space indent
 just test             # tests/test-anon-git.sh + tests/test-anon-git-completion.sh
 just test-completion  # just the completion tests
 just all              # lint, format, test, test-completion, in order
+just sync-docs        # regenerate README's ### Options block from `anon-git.sh --help`
 ```
 
 Run `just lint`, `just format`, and `just test` before every commit — `.github/workflows/ci.yml` runs `just lint`, `just format-check` (fails if you forgot `just format`), and `just test` on every push/PR, so catching drift locally first saves a round-trip.
+
+If you change `show_help()`'s `Options:` section (new/renamed/reworded flag), run `just sync-docs` too — it regenerates README's `### Options` code block from `anon-git.sh --help` so the two can't silently drift apart, and stages the result like any other edit.
 
 `tests/test-manually.sh` drops you into a disposable git repo with sample commits for interactive poking — useful when a failing test isn't enough context to see what's going on.
 
