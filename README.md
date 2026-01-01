@@ -1,56 +1,53 @@
 # ANON GIT
 
-AnonGit is a script to **anonymize** git commit authorship and timestamp.
+AnonGit is a script that anonymizes git commit authorship and timestamps.
 
-It can useful to contributors of privacy, anti-surveillance, or
-censorship-resistant open-source projects, by avoid **leaking information** from
-commit **timestamps** and/or **email**. Specifically, anon-git can:
+It's meant for contributors to privacy, anti-surveillance, or
+censorship-resistant open-source projects who don't want their commit
+timestamps or email leaking information about them. Specifically, anon-git can:
 
 - Anonymize entire git history
-- Anonymize single commit
+- Anonymize a single commit
 - Anonymize multiple commits
-- Anonymize commits filtered by author/commiter, date range, or commit message
+- Anonymize commits filtered by author/committer, date range, or commit message
 - Anonymize metadata using arbitrary values for user name, user email and date
 - Anonymize just the timestamps (keep authorship) or the username (keep timestamp)
-- Anonymize the timestamps partially: preserve commit year or month or day while anonymizing other information (hour & timezone)
+- Anonymize timestamps partially: preserve the commit year, month, or day while anonymizing the rest (hour & timezone)
 
 ## Introduction
 
 ### Why anonymize meta-data of Git commits?
 
-Even when using Tor and throwaway GitHub accounts, your **commit timestamps**
+Even when using Tor and a throwaway GitHub account, your commit timestamps
 can still deanonymize you over time:
 
 - timezone may be linked to location
 - time of commit may be linked to work and routine schedules
-- day of the week may be linked workdays and religious/cultural practices (rest days)
+- day of the week may be linked to workdays and religious/cultural practices (rest days)
 - day and month may be linked to holidays, festivals and cultural/religious events
 - cadence between commits may leak information about commit frequency and coding pace, revealing personal development patterns (some developers commit frequently, while others code more before committing)
 
-Such information could be used to target contributors of privacy-oriented projects:
+That kind of information could be used to target contributors to
+privacy-oriented projects:
 
-- **Internet anonymity**: Tor Browser, I2P, FreeNet
-- **Private finace**: Monero, Bisq, Samourai Wallet, CoinJoin tools
-- **Mobile OS**: GrapheneOS, CalyxOS
-- **Communication protocols**: Simplex, Matrix, Briar, XMPP
-- **Social network**: Nostr, Mastodon, Scuttlebutt
-- **Privacy guides**, KYC Not Me (kycnot.me), Digital Defense (digitaldefense.io)
+- Internet anonymity: Tor Browser, I2P, FreeNet
+- Private finance: Monero, Bisq, Samourai Wallet, CoinJoin tools
+- Mobile OS: GrapheneOS, CalyxOS
+- Communication protocols: Simplex, Matrix, Briar, XMPP
+- Social networks: Nostr, Mastodon, Scuttlebutt
+- Privacy guides: KYC Not Me (kycnot.me), Digital Defense (digitaldefense.io)
 
-The list above is not meant to be a compilation of privacy tools, but merely
-examples of projects whose contributors may wish to stay anonymous.
+This isn't meant to be a full list of privacy tools, just examples of the
+kind of project whose contributors might want to stay anonymous.
 
 ### When to use it
 
-- AnonGit **only removes metadata** — it does **not** hide IP addresses, contribution timing correlations, writing style, code patterns, etc.
-- AnonGit is most useful to anonymize timestamp metadata along with anonymous email and name. If you leak personal data via public forges (GitHub, GitLab, Codeberg, SourceHut) the script becomes useless.
-- AnonGit most useful on branches you have full control of the branch
-- AnonGit most useful for commits that have not been published to remote branches and forges
-- If the repository is public and has been cloned/forked, then the script may become useless since the old copies of the git history were not rewritten
+- AnonGit only removes metadata. It does not hide IP addresses, timing correlations between your contributions, writing style, code patterns, etc.
+- AnonGit works best when you anonymize timestamps along with an anonymous name and email. Leaking your identity elsewhere on the forge (GitHub, GitLab, Codeberg, SourceHut) defeats the purpose.
+- AnonGit is most useful on branches you fully control, for commits that haven't been pushed to a remote or forge yet.
+- If the repo is public and already cloned or forked, rewriting history won't help much. The old copies are still out there.
 
 ## Usage
-
-This section describe how to install and use anon-git, with detailed examples
-and documented options.
 
 ### Installation
 
@@ -79,7 +76,7 @@ git clone https://github.com/radioactively/anon-git && cd anon-git
 > [!NOTE]
 > The `--install` only copies into `~/.local/bin` and/or `~/.bin` if they already exist.
 > The `--install-system` requires `sudo`.
-> The directory `~/.local/bin` or ``~/.bin` must be in your `$PATH`
+> The directory `~/.local/bin` or `~/.bin` must be in your `$PATH`.
 > `--uninstall` removes the script from all three locations at once, skipping whichever don't have a copy.
 
 #### Manual installation
@@ -128,8 +125,7 @@ Alternatively, just download or copy-paste the file and put it into your `$PATH`
 ANON_GIT_NAME="Anon" ANON_GIT_EMAIL="anon@localhost" ./anon-git.sh --keep-date HEAD
 ```
 
-More examples using built-in filters provided by `git` in order to pick a set of
-commits matching the filter:
+More examples, using `git`'s own filters to pick a set of matching commits:
 
 ```bash
 # Anonymize the last 10 commits using shell expansion (works in bash and zsh)
@@ -187,7 +183,7 @@ git log --format=%H --grep='^fix:' | xargs ./anon-git.sh
 **Priority order** (highest to lowest):
 
 1. Command-line flags
-2. Repo-local git config (`git config anon-git.name`, `anon-git.email`, `anon-git.date`, `anon-git.keepuser`, `anon-git.keepdate`, `anon-git.keepyear`, `anon-git.keepmonth`, `anon-git.keepday`, `anon-git.striptimezone`, `anon-git.quiet` — see [Repo-local config](#repo-local-config) below; `--entire-history`/`--current-branch`/`--dry-run` have no config equivalent, flag/envvar only)
+2. Repo-local git config (`git config anon-git.name`, `anon-git.email`, `anon-git.date`, `anon-git.keepuser`, `anon-git.keepdate`, `anon-git.keepyear`, `anon-git.keepmonth`, `anon-git.keepday`, `anon-git.striptimezone`, `anon-git.quiet`, see [Repo-local config](#repo-local-config) below; `--entire-history`/`--current-branch`/`--dry-run` have no config equivalent, flag/envvar only)
 3. Environment variables (`ANON_GIT_DATE`, `ANON_GIT_NAME`, `ANON_GIT_EMAIL`, `ANON_GIT_KEEPUSER`, `ANON_GIT_KEEPDATE`, `ANON_GIT_KEEPYEAR`, `ANON_GIT_KEEPMONTH`, `ANON_GIT_KEEPDAY`, `ANON_GIT_STRIPTIMEZONE`, `ANON_GIT_ENTIREHISTORY`, `ANON_GIT_CURRENTBRANCH`, `ANON_GIT_DRYRUN`, `ANON_GIT_QUIET`)
 4. Hardcoded defaults
 
@@ -195,18 +191,18 @@ git log --format=%H --grep='^fix:' | xargs ./anon-git.sh
 
 > [!WARNING]
 > `--name`, `--email` and `--date` (and their `ANON_GIT_*` environment variable
-> equivalents) are not meant to carry untrusted input — don't wire user-controlled
+> equivalents) are not meant to carry untrusted input. Don't wire user-controlled
 > values (e.g. from CI variables or another service) into them.
 
 ### Exit codes
 
 The script only ever exits `0` (success) or `1` (any failure: bad flags,
 failed preconditions, a declined confirmation prompt, or `git`/`git
-filter-repo` erroring out) — there's no finer-grained code to script against.
+filter-repo` erroring out). There's no finer-grained code to script against.
 
 ### Repo-local config
 
-A repository can pin its own defaults instead of every invocation needing flags or exported envvars. Repo config outranks `ANON_GIT_*` envvars (it wins over an inherited/exported envvar you didn't set for this specific invocation), but a CLI flag still overrides it:
+A repository can pin its own defaults so you don't have to pass flags or export envvars every time. Repo config outranks `ANON_GIT_*` envvars (it wins over an inherited/exported envvar you didn't set for this specific invocation), but a CLI flag still overrides it:
 
 ```bash
 git config anon-git.name "Sherlock"
@@ -221,10 +217,10 @@ git config anon-git.striptimezone true
 git config anon-git.quiet true
 ```
 
-Booleans accept anything `git config --bool` does (`true`/`false`, `yes`/`no`, `on`/`off`, `1`/`0`); anything else is a hard error rather than silently ignored, since a typo'd repo config shouldn't fail open. `git config` writes to `.git/config` (local to your clone) by default — use `git config --global` instead if you want the same defaults across every repo.
+Booleans accept anything `git config --bool` does (`true`/`false`, `yes`/`no`, `on`/`off`, `1`/`0`); anything else is a hard error rather than silently ignored, since a typo'd repo config shouldn't fail open. `git config` writes to `.git/config` (local to your clone) by default; use `git config --global` instead if you want the same defaults across every repo.
 
-Deliberately scoped to `name`/`email`/`date`/`keep-*`/`striptimezone`/`quiet` -- the settings
-that make sense to pin per-repo. `--entire-history`, `--current-branch` and
+This is deliberately scoped to `name`/`email`/`date`/`keep-*`/`striptimezone`/`quiet`,
+the settings that make sense to pin per-repo. `--entire-history`, `--current-branch` and
 `--dry-run` stay flag/envvar-only: a silently-configured default for any of
 those would be far more destructive than a wrong name or email (e.g. every
 invocation silently rewriting the entire history instead of one commit).
@@ -244,14 +240,14 @@ This writes `.git/hooks/post-commit`, which anonymizes only the commit you just
 made (`HEAD`), using `--current-branch --no-backup --quiet` so it rewrites in
 place rather than creating a new branch (or a backup branch) after every commit,
 and doesn't print "Anonymizing commit(s): ..." / "Done." on top of git's own
-commit summary — the hook fires on *every* commit, so a per-commit backup branch
-(or message) would otherwise accumulate/spam forever; `git reflog`/`git reset`
-still recover the pre-hook state if something goes wrong. Re-running
-`--install-hook` safely refreshes a hook it created, but refuses to overwrite a
-pre-existing hook it didn't write (remove or back that one up first).
+commit summary. The hook fires on *every* commit, so a per-commit backup branch
+(or message) would otherwise pile up forever; `git reflog`/`git reset` still
+recover the pre-hook state if something goes wrong. Re-running `--install-hook`
+safely refreshes a hook it created, but refuses to overwrite a pre-existing
+hook it didn't write (remove or back that one up first).
 
 If `core.hooksPath` is set (common with husky/pre-commit/lefthook), git looks
-there instead of `.git/hooks`, so the installed hook won't fire — `--install-hook`
+there instead of `.git/hooks`, so the installed hook won't fire. `--install-hook`
 still writes it, but warns and tells you where git is actually looking.
 
 Remove it again with `--uninstall-hook`, which refuses to touch a `post-commit`
@@ -293,7 +289,7 @@ source <(./anon-git.sh --print-completion)
 - The script runs `git filter-repo --force`, which skips filter-repo's own "is
   this repo safe to rewrite" check (normally it refuses to run outside of a
   fresh clone). This is safe here because the script always rewrites a
-  new/backup branch first — but it does mean you're relying on that branch, not
+  new/backup branch first, but it does mean you're relying on that branch, not
   on filter-repo, to protect your other branches/history.
 - Rewriting a commit invalidates any GPG signature on it (same as `git
   filter-branch`/`git rebase`); re-sign afterward if you sign your commits

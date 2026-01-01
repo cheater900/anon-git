@@ -20,7 +20,7 @@ DEFAULT_DRYRUN='0'
 DEFAULT_QUIET='0'
 
 # Scratch files cleaned up by the EXIT trap (cleanup_on_exit) below, so a
-# kill mid-run (Ctrl-C, CI timeout, ...) can't leave them behind — not just
+# kill mid-run (Ctrl-C, CI timeout, ...) can't leave them behind, not just
 # the normal success/failure exit paths. Declared here (empty) so the trap
 # can safely run even before setup_dryrun/run_filter_repo populate them.
 dryrun_file=''
@@ -96,7 +96,7 @@ Priority (highest to lowest):
   1. Command-line flags (--date, --name, --email, --keep-user, --keep-date, ...)
   2. Repo-local git config (git config anon-git.name, anon-git.email, anon-git.date,
      anon-git.keepuser, anon-git.keepdate, anon-git.keepyear, anon-git.keepmonth,
-     anon-git.keepday, anon-git.striptimezone, anon-git.quiet —
+     anon-git.keepday, anon-git.striptimezone, anon-git.quiet;
      --entire-history/--current-branch/--dry-run have no config equivalent, flag/envvar only)
   3. Environment variables (ANON_GIT_DATE, ANON_GIT_NAME, ANON_GIT_EMAIL, ANON_GIT_KEEPUSER,
      ANON_GIT_KEEPDATE, ANON_GIT_KEEPYEAR, ANON_GIT_KEEPMONTH, ANON_GIT_KEEPDAY,
@@ -406,7 +406,7 @@ EOF
 }
 
 # Internal: removes $1/anon-git if present, printing what it did. Unlike
-# install_copy, a target that isn't there is not a failure — uninstalling is
+# install_copy, a target that isn't there is not a failure: uninstalling is
 # idempotent, so uninstall_all can call this for every candidate directory
 # regardless of which ones actually have a copy.
 uninstall_copy() {
@@ -568,7 +568,7 @@ read_git_config_bool() {
 # globals that merge_args_with_defaults consults above ANON_GIT_* envvars
 # (repo config wins over an inherited/exported envvar) and below CLI flags
 # (see README's "Repo-local config" section). Deliberately scoped to
-# name/email/date/keep-*/striptimezone/quiet — the
+# name/email/date/keep-*/striptimezone/quiet, the
 # settings that make sense to pin per-repo; --entire-history,
 # --current-branch and --dry-run stay flag/envvar-only, since a silently
 # configured default for any of those would be far more destructive than a
@@ -720,7 +720,7 @@ check_incompatible() {
 
 # Rejects mutually-exclusive option combinations regardless of whether each
 # side was provided via CLI flag, repo-local `git config anon-git.*`, or its
-# ANON_GIT_* environment variable equivalent — so e.g.
+# ANON_GIT_* environment variable equivalent, so e.g.
 # `ANON_GIT_KEEP_USER=1 ANON_GIT_NAME=X` and a repo with both `anon-git.keepuser`
 # and `anon-git.name` configured are rejected the same way `--keep-user --name X`
 # is, instead of silently letting one win. Must run before RESOLVE ARGS
@@ -808,7 +808,7 @@ merge_args_with_defaults() {
 }
 
 # Internal: --strip-timezone used with no other CLI flag means "don't touch
-# author or date/time digits, only relabel the offset to +0000" — i.e. it
+# author or date/time digits, only relabel the offset to +0000", i.e. it
 # implicitly behaves like --keep-user --keep-date for that one run (the
 # python commit-callback still performs the offset rewrite for a kept date,
 # see the `elif striptimezone` branch there). Any other CLI flag (--name,
@@ -816,7 +816,7 @@ merge_args_with_defaults() {
 # --strip-timezone's documented "unless other CLI options are provided"
 # contract. Repo-local config / ANON_GIT_* envvars don't count as "provided"
 # here since they're background defaults, not this invocation's explicit
-# intent — only the *_ARG (CLI-only) globals are checked.
+# intent; only the *_ARG (CLI-only) globals are checked.
 apply_strip_timezone_alone() {
     if [[ "$STRIPTIMEZONE_ARG" == '1' && -z "$DATE_ARG" && -z "$NAME_ARG" && -z "$EMAIL_ARG" &&
         -z "$KEEPUSER_ARG" && -z "$KEEPDATE_ARG" &&
@@ -1100,7 +1100,7 @@ if not keepdate:
         offset = '+0000'
     elif striptimezone:
         # Keep the date/time digits given by --date (or its default), but
-        # relabel (not convert) the offset to +0000 — same tzinfo=None ->
+        # relabel (not convert) the offset to +0000: same tzinfo=None ->
         # reinterpret-as-UTC strategy as the keepyear/month/day branch above,
         # just without zeroing out the smaller fields.
         dt = parse_target_date(date)
@@ -1126,7 +1126,7 @@ if not keepdate:
 elif striptimezone:
     # --keep-date (explicit, or implied by --strip-timezone used with no
     # other option) leaves the date/time digits untouched per field, but
-    # --strip-timezone still relabels each field's offset to +0000 — computed
+    # --strip-timezone still relabels each field's offset to +0000, computed
     # per author/committer independently (they can differ, e.g. after a
     # rebase), unlike the shared date_encoded used above.
     author_dt = parse_git_date(commit.author_date).replace(tzinfo=None)
