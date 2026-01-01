@@ -1158,6 +1158,69 @@ test_flag_install_hook_preserves_foreign_hook() {
     record_result "$errors" 'flag --install-hook does not overwrite a pre-existing foreign hook'
 }
 
+test_flag_install_hook_warns_on_hookspath() {
+    # Regression test: git honors core.hooksPath over <git-dir>/hooks when
+    # set (common with husky/pre-commit/lefthook), so a hook written to the
+    # standard location would silently never fire. --install-hook must warn
+    # about this rather than installing silently, but should still succeed
+    # (exit 0) and still write the hook file, so it stays regenerable/usable
+    # for manual relocation.
+    local repo_dir hook_file output exit_status errors=0
+
+    repo_dir=$(new_hook_test_repo)
+    hook_file="${repo_dir}/.git/hooks/post-commit"
+    (cd "$repo_dir" && git config --local core.hooksPath .husky)
+
+    output=$(cd "$repo_dir" && "./${SCRIPT_NAME}" --install-hook 2>&1)
+    exit_status=$?
+
+    if [[ "$exit_status" -ne 0 ]]; then
+        printf 'Error: --install-hook with core.hooksPath set exited with status %s\n' "$exit_status"
+        errors=$((errors + 1))
+    fi
+    if [[ ! -x "$hook_file" ]]; then
+        printf 'Error: %s was not created despite core.hooksPath being set\n' "$hook_file"
+        errors=$((errors + 1))
+    fi
+    if ! grep -qi 'core.hookspath' <<<"$output"; then
+        printf 'Error: expected a core.hooksPath warning not found\n'
+        errors=$((errors + 1))
+    fi
+    if ! grep -qF '.husky' <<<"$output"; then
+        printf 'Error: warning did not mention the configured hooksPath value\n'
+        errors=$((errors + 1))
+    fi
+
+    rm -rf "$repo_dir"
+
+    record_result "$errors" 'flag --install-hook warns when core.hooksPath is set'
+}
+
+test_flag_install_hook_no_warning_without_hookspath() {
+    # No core.hooksPath warning when it isn't set (the common case) — a
+    # sibling regression test to the one above, pinning down the non-noisy
+    # default so a future change can't make --install-hook warn on every run.
+    local repo_dir output exit_status errors=0
+
+    repo_dir=$(new_hook_test_repo)
+
+    output=$(cd "$repo_dir" && "./${SCRIPT_NAME}" --install-hook 2>&1)
+    exit_status=$?
+
+    if [[ "$exit_status" -ne 0 ]]; then
+        printf 'Error: --install-hook exited with status %s\n' "$exit_status"
+        errors=$((errors + 1))
+    fi
+    if grep -qi 'core.hookspath' <<<"$output"; then
+        printf 'Error: unexpected core.hooksPath warning when it is not set\n'
+        errors=$((errors + 1))
+    fi
+
+    rm -rf "$repo_dir"
+
+    record_result "$errors" 'flag --install-hook does not warn when core.hooksPath is unset'
+}
+
 test_flag_install_hook_idempotent() {
     local repo_dir hook_file first_exit second_exit errors=0
 
@@ -2042,6 +2105,8 @@ main() {
     test_flag_install_hook_creates_hook
     test_flag_install_hook_requires_git_repo
     test_flag_install_hook_preserves_foreign_hook
+    test_flag_install_hook_warns_on_hookspath
+    test_flag_install_hook_no_warning_without_hookspath
     test_flag_install_hook_idempotent
     test_flag_install_hook_anonymizes_next_commit
     test_show_help

@@ -226,6 +226,10 @@ still recover the pre-hook state if something goes wrong. Re-running
 `--install-hook` safely refreshes a hook it created, but refuses to overwrite a
 pre-existing hook it didn't write (remove or back that one up first).
 
+If `core.hooksPath` is set (common with husky/pre-commit/lefthook), git looks
+there instead of `.git/hooks`, so the installed hook won't fire — `--install-hook`
+still writes it, but warns and tells you where git is actually looking.
+
 ### Shell completion
 
 Tab-completion scripts for bash, zsh, and fish are hand-written and live in `completions/` (they don't need `git filter-repo`, only `anon-git.sh` itself and, for completing commit refs, `git`). The flag list they offer comes from the script's own `--_list-flags` (bash) or is kept in sync with it (zsh/fish; checked by the test suite), so there's one source of truth even though each shell's completion format is hand-maintained separately.

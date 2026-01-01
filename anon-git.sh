@@ -328,9 +328,11 @@ HOOK_MARKER='# Installed by anon-git --install-hook'
 # reflog`/`git reset` still recover the pre-hook state if something goes
 # wrong, per the README. Also passes --quiet: without it, every `git commit`
 # would print "Anonymizing commit(s): ..." / "Done." on top of git's own
-# commit summary.
+# commit summary. Warns (but still installs) if core.hooksPath is set, since
+# git would look there instead of <git-dir>/hooks and the installed hook
+# would otherwise silently never fire.
 install_hook() {
-    local git_dir hooks_dir hook_file src
+    local git_dir hooks_dir hook_file src hooks_path
 
     if ! git_dir=$(git rev-parse --git-dir 2>/dev/null); then
         printf 'Error: --install-hook must be run inside a git repository.\n' >&2
@@ -344,6 +346,18 @@ install_hook() {
         printf 'Error: %s already exists and was not installed by anon-git.\n' "$hook_file" >&2
         printf '  Remove or back it up first, then re-run --install-hook.\n' >&2
         exit 1
+    fi
+
+    # git honors core.hooksPath (common with husky/pre-commit/lefthook) over
+    # <git-dir>/hooks when set, so a hook written there would silently never
+    # fire. Warn rather than silently installing somewhere git won't look;
+    # still install at the standard location below so `--install-hook` stays
+    # idempotent/regenerable and the file is there for manual relocation.
+    hooks_path=$(git config --get core.hooksPath 2>/dev/null || true)
+    if [[ -n "$hooks_path" ]]; then
+        printf 'Warning: core.hooksPath is set to "%s"; git looks there for hooks, not %s.\n' "$hooks_path" "$hooks_dir" >&2
+        printf '  This hook will not fire until you either unset core.hooksPath or\n' >&2
+        printf '  move/symlink %s into "%s" yourself.\n' "$hook_file" "$hooks_path" >&2
     fi
 
     src=$(script_path)
