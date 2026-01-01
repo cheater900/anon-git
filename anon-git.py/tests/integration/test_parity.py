@@ -5,7 +5,7 @@ import shutil
 import subprocess
 
 import pytest
-from helpers import REWRITE, SHELL_SCRIPT, commit, git, new_repo, run_cli
+from helpers import PAGER_CAT, REWRITE, SHELL_SCRIPT, commit, git, new_repo, run_cli
 
 from anon_git.constants import FLAGS, FLAGS_DROPPED
 
@@ -64,7 +64,7 @@ def test_dry_run_preview_parity_with_shell(mixed_tz_repo, args):
     shell = subprocess.run(
         [str(SHELL_SCRIPT), *args], cwd=mixed_tz_repo, env=env, capture_output=True, text=True
     )
-    python = run_cli(*args, env={"PAGER": "cat"}, cwd=mixed_tz_repo)
+    python = run_cli(*args, env=PAGER_CAT, cwd=mixed_tz_repo)
     assert shell.returncode == 0, shell.stderr
     assert python.stdout == shell.stdout
 

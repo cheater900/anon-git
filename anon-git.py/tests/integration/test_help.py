@@ -2,7 +2,7 @@
 
 import re
 
-from helpers import head, run_cli
+from helpers import PAGER_CAT, append_line, head, run_cli
 
 from anon_git.constants import DEFAULT_EMAIL, FLAGS_DROPPED
 
@@ -30,8 +30,7 @@ def test_version_works_outside_repo(outside_repo):
 
 def test_no_args_in_dirty_repo_shows_help(repo):
     # Help comes before safety checks; a tracked-file change must not block it.
-    with open("file_1.txt", "a") as fh:
-        fh.write("uncommitted change\n")
+    append_line("file_1.txt", "uncommitted change")
     before = head()
     result = run_cli()
     assert result.returncode == 0
@@ -41,7 +40,7 @@ def test_no_args_in_dirty_repo_shows_help(repo):
 
 def test_name_value_not_taken_as_help(repo):
     # `--name --help` sets the name; it must not short-circuit to help.
-    result = run_cli("--dry-run", "--name", "--help", "HEAD", env={"PAGER": "cat"})
+    result = run_cli("--dry-run", "--name", "--help", "HEAD", env=PAGER_CAT)
     assert "Usage:" not in result.stdout
     assert f"-> --help <{DEFAULT_EMAIL}>" in result.stdout
 
@@ -63,7 +62,7 @@ def test_no_target_shows_help(repo):
 
 def test_dry_run_without_target_shows_help(repo):
     before = head()
-    result = run_cli("--dry-run", env={"PAGER": "cat"})
+    result = run_cli("--dry-run", env=PAGER_CAT)
     assert result.returncode == 0
     assert "Usage:" in result.stdout
     assert head() == before

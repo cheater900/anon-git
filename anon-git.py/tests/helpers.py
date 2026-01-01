@@ -19,6 +19,9 @@ SECONDS_PER_DAY = 86400
 EPOCH_2019 = 1546300800
 EPOCH_2020 = 1577836800
 SHELL_SCRIPT = Path(__file__).resolve().parents[2] / "anon-git.sh" / "anon-git.sh"
+# Dry-run preview straight to stdout.
+PAGER_CAT = {"PAGER": "cat"}
+EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 # Rewrite the current branch in place: no prompt, no backup branch.
 REWRITE = ("--no-confirm", "--no-backup", "--current-branch")
 
@@ -42,6 +45,23 @@ def commit(message, date=None, cwd=None):
     if date is not None:
         env = {**os.environ, "GIT_AUTHOR_DATE": date, "GIT_COMMITTER_DATE": date}
     git("commit", "-q", "--allow-empty", "-m", message, cwd=cwd, env=env)
+
+
+def append_line(path, line):
+    with open(path, "a") as fh:
+        fh.write(f"{line}\n")
+
+
+# Writes a commit object verbatim (bypassing git's own checks) and resets
+# HEAD to it.
+def checkout_raw_commit(raw):
+    sha = subprocess.run(
+        ["git", "hash-object", "-t", "commit", "-w", "--stdin"],
+        input=raw,
+        capture_output=True,
+        check=True,
+    ).stdout.decode()
+    git("reset", "-q", "--hard", sha.strip())
 
 
 def run_cli(*args, env=None, input=None, cwd=None):

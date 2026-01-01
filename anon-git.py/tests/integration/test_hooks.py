@@ -3,9 +3,19 @@
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
-from helpers import DEFAULT_AUTHOR, branch_count, commit_author, git, new_repo, run_cli
+from helpers import (
+    DEFAULT_AUTHOR,
+    PAGER_CAT,
+    append_line,
+    branch_count,
+    commit_author,
+    git,
+    new_repo,
+    run_cli,
+)
 
 from anon_git.constants import DEFAULT_DATE, DEFAULT_NAME, HOOK_MARKER
 from anon_git.hooks import install_hook
@@ -22,11 +32,6 @@ def write_foreign_script(path):
     os.chmod(path, 0o755)
 
 
-def read(path):
-    with open(path) as fh:
-        return fh.read()
-
-
 def run_install_hook():
     result = run_cli("--install-hook")
     assert result.returncode == 0, result.stderr
@@ -36,7 +41,7 @@ def run_install_hook():
 def test_install_hook_creates_post_commit_hook(repo):
     run_install_hook()
     assert os.access(HOOK_FILE, os.X_OK)
-    hook = read(HOOK_FILE)
+    hook = Path(HOOK_FILE).read_text()
     assert HOOK_MARKER in hook
     assert sys.executable in hook
     # Without --no-backup a backup branch would accumulate per commit.
@@ -55,7 +60,7 @@ def test_install_hook_keeps_foreign_hook(repo):
     write_foreign_script(HOOK_FILE)
     result = run_cli("--install-hook")
     assert result.returncode == 1
-    assert read(HOOK_FILE) == FOREIGN_SCRIPT
+    assert Path(HOOK_FILE).read_text() == FOREIGN_SCRIPT
     assert "already exists" in result.stderr
 
 
@@ -81,8 +86,7 @@ def test_hook_anonymizes_partial_commit_keeps_changes(repo):
         with open(name, "w") as fh:
             fh.write(f"{name}\n")
     git("add", "staged.txt", "committed.txt")
-    with open("file_1.txt", "a") as fh:
-        fh.write("unstaged\n")
+    append_line("file_1.txt", "unstaged")
     git("commit", "-q", "-m", "Partial commit", "committed.txt")
     assert commit_author("HEAD") == DEFAULT_AUTHOR
     assert git("diff", "--name-only") == "file_1.txt"
@@ -94,8 +98,7 @@ def test_hook_keeps_unrelated_stash_when_push_saves_nothing(repo, tmp_path):
     git("-C", str(sub), "commit", "-q", "--allow-empty", "-m", "sub")
     git("-c", "protocol.file.allow=always", "submodule", "add", "-q", str(sub), "sub")
     git("commit", "-q", "-m", "Add submodule")
-    with open("file_1.txt", "a") as fh:
-        fh.write("stashed\n")
+    append_line("file_1.txt", "stashed")
     git("stash", "push", "-q")
     run_install_hook()
     # Dirty submodule content: diff-files reports it, stash push saves nothing.
@@ -167,13 +170,13 @@ def test_uninstall_hook_keeps_foreign_hook(repo):
     write_foreign_script(HOOK_FILE)
     result = run_cli("--uninstall-hook")
     assert result.returncode == 1
-    assert read(HOOK_FILE) == FOREIGN_SCRIPT
+    assert Path(HOOK_FILE).read_text() == FOREIGN_SCRIPT
     assert "not installed by anon-git" in result.stderr
 
 
 def test_install_flag_as_name_value_not_run(repo):
     # `--name --install-hook` uses the flag as a name; no hook gets written.
-    result = run_cli("--dry-run", "--name", "--install-hook", "HEAD", env={"PAGER": "cat"})
+    result = run_cli("--dry-run", "--name", "--install-hook", "HEAD", env=PAGER_CAT)
     assert result.returncode == 0, result.stderr
     assert not os.path.exists(HOOK_FILE)
 

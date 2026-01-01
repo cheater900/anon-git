@@ -7,7 +7,19 @@ from pathlib import Path
 
 import git_filter_repo as fr
 import pytest
-from helpers import CLI, REWRITE, commit_author, git, head, new_repo, run_cli, run_cli_without_tty
+from helpers import (
+    CLI,
+    EMPTY_TREE,
+    PAGER_CAT,
+    REWRITE,
+    checkout_raw_commit,
+    commit_author,
+    git,
+    head,
+    new_repo,
+    run_cli,
+    run_cli_without_tty,
+)
 
 from anon_git import cli, random_dates
 from anon_git.cli import main, run
@@ -134,7 +146,7 @@ def test_filter_repo_cache_cleared_from_subdir(repo):
     marker.parent.mkdir(parents=True)
     marker.touch()
     (repo / "subdir").mkdir()
-    result = run_cli("--dry-run", "HEAD", env={"PAGER": "cat"}, cwd=repo / "subdir")
+    result = run_cli("--dry-run", "HEAD", env=PAGER_CAT, cwd=repo / "subdir")
     assert result.returncode == 0, result.stderr
     assert not marker.exists()
 
@@ -157,7 +169,7 @@ def test_dry_run_keeps_signed_commit_hash(tmp_path, monkeypatch):
         fh.write("signing_key*\n")
     git("commit", "-q", "-S", "--allow-empty", "-m", "Signed commit")
     before = head()
-    result = run_cli("--no-confirm", "--dry-run", "HEAD", env={"PAGER": "cat"})
+    result = run_cli("--no-confirm", "--dry-run", "HEAD", env=PAGER_CAT)
     assert result.returncode == 0, result.stderr
     assert head() == before
 
@@ -165,23 +177,12 @@ def test_dry_run_keeps_signed_commit_hash(tmp_path, monkeypatch):
 def test_dry_run_handles_non_utf8_metadata(tmp_path, monkeypatch):
     path = new_repo(tmp_path / "non_utf8")
     monkeypatch.chdir(path)
-    raw = (
-        b"tree 4b825dc642cb6eb9a060e54bf8d69288fbee4904\n"
-        b"author Bad \xff Name <bad@example.com> 1700000000 +0000\n"
+    checkout_raw_commit(
+        f"tree {EMPTY_TREE}\n".encode()
+        + b"author Bad \xff Name <bad@example.com> 1700000000 +0000\n"
         b"committer Bad \xff Name <bad@example.com> 1700000000 +0000\n\nMessage \xfe\n"
     )
-    sha = (
-        subprocess.run(
-            ["git", "hash-object", "-t", "commit", "-w", "--stdin"],
-            input=raw,
-            capture_output=True,
-            check=True,
-        )
-        .stdout.decode()
-        .strip()
-    )
-    git("reset", "-q", "--hard", sha)
-    result = run_cli("--dry-run", "HEAD", env={"PAGER": "cat"})
+    result = run_cli("--dry-run", "HEAD", env=PAGER_CAT)
     assert result.returncode == 0, result.stderr
     assert "AuthorDate:" in result.stdout
 
@@ -191,25 +192,17 @@ def test_dry_run_handles_non_utf8_metadata(tmp_path, monkeypatch):
     [["--dry-run"], ["--keep-year", *REWRITE], ["--keep-date", "--strip-timezone", *REWRITE]],
 )
 def test_bogus_timezone_offset_rewrites_without_crash(repo, args):
-    raw = (
-        f"tree 4b825dc642cb6eb9a060e54bf8d69288fbee4904\nparent {head()}\n"
-        "author A <a@b> 1700000000 +9999\ncommitter A <a@b> 1700000000 +9999\n\nbad tz\n"
+    checkout_raw_commit(
+        f"tree {EMPTY_TREE}\nparent {head()}\n"
+        "author A <a@b> 1700000000 +9999\ncommitter A <a@b> 1700000000 +9999\n\nbad tz\n".encode()
     )
-    sha = subprocess.run(
-        ["git", "hash-object", "-t", "commit", "-w", "--stdin"],
-        input=raw,
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
-    git("reset", "-q", "--hard", sha)
-    result = run_cli(*args, "HEAD", env={"PAGER": "cat"})
+    result = run_cli(*args, "HEAD", env=PAGER_CAT)
     assert result.returncode == 0, result.stderr
 
 
 def test_dry_run_escapes_terminal_control_chars(repo):
     git("commit", "-q", "--allow-empty", "-m", "evil \x1b]0;pwned\x07 title\n\n\tbody")
-    result = run_cli("--dry-run", "HEAD", env={"PAGER": "cat"})
+    result = run_cli("--dry-run", "HEAD", env=PAGER_CAT)
     assert result.returncode == 0, result.stderr
     assert "\x1b" not in result.stdout
     assert "\x07" not in result.stdout

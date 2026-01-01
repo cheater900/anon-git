@@ -4,6 +4,7 @@ import pytest
 from helpers import (
     COMMIT_COUNT,
     DEFAULT_AUTHOR,
+    PAGER_CAT,
     REWRITE,
     branch_count,
     commit_author,
@@ -24,7 +25,7 @@ def test_invalid_bool_envvar_fails(repo, head_before):
 
 
 def test_dry_run_entire_history_previews_all(repo, head_before):
-    result = run_cli("--dry-run", "--entire-history", env={"PAGER": "cat"})
+    result = run_cli("--dry-run", "--entire-history", env=PAGER_CAT)
     assert result.returncode == 0, result.stderr
     assert head() == head_before
     assert preview_count(result.stdout) == COMMIT_COUNT

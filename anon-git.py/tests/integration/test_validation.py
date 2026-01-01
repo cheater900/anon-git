@@ -3,7 +3,7 @@
 import subprocess
 
 import pytest
-from helpers import branch_count, git, head, run_cli
+from helpers import append_line, branch_count, git, head, run_cli
 
 from anon_git.options import parse_args
 
@@ -61,8 +61,7 @@ def test_rejects_invalid_commit_ref(repo, head_before):
 
 
 def test_rejects_uncommitted_changes(repo, head_before):
-    with open("file_1.txt", "a") as fh:
-        fh.write("dirty\n")
+    append_line("file_1.txt", "dirty")
     result = run_cli("--no-confirm", "--no-backup")
     assert result.returncode == 1
     assert "uncommitted changes" in result.stderr
