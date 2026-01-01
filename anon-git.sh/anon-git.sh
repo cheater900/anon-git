@@ -432,6 +432,22 @@ hook_is_ours() {
     [[ ! -L "$1" && -f "$1" ]] && grep -qF "$HOOK_MARKER" "$1"
 }
 
+# A core.hooksPath from global/system/command config is shared by other
+# repos: the hook would rewrite HEAD with --no-backup in every one of them.
+require_repo_local_hooks_path() {
+    local scoped_value scope
+
+    scoped_value=$(git config --show-scope --get core.hooksPath) || return 0
+    scope=${scoped_value%%$'\t'*}
+    if [[ "$scope" == 'local' || "$scope" == 'worktree' ]]; then
+        return 0
+    fi
+    printf 'Error: core.hooksPath is set in %s config (%s), shared with other repositories; refusing to install the hook there.\n' \
+        "$scope" "${scoped_value#*$'\t'}" >&2
+    printf '  Set a repo-local one first: git config --local core.hooksPath .git/hooks\n' >&2
+    exit 1
+}
+
 # --install-hook: installs a post-commit hook that re-anonymizes HEAD in
 # place after every commit, with --no-backup (would accumulate one branch
 # per commit) and --quiet.
@@ -442,6 +458,7 @@ install_hook() {
         printf 'Error: --install-hook must be run inside a git repository.\n' >&2
         exit 1
     fi
+    require_repo_local_hooks_path
     hook_file=$(hook_file_path)
 
     if [[ -e "$hook_file" || -L "$hook_file" ]] && ! hook_is_ours "$hook_file"; then

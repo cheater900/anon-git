@@ -209,6 +209,16 @@ hook_flag_refuses_symlink() {
     assert_file_not_exists "$HOOK_FILE"
 }
 
+@test "--install-hook refuses global core.hooksPath" {
+    local shared=${BATS_TEST_TMPDIR}/shared-hooks
+    export GIT_CONFIG_GLOBAL=${BATS_TEST_TMPDIR}/gitconfig
+    git config --global core.hooksPath "$shared"
+    run ./anon-git.sh --install-hook
+    assert_failure
+    assert_output --partial 'global config'
+    assert_not_exists "$shared"
+}
+
 @test "--install-hook anonymizes partial commit, keeps changes" {
     # A partial commit leaves unstaged and staged changes behind; the hook
     # must still anonymize HEAD and restore both.
