@@ -27,8 +27,8 @@ TOTAL_ERRORS=0
 DEFAULT_DATE=$(grep '^DEFAULT_DATE=' "$SCRIPT" | sed -e "s/DEFAULT_DATE='//" -e "s/'\$//")
 DEFAULT_NAME=$(grep '^DEFAULT_NAME=' "$SCRIPT" | sed -e "s/DEFAULT_NAME='//" -e "s/'\$//")
 DEFAULT_EMAIL=$(grep '^DEFAULT_EMAIL=' "$SCRIPT" | sed -e "s/DEFAULT_EMAIL='//" -e "s/'\$//")
-DEFAULT_KEEPUSER=$(grep '^DEFAULT_KEEPUSER=' "$SCRIPT" | sed -e "s/DEFAULT_KEEPUSER='//" -e "s/'\$//")
-DEFAULT_KEEPDATE=$(grep '^DEFAULT_KEEPDATE=' "$SCRIPT" | sed -e "s/DEFAULT_KEEPDATE='//" -e "s/'\$//")
+DEFAULT_KEEPUSER=$(sed -n "s/^ *DEFAULT_KEEPUSER='\(.*\)'$/\1/p" "$SCRIPT")
+DEFAULT_KEEPDATE=$(sed -n "s/^ *DEFAULT_KEEPDATE='\(.*\)'$/\1/p" "$SCRIPT")
 
 init_repo() {
     git init >/dev/null

@@ -8,19 +8,29 @@ ANON_GIT_VERSION='0.1.0'
 DEFAULT_NAME='Anon'
 DEFAULT_EMAIL='anon@localhost'
 DEFAULT_DATE='2008-10-31 00:00:00 +0000'
-DEFAULT_KEEPUSER='0'
-DEFAULT_KEEPDATE='0'
-DEFAULT_KEEPYEAR='0'
-DEFAULT_KEEPMONTH='0'
-DEFAULT_KEEPDAY='0'
-DEFAULT_RANDOMTIME='0'
-DEFAULT_RANDOMDAY='0'
-DEFAULT_RANDOMMONTH='0'
-DEFAULT_STRIPTIMEZONE='0'
-DEFAULT_ENTIREHISTORY='0'
-DEFAULT_CURRENTBRANCH='0'
-DEFAULT_DRYRUN='0'
-DEFAULT_QUIET='0'
+# Bool defaults are read indirectly (${!def}), see BOOLS below.
+# shellcheck disable=SC2034
+{
+    DEFAULT_KEEPUSER='0'
+    DEFAULT_KEEPDATE='0'
+    DEFAULT_KEEPYEAR='0'
+    DEFAULT_KEEPMONTH='0'
+    DEFAULT_KEEPDAY='0'
+    DEFAULT_RANDOMTIME='0'
+    DEFAULT_RANDOMDAY='0'
+    DEFAULT_RANDOMMONTH='0'
+    DEFAULT_STRIPTIMEZONE='0'
+    DEFAULT_ENTIREHISTORY='0'
+    DEFAULT_CURRENTBRANCH='0'
+    DEFAULT_DRYRUN='0'
+    DEFAULT_QUIET='0'
+}
+
+# Boolean options: each has a flag (KEEPUSER <-> --keep-user, see
+# flag_option), an ANON_GIT_<OPT> envvar and a DEFAULT_<OPT>. CONFIG_BOOLS
+# also read git config anon-git.<opt>.
+CONFIG_BOOLS=(KEEPUSER KEEPDATE KEEPYEAR KEEPMONTH KEEPDAY RANDOMTIME RANDOMDAY RANDOMMONTH STRIPTIMEZONE QUIET)
+BOOLS=("${CONFIG_BOOLS[@]}" ENTIREHISTORY CURRENTBRANCH DRYRUN)
 
 # Scratch files removed by the EXIT trap (cleanup_on_exit) so a kill mid-run
 # doesn't leave them behind. Declared empty so the trap is safe before
@@ -651,134 +661,54 @@ read_git_config_bool() {
 # envvars and below flags. Excludes --entire-history/--current-branch/
 # --dry-run: a silent default for those would be too destructive.
 read_git_config() {
+    local opt key value
+
     GITCONFIG_NAME=$(git config --get anon-git.name 2>/dev/null || true)
     GITCONFIG_EMAIL=$(git config --get anon-git.email 2>/dev/null || true)
     GITCONFIG_DATE=$(git config --get anon-git.date 2>/dev/null || true)
-    GITCONFIG_KEEPUSER=$(read_git_config_bool anon-git.keepuser)
-    GITCONFIG_KEEPDATE=$(read_git_config_bool anon-git.keepdate)
-    GITCONFIG_KEEPYEAR=$(read_git_config_bool anon-git.keepyear)
-    GITCONFIG_KEEPMONTH=$(read_git_config_bool anon-git.keepmonth)
-    GITCONFIG_KEEPDAY=$(read_git_config_bool anon-git.keepday)
-    GITCONFIG_RANDOMTIME=$(read_git_config_bool anon-git.randomtime)
-    GITCONFIG_RANDOMDAY=$(read_git_config_bool anon-git.randomday)
-    GITCONFIG_RANDOMMONTH=$(read_git_config_bool anon-git.randommonth)
-    GITCONFIG_STRIPTIMEZONE=$(read_git_config_bool anon-git.striptimezone)
-    GITCONFIG_QUIET=$(read_git_config_bool anon-git.quiet)
+    for opt in "${CONFIG_BOOLS[@]}"; do
+        key="anon-git.$(to_lower "$opt")"
+        # Plain assignment, so an invalid value's exit 1 aborts the script.
+        value=$(read_git_config_bool "$key")
+        printf -v "GITCONFIG_${opt}" '%s' "$value"
+    done
+}
+
+to_lower() {
+    tr '[:upper:]' '[:lower:]' <<<"$1"
+}
+
+# Internal: maps a flag to its option name: --keep-user -> KEEPUSER.
+flag_option() {
+    local opt="${1#--}"
+    tr '[:lower:]' '[:upper:]' <<<"${opt//-/}"
 }
 
 # Internal: parses "$@" into the *_ARG globals, later merged with ANON_GIT_*
 # envvars and DEFAULT_* fallbacks. Empty string means "not provided via flag".
 parse_args() {
-    DATE_ARG=""
-    NAME_ARG=""
-    EMAIL_ARG=""
-    KEEPUSER_ARG=""
-    KEEPDATE_ARG=""
-    KEEPYEAR_ARG=""
-    KEEPMONTH_ARG=""
-    KEEPDAY_ARG=""
-    RANDOMTIME_ARG=""
-    RANDOMDAY_ARG=""
-    RANDOMMONTH_ARG=""
-    STRIPTIMEZONE_ARG=""
-    NOCONFIRM_ARG=""
-    NOBACKUP_ARG=""
-    DRYRUN_ARG=""
-    ENTIREHISTORY_ARG=""
-    CURRENTBRANCH_ARG=""
-    QUIET_ARG=""
-    VERBOSE_ARG=""
-    COMMIT_ARG=""
+    local opt
+
+    for opt in DATE NAME EMAIL "${BOOLS[@]}" NOCONFIRM NOBACKUP VERBOSE COMMIT; do
+        printf -v "${opt}_ARG" '%s' ''
+    done
     COMMITS_ARG=()
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
-        --date)
+        --date | --name | --email)
             [[ $# -ge 2 ]] || {
                 printf 'Error: %s requires a value\n' "$1" >&2
                 exit 1
             }
-            DATE_ARG="$2"
+            printf -v "$(flag_option "$1")_ARG" '%s' "$2"
             shift 2
             ;;
-        --name)
-            [[ $# -ge 2 ]] || {
-                printf 'Error: %s requires a value\n' "$1" >&2
-                exit 1
-            }
-            NAME_ARG="$2"
-            shift 2
-            ;;
-        --email)
-            [[ $# -ge 2 ]] || {
-                printf 'Error: %s requires a value\n' "$1" >&2
-                exit 1
-            }
-            EMAIL_ARG="$2"
-            shift 2
-            ;;
-        --keep-user)
-            KEEPUSER_ARG='1'
-            shift
-            ;;
-        --keep-date)
-            KEEPDATE_ARG='1'
-            shift
-            ;;
-        --keep-year)
-            KEEPYEAR_ARG='1'
-            shift
-            ;;
-        --keep-month)
-            KEEPMONTH_ARG='1'
-            shift
-            ;;
-        --keep-day)
-            KEEPDAY_ARG='1'
-            shift
-            ;;
-        --random-time)
-            RANDOMTIME_ARG='1'
-            shift
-            ;;
-        --random-day)
-            RANDOMDAY_ARG='1'
-            shift
-            ;;
-        --random-month)
-            RANDOMMONTH_ARG='1'
-            shift
-            ;;
-        --strip-timezone)
-            STRIPTIMEZONE_ARG='1'
-            shift
-            ;;
-        --no-confirm)
-            NOCONFIRM_ARG='1'
-            shift
-            ;;
-        --no-backup)
-            NOBACKUP_ARG='1'
-            shift
-            ;;
-        --entire-history)
-            ENTIREHISTORY_ARG='1'
-            shift
-            ;;
-        --current-branch)
-            CURRENTBRANCH_ARG='1'
-            shift
-            ;;
-        --dry-run)
-            DRYRUN_ARG='1'
-            shift
-            ;;
-        --quiet)
-            QUIET_ARG='1'
-            shift
-            ;;
-        --verbose)
-            VERBOSE_ARG='1'
+        --keep-user | --keep-date | --keep-year | --keep-month | --keep-day | \
+            --random-time | --random-day | --random-month | --strip-timezone | \
+            --no-confirm | --no-backup | --entire-history | --current-branch | \
+            --dry-run | --quiet | --verbose)
+            printf -v "$(flag_option "$1")_ARG" '%s' '1'
             shift
             ;;
         -*)
@@ -856,7 +786,7 @@ source_var() {
 # merge_args_with_defaults overwrites these envvar names with the
 # fully-resolved value, so an unset envvar still reads as empty.
 reject_incompatible_options() {
-    local date_set name_set email_set
+    local date_set name_set email_set opt arg cfg env
     local keepuser_set keepdate_set keepyear_set keepmonth_set keepday_set
     local randomtime_set randomday_set randommonth_set entirehistory_set
 
@@ -865,32 +795,13 @@ reject_incompatible_options() {
     date_set="${DATE_ARG:-${GITCONFIG_DATE:-${ANON_GIT_DATE:-}}}"
     name_set="${NAME_ARG:-${GITCONFIG_NAME:-${ANON_GIT_NAME:-}}}"
     email_set="${EMAIL_ARG:-${GITCONFIG_EMAIL:-${ANON_GIT_EMAIL:-}}}"
-    keepuser_set="$KEEPUSER_ARG"
-    keepdate_set="$KEEPDATE_ARG"
-    keepyear_set="$KEEPYEAR_ARG"
-    keepmonth_set="$KEEPMONTH_ARG"
-    keepday_set="$KEEPDAY_ARG"
-    randomtime_set="$RANDOMTIME_ARG"
-    randomday_set="$RANDOMDAY_ARG"
-    randommonth_set="$RANDOMMONTH_ARG"
-    entirehistory_set="$ENTIREHISTORY_ARG"
-    [[ "${ANON_GIT_KEEPUSER:-}" == '1' ]] && keepuser_set='1'
-    [[ "${ANON_GIT_KEEPDATE:-}" == '1' ]] && keepdate_set='1'
-    [[ "${ANON_GIT_KEEPYEAR:-}" == '1' ]] && keepyear_set='1'
-    [[ "${ANON_GIT_KEEPMONTH:-}" == '1' ]] && keepmonth_set='1'
-    [[ "${ANON_GIT_KEEPDAY:-}" == '1' ]] && keepday_set='1'
-    [[ "${ANON_GIT_RANDOMTIME:-}" == '1' ]] && randomtime_set='1'
-    [[ "${ANON_GIT_RANDOMDAY:-}" == '1' ]] && randomday_set='1'
-    [[ "${ANON_GIT_RANDOMMONTH:-}" == '1' ]] && randommonth_set='1'
-    [[ "${ANON_GIT_ENTIREHISTORY:-}" == '1' ]] && entirehistory_set='1'
-    [[ "${GITCONFIG_KEEPUSER:-}" == '1' ]] && keepuser_set='1'
-    [[ "${GITCONFIG_KEEPDATE:-}" == '1' ]] && keepdate_set='1'
-    [[ "${GITCONFIG_KEEPYEAR:-}" == '1' ]] && keepyear_set='1'
-    [[ "${GITCONFIG_KEEPMONTH:-}" == '1' ]] && keepmonth_set='1'
-    [[ "${GITCONFIG_KEEPDAY:-}" == '1' ]] && keepday_set='1'
-    [[ "${GITCONFIG_RANDOMTIME:-}" == '1' ]] && randomtime_set='1'
-    [[ "${GITCONFIG_RANDOMDAY:-}" == '1' ]] && randomday_set='1'
-    [[ "${GITCONFIG_RANDOMMONTH:-}" == '1' ]] && randommonth_set='1'
+    for opt in KEEPUSER KEEPDATE KEEPYEAR KEEPMONTH KEEPDAY RANDOMTIME RANDOMDAY RANDOMMONTH ENTIREHISTORY; do
+        arg="${opt}_ARG" cfg="GITCONFIG_${opt}" env="ANON_GIT_${opt}"
+        printf -v "$(to_lower "$opt")_set" '%s' ''
+        if [[ -n "${!arg}" || "${!cfg:-}" == '1' || "${!env:-}" == '1' ]]; then
+            printf -v "$(to_lower "$opt")_set" '%s' '1'
+        fi
+    done
 
     check_incompatible --keep-user "$keepuser_set" --name "$name_set"
     check_incompatible --keep-user "$keepuser_set" --email "$email_set"
@@ -938,24 +849,17 @@ reject_incompatible_options() {
 # Internal: merges flags > repo-local git config > ANON_GIT_* envvars >
 # DEFAULT_* fallbacks into the final ANON_GIT_* globals used from here on.
 merge_args_with_defaults() {
+    local opt arg cfg env def
+
     DEFAULT_COMMIT=$(git rev-parse HEAD)
     ANON_GIT_DATE="${DATE_ARG:-${GITCONFIG_DATE:-${ANON_GIT_DATE:-${DEFAULT_DATE}}}}"
     ANON_GIT_NAME="${NAME_ARG:-${GITCONFIG_NAME:-${ANON_GIT_NAME:-${DEFAULT_NAME}}}}"
     ANON_GIT_EMAIL="${EMAIL_ARG:-${GITCONFIG_EMAIL:-${ANON_GIT_EMAIL:-${DEFAULT_EMAIL}}}}"
-    ANON_GIT_KEEPUSER="${KEEPUSER_ARG:-${GITCONFIG_KEEPUSER:-${ANON_GIT_KEEPUSER:-${DEFAULT_KEEPUSER}}}}"
-    ANON_GIT_KEEPDATE="${KEEPDATE_ARG:-${GITCONFIG_KEEPDATE:-${ANON_GIT_KEEPDATE:-${DEFAULT_KEEPDATE}}}}"
-    ANON_GIT_KEEPYEAR="${KEEPYEAR_ARG:-${GITCONFIG_KEEPYEAR:-${ANON_GIT_KEEPYEAR:-${DEFAULT_KEEPYEAR}}}}"
-    ANON_GIT_KEEPMONTH="${KEEPMONTH_ARG:-${GITCONFIG_KEEPMONTH:-${ANON_GIT_KEEPMONTH:-${DEFAULT_KEEPMONTH}}}}"
-    ANON_GIT_KEEPDAY="${KEEPDAY_ARG:-${GITCONFIG_KEEPDAY:-${ANON_GIT_KEEPDAY:-${DEFAULT_KEEPDAY}}}}"
-    ANON_GIT_RANDOMTIME="${RANDOMTIME_ARG:-${GITCONFIG_RANDOMTIME:-${ANON_GIT_RANDOMTIME:-${DEFAULT_RANDOMTIME}}}}"
-    ANON_GIT_RANDOMDAY="${RANDOMDAY_ARG:-${GITCONFIG_RANDOMDAY:-${ANON_GIT_RANDOMDAY:-${DEFAULT_RANDOMDAY}}}}"
-    ANON_GIT_RANDOMMONTH="${RANDOMMONTH_ARG:-${GITCONFIG_RANDOMMONTH:-${ANON_GIT_RANDOMMONTH:-${DEFAULT_RANDOMMONTH}}}}"
-    ANON_GIT_STRIPTIMEZONE="${STRIPTIMEZONE_ARG:-${GITCONFIG_STRIPTIMEZONE:-${ANON_GIT_STRIPTIMEZONE:-${DEFAULT_STRIPTIMEZONE}}}}"
-    ANON_GIT_ENTIREHISTORY="${ENTIREHISTORY_ARG:-${ANON_GIT_ENTIREHISTORY:-${DEFAULT_ENTIREHISTORY}}}"
-    ANON_GIT_CURRENTBRANCH="${CURRENTBRANCH_ARG:-${ANON_GIT_CURRENTBRANCH:-${DEFAULT_CURRENTBRANCH}}}"
+    for opt in "${BOOLS[@]}"; do
+        arg="${opt}_ARG" cfg="GITCONFIG_${opt}" env="ANON_GIT_${opt}" def="DEFAULT_${opt}"
+        printf -v "$env" '%s' "${!arg:-${!cfg:-${!env:-${!def}}}}"
+    done
     ANON_GIT_COMMIT="${COMMIT_ARG:-${DEFAULT_COMMIT}}"
-    ANON_GIT_DRYRUN="${DRYRUN_ARG:-${ANON_GIT_DRYRUN:-${DEFAULT_DRYRUN}}}"
-    ANON_GIT_QUIET="${QUIET_ARG:-${GITCONFIG_QUIET:-${ANON_GIT_QUIET:-${DEFAULT_QUIET}}}}"
     # --verbose always wins over whatever set ANON_GIT_QUIET above.
     if [[ "$VERBOSE_ARG" == '1' ]]; then
         ANON_GIT_QUIET='0'
@@ -966,14 +870,21 @@ merge_args_with_defaults() {
 # --keep-date for that run (the python commit-callback still does the
 # offset rewrite). Any other CLI flag opts back into normal precedence.
 # Only the *_ARG (CLI-only) globals count -- repo config/envvars don't.
+# shellcheck disable=SC2034 # ANON_GIT_* are exported indirectly.
 apply_strip_timezone_alone() {
-    if [[ "$STRIPTIMEZONE_ARG" == '1' && -z "$DATE_ARG" && -z "$NAME_ARG" && -z "$EMAIL_ARG" &&
-        -z "$KEEPUSER_ARG" && -z "$KEEPDATE_ARG" &&
-        -z "$KEEPYEAR_ARG" && -z "$KEEPMONTH_ARG" && -z "$KEEPDAY_ARG" &&
-        -z "$RANDOMTIME_ARG" && -z "$RANDOMDAY_ARG" && -z "$RANDOMMONTH_ARG" ]]; then
-        ANON_GIT_KEEPUSER='1'
-        ANON_GIT_KEEPDATE='1'
+    local opt arg
+
+    if [[ "$STRIPTIMEZONE_ARG" != '1' ]]; then
+        return
     fi
+    for opt in DATE NAME EMAIL KEEPUSER KEEPDATE KEEPYEAR KEEPMONTH KEEPDAY RANDOMTIME RANDOMDAY RANDOMMONTH; do
+        arg="${opt}_ARG"
+        if [[ -n "${!arg}" ]]; then
+            return
+        fi
+    done
+    ANON_GIT_KEEPUSER='1'
+    ANON_GIT_KEEPDATE='1'
 }
 
 # Internal: without a commit target or --entire-history, show help instead
@@ -995,19 +906,12 @@ validate_bool() {
 # Sanity-checks the resolved ANON_GIT_* booleans (a stray envvar could have
 # produced a bogus value) before anything acts on them.
 validate_final_options() {
-    validate_bool ANON_GIT_KEEPUSER "$ANON_GIT_KEEPUSER"
-    validate_bool ANON_GIT_KEEPDATE "$ANON_GIT_KEEPDATE"
-    validate_bool ANON_GIT_KEEPYEAR "$ANON_GIT_KEEPYEAR"
-    validate_bool ANON_GIT_KEEPMONTH "$ANON_GIT_KEEPMONTH"
-    validate_bool ANON_GIT_KEEPDAY "$ANON_GIT_KEEPDAY"
-    validate_bool ANON_GIT_RANDOMTIME "$ANON_GIT_RANDOMTIME"
-    validate_bool ANON_GIT_RANDOMDAY "$ANON_GIT_RANDOMDAY"
-    validate_bool ANON_GIT_RANDOMMONTH "$ANON_GIT_RANDOMMONTH"
-    validate_bool ANON_GIT_STRIPTIMEZONE "$ANON_GIT_STRIPTIMEZONE"
-    validate_bool ANON_GIT_ENTIREHISTORY "$ANON_GIT_ENTIREHISTORY"
-    validate_bool ANON_GIT_CURRENTBRANCH "$ANON_GIT_CURRENTBRANCH"
-    validate_bool ANON_GIT_DRYRUN "$ANON_GIT_DRYRUN"
-    validate_bool ANON_GIT_QUIET "$ANON_GIT_QUIET"
+    local opt env
+
+    for opt in "${BOOLS[@]}"; do
+        env="ANON_GIT_${opt}"
+        validate_bool "$env" "${!env}"
+    done
 }
 
 # Only HEAD's history is rewritten (--refs HEAD), so any other target would
@@ -1167,12 +1071,13 @@ setup_dryrun() {
 # source, so a name/email/date with a quote or other Python-special
 # character can't break out of a string literal and inject code.
 export_rewrite_env() {
+    local opt
+
     export ANON_GIT_NAME ANON_GIT_EMAIL ANON_GIT_DATE ANON_GIT_COMMIT
-    export ANON_GIT_KEEPUSER ANON_GIT_KEEPDATE ANON_GIT_KEEPYEAR ANON_GIT_KEEPMONTH ANON_GIT_KEEPDAY
-    export ANON_GIT_RANDOMTIME ANON_GIT_RANDOMDAY ANON_GIT_RANDOMMONTH
+    for opt in "${BOOLS[@]}"; do
+        export "ANON_GIT_${opt}"
+    done
     export ANON_GIT_RANDOM_DATES_FILE="${random_dates_file}"
-    export ANON_GIT_STRIPTIMEZONE
-    export ANON_GIT_ENTIREHISTORY ANON_GIT_DRYRUN
     export ANON_GIT_DRYRUN_FILE="${dryrun_file}"
     export TZ=UTC
 }
