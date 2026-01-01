@@ -4,6 +4,7 @@ Derived from git history, newest first.
 
 ## 2026-11-02
 
+- docs(py): add NOTES with layout decisions and open dry-run question
 - docs(py): document module and test layout
 - refactor(py): split anon_git into modules by concern, tests into unit/integration/e2e
 - docs(py): describe derived flag list in CONTRIBUTING
