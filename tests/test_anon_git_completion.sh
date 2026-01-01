@@ -44,8 +44,9 @@ record_result() {
 test_completion_flags() {
     # Zsh and fish hand-maintain flag names (for per-flag descriptions); this
     # regression-tests that every flag from --_list-flags (the source of
-    # truth) is still mentioned in both, compared by bare name (dashes/=
-    # stripped, since fish's `complete -l` omits the leading "--"). Bash
+    # truth) is still declared in both: as `'--flag[`, `'--flag=[` or
+    # `{-f,--flag}` in zsh and `-l flag` in fish, matched whole so "date"
+    # can't hit "keep-date". Bash
     # completion is dynamic (calls --_list-flags itself), so it's only
     # checked for still being wired up.
     local bash_completion zsh_completion fish_completion
@@ -64,11 +65,11 @@ test_completion_flags() {
 
     while IFS= read -r flag; do
         [[ "${#flag}" -gt 1 ]] || continue
-        if ! grep -qF -- "$flag" "$zsh_completion" 2>/dev/null; then
+        if ! grep -qE -- "^ *'--${flag}=?\[|[{,]--${flag}[,}]" "$zsh_completion" 2>/dev/null; then
             printf 'Error: "%s" missing from zsh completion (%s)\n' "$flag" "$zsh_completion"
             errors=$((errors + 1))
         fi
-        if ! grep -qF -- "$flag" "$fish_completion" 2>/dev/null; then
+        if ! grep -qE -- "-l ${flag}( |$)" "$fish_completion" 2>/dev/null; then
             printf 'Error: "%s" missing from fish completion (%s)\n' "$flag" "$fish_completion"
             errors=$((errors + 1))
         fi
