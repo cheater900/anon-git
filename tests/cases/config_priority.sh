@@ -237,12 +237,12 @@ test_gitconfig_flag_priority() {
 }
 
 test_gitconfig_keepuser_bool() {
-    # git config's true/false/yes/no/on/off/1/0 spellings must all normalize
-    # like --keep-user.
-    local before_author after_author exit_status errors=0
+    # $1 (optional): spelling, default yes. Any git bool spelling (any case)
+    # must normalize like --keep-user.
+    local value="${1:-yes}" before_author after_author exit_status errors=0
 
     before_author=$(git show -s --format='%an <%ae>' HEAD)
-    git config --local anon-git.keepuser yes
+    git config --local anon-git.keepuser "$value"
 
     ./"${SCRIPT_NAME}" --no-confirm --no-backup --current-branch HEAD >/dev/null 2>&1
     exit_status=$?
@@ -251,15 +251,15 @@ test_gitconfig_keepuser_bool() {
     git config --local --unset anon-git.keepuser
 
     if [[ "$exit_status" -ne 0 ]]; then
-        printf 'Error: anon-git.keepuser=yes run exited with status %s\n' "$exit_status"
+        printf 'Error: anon-git.keepuser=%s run exited with status %s\n' "$value" "$exit_status"
         errors=$((errors + 1))
     fi
     if [[ "$after_author" != "$before_author" ]]; then
-        printf 'Error: anon-git.keepuser=yes did not preserve author identity\n'
+        printf 'Error: anon-git.keepuser=%s did not preserve author identity\n' "$value"
         errors=$((errors + 1))
     fi
 
-    record_result "$errors" 'anon-git.keepuser config acts as --keep-user'
+    record_result "$errors" "anon-git.keepuser=$value config acts as --keep-user"
 }
 
 test_gitconfig_invalid_bool() {

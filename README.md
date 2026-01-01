@@ -314,7 +314,9 @@ source <(./anon-git.sh --print-completion)
   before and after each target is used to bound that target's randomized
   date, without itself being touched or appearing anywhere in the rewrite
 - Timestamps must be in a format `git` understands (ISO 8601 with timezone
-  recommended)
+  recommended), and not before 1970 (`git fsck` rejects negative timestamps)
+- `--name`/`--email` must not contain `<`, `>` or a newline (git can't store
+  them in an ident), and an empty value is an error rather than the default
 - The script runs `git filter-repo --force`, which skips filter-repo's own "is
   this repo safe to rewrite" check (normally it refuses to run outside of a
   fresh clone). This is safe here because the script always rewrites a

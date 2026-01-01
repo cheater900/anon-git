@@ -222,6 +222,43 @@ test_match_outside_git_repo() {
     record_result "$errors" 'outside git repo fails cleanly'
 }
 
+test_match_bare_repo() {
+    local bare_dir output exit_status errors=0
+
+    bare_dir=$(mktemp -d "${TMP_DIR}/bare_repo.XXXXXX")
+    git clone --quiet --bare "$TMP_DIR" "$bare_dir" 2>/dev/null
+
+    output=$(cd "$bare_dir" && "${TMP_DIR}/${SCRIPT_NAME}" --no-confirm HEAD 2>&1 >/dev/null)
+    exit_status=$?
+
+    if [[ "$exit_status" -eq 0 ]]; then
+        printf 'Error: running in a bare repository did not fail\n'
+        errors=$((errors + 1))
+    fi
+    if ! grep -q 'not a bare repository' <<<"$output"; then
+        printf 'Error: expected "not a bare repository" message not found (got: %s)\n' "$output"
+        errors=$((errors + 1))
+    fi
+
+    rm -rf "$bare_dir"
+
+    record_result "$errors" 'bare repo fails with work tree message'
+}
+
+test_match_unset_home() {
+    local output exit_status errors=0
+
+    output=$(env -u HOME ./"${SCRIPT_NAME}" --version 2>&1)
+    exit_status=$?
+
+    if [[ "$exit_status" -ne 0 ]]; then
+        printf 'Error: unset HOME broke --version (got: %s)\n' "$output"
+        errors=$((errors + 1))
+    fi
+
+    record_result "$errors" 'unset HOME does not break startup'
+}
+
 test_match_unborn_head() {
     local repo_dir output exit_status errors=0
 

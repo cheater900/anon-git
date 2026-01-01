@@ -95,6 +95,8 @@ main() {
     test_gitconfig_beats_envvar
     test_gitconfig_flag_priority
     test_gitconfig_keepuser_bool
+    test_gitconfig_keepuser_bool YES
+    test_gitconfig_keepuser_bool True
     test_gitconfig_invalid_bool
     test_gitconfig_catch_incompatible
     test_gitconfig_quiet
@@ -138,6 +140,8 @@ main() {
     test_flag_missing_value --date
     test_flag_missing_value --name
     test_flag_missing_value --email
+    test_flag_missing_value --name ''
+    test_flag_missing_value --date ''
     test_flag_new_branch
     test_flag_no_backup
     test_flag_quiet
@@ -162,8 +166,14 @@ main() {
     test_match_dry_run_without_target_shows_help
     test_match_malformed_date
     test_match_malformed_date_no_branch
+    test_match_malformed_date_no_branch '1960-01-01 00:00:00 +0000'
+    test_match_invalid_identity --name 'Ev<il>'
+    test_match_invalid_identity --email 'a>b@example.com'
+    test_match_invalid_identity --name $'Line\nBreak'
     test_match_unreachable_commit
     test_match_outside_git_repo
+    test_match_bare_repo
+    test_match_unset_home
     test_match_unborn_head
     test_match_annotated_tag
     test_match_dry_run_keeps_signed_commit

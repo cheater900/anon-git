@@ -267,7 +267,8 @@ EOF
 
 # Where --install/--install-system put completions/, since an installed
 # copy has none next to it.
-USER_DATA_DIR="${HOME}/.local/share/anon-git"
+# ${HOME:-}: an unset HOME must not break runs that never install.
+USER_DATA_DIR="${HOME:-}/.local/share/anon-git"
 SYSTEM_DATA_DIR='/usr/share/anon-git'
 
 # Internal: completion scripts are static files shipped in completions/,
@@ -632,6 +633,12 @@ safety_checks() {
         exit 1
     fi
 
+    # Bare repo or inside .git: the dirty-tree check below would misreport.
+    if [[ "$(git rev-parse --is-inside-work-tree)" != 'true' ]]; then
+        printf 'Error: AnonGit must be run inside a work tree (not a bare repository or .git directory).\n' >&2
+        exit 1
+    fi
+
     if ! git rev-parse --quiet --verify HEAD >/dev/null; then
         printf 'Error: repository has no commits yet; nothing to anonymize.\n' >&2
         exit 1
@@ -649,25 +656,28 @@ safety_checks() {
 }
 
 # Internal: reads git config anon-git.<key>, normalized to '1'/'0', or
-# prints nothing if unset. An unparseable value is a hard error rather than
-# silently ignored, since a typo'd config shouldn't fail open.
+# prints nothing if unset. Parsed by git itself (--type=bool), so "True",
+# "YES" or a valueless key mean what git says. An unparseable value is a
+# hard error rather than silently ignored, since a typo'd config shouldn't
+# fail open.
 read_git_config_bool() {
-    local key="$1" raw
-    raw=$(git config --get "$key" 2>/dev/null || true)
+    local key="$1" value status=0
+    value=$(git config --type=bool --get "$key" 2>/dev/null) || status=$?
 
-    if [[ -z "$raw" ]]; then
-        printf ''
+    # Exit 1: key unset.
+    if [[ "$status" -eq 1 ]]; then
         return 0
     fi
-
-    case "$raw" in
-    true | yes | on | 1) printf '1' ;;
-    false | no | off | 0) printf '0' ;;
-    *)
-        printf 'Error: git config %s has an invalid boolean value "%s" (expected true/false)\n' "$key" "$raw" >&2
+    if [[ "$status" -ne 0 ]]; then
+        printf 'Error: git config %s has an invalid boolean value "%s" (expected true/false)\n' \
+            "$key" "$(git config --get "$key")" >&2
         exit 1
-        ;;
-    esac
+    fi
+    if [[ "$value" == 'true' ]]; then
+        printf '1'
+        return 0
+    fi
+    printf '0'
 }
 
 # Reads `git config anon-git.*` into the GITCONFIG_* globals, ranked above
@@ -710,7 +720,8 @@ parse_args() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
         --date | --name | --email)
-            [[ $# -ge 2 ]] || {
+            # Empty would silently fall back to the default identity/date.
+            [[ $# -ge 2 && -n "$2" ]] || {
                 printf 'Error: %s requires a value\n' "$1" >&2
                 exit 1
             }
@@ -925,13 +936,31 @@ require_reachable() {
     done
 }
 
+# Pre-1970 is rejected: git writes the negative timestamp, but fsck (and
+# so most hosts on push) rejects the commit as badDate.
 validate_date() {
     if ! ANON_GIT_DATE="$ANON_GIT_DATE" python3 -c "${python_parse_target_date}
 import os
-parse_target_date(os.environ['ANON_GIT_DATE'])" 2>/dev/null; then
-        printf 'Error: invalid date "%s" (expected e.g. "2025-03-10 13:37:00 +0000")\n' "$ANON_GIT_DATE" >&2
+assert parse_target_date(os.environ['ANON_GIT_DATE']).timestamp() >= 0" 2>/dev/null; then
+        printf 'Error: invalid date "%s" (expected e.g. "2025-03-10 13:37:00 +0000", not before 1970)\n' "$ANON_GIT_DATE" >&2
         exit 1
     fi
+}
+
+# fast-import aborts mid-rewrite on an ident with <, > or a newline, after
+# the new/backup branch already exists; reject it before anything runs.
+validate_identity() {
+    local field value
+    if [[ "$ANON_GIT_KEEPUSER" == '1' ]]; then
+        return
+    fi
+    for field in NAME EMAIL; do
+        value="ANON_GIT_${field}"
+        if [[ "${!value}" == *[$'<>\n']* ]]; then
+            printf 'Error: %s must not contain "<", ">" or a newline (got "%s")\n' "$(to_lower "$field")" "${!value}" >&2
+            exit 1
+        fi
+    done
 }
 
 # Prints a summary, gated on flags explicitly passed on the CLI (not the
@@ -1043,7 +1072,10 @@ confirm() {
     fi
     read -p "Continue? (y/N) " -n 1 -r </dev/tty
     printf '\n'
-    [[ $REPLY =~ ^[Yy]$ ]] || exit 1
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        printf 'Aborted.\n' >&2
+        exit 1
+    fi
 }
 
 # git-filter-repo caches metadata in .git/filter-repo/ to reuse across runs,
@@ -1448,6 +1480,7 @@ main() {
     validate_final_options
     require_target
     validate_date
+    validate_identity
     require_reachable
     verbose_info
     confirm

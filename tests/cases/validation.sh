@@ -124,11 +124,11 @@ test_catch_uncommitted_changes() {
 }
 
 test_flag_missing_value() {
-    # $1: --date | --name | --email
+    # $1: --date | --name | --email, $2 (optional): empty value, e.g. ''
     local flag="$1" before after output exit_status errors=0
 
     before=$(git rev-parse HEAD)
-    output=$(./"${SCRIPT_NAME}" --no-confirm --no-backup --current-branch "$flag" 2>&1)
+    output=$(./"${SCRIPT_NAME}" --no-confirm --no-backup --current-branch "$@" 2>&1)
     exit_status=$?
     after=$(git rev-parse HEAD)
 
@@ -145,7 +145,7 @@ test_flag_missing_value() {
         errors=$((errors + 1))
     fi
 
-    record_result "$errors" "flag with missing value: $flag"
+    record_result "$errors" "flag with missing value: $flag${2+ (empty)}"
 }
 
 test_flag_unknown() {
@@ -217,11 +217,12 @@ test_match_malformed_date() {
 }
 
 test_match_malformed_date_no_branch() {
-    local branch_before branch_count_before output exit_status errors=0
+    # $1 (optional): rejected date, default an out-of-range one
+    local date="${1:-2025-13-45 99:00:00 +0000}" branch_before branch_count_before output exit_status errors=0
 
     branch_before=$(git branch --show-current)
     branch_count_before=$(git branch --list | wc -l)
-    output=$(./"${SCRIPT_NAME}" --no-confirm --date '2025-13-45 99:00:00 +0000' HEAD 2>&1)
+    output=$(./"${SCRIPT_NAME}" --no-confirm --date "$date" HEAD 2>&1)
     exit_status=$?
 
     if [[ "$exit_status" -eq 0 ]]; then
@@ -238,7 +239,36 @@ test_match_malformed_date_no_branch() {
     fi
     git switch "$branch_before" >/dev/null 2>&1
 
-    record_result "$errors" 'malformed --date rejected before branch creation'
+    record_result "$errors" "malformed --date $date rejected before branch creation"
+}
+
+test_match_invalid_identity() {
+    # $1: --name | --email, $2: value fast-import can't encode in an ident
+    local branch_count_before before output exit_status errors=0
+
+    before=$(git rev-parse HEAD)
+    branch_count_before=$(git branch --list | wc -l)
+    output=$(./"${SCRIPT_NAME}" --no-confirm "$1" "$2" HEAD 2>&1)
+    exit_status=$?
+
+    if [[ "$exit_status" -eq 0 ]]; then
+        printf 'Error: %s %q did not fail\n' "$1" "$2"
+        errors=$((errors + 1))
+    fi
+    if [[ "$(git rev-parse HEAD)" != "$before" ]]; then
+        printf 'Error: HEAD changed despite invalid %s\n' "$1"
+        errors=$((errors + 1))
+    fi
+    if [[ "$(git branch --list | wc -l)" != "$branch_count_before" ]]; then
+        printf 'Error: invalid %s left a stray branch\n' "$1"
+        errors=$((errors + 1))
+    fi
+    if ! grep -q 'must not contain' <<<"$output"; then
+        printf 'Error: expected "must not contain" message not found (got: %s)\n' "$output"
+        errors=$((errors + 1))
+    fi
+
+    record_result "$errors" "invalid identity $1 $(printf '%q' "$2") rejected before branch creation"
 }
 
 test_match_unreachable_commit() {
