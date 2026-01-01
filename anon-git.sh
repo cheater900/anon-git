@@ -167,13 +167,13 @@ Examples:
     ./anon-git.sh HEAD~{0..9}
 
     # Anonymize commits within a specific date range
-    git log --format=%H --after='2023-01-01' --before='2024-01-01' | xargs ./anon-git.sh
+    ./anon-git.sh \$(git log --format=%H --after='2023-01-01' --before='2024-01-01')
 
     # Anonymize commits where the commit author matches a pattern
-    git log --format=%H --author='Frederic' | xargs ./anon-git.sh
+    ./anon-git.sh \$(git log --format=%H --author='Frederic')
 
     # Anonymize commits following the Conventional Commits "fix:" prefix
-    git log --format=%H --grep='^fix:' | xargs ./anon-git.sh
+    ./anon-git.sh \$(git log --format=%H --grep='^fix:')
 
     # Install shell completion (shell inferred from \$SHELL if omitted)
     ./anon-git.sh --print-completion bash > ~/.local/share/bash-completion/completions/anon-git.sh
@@ -1003,12 +1003,18 @@ backup_branch() {
 }
 
 # Skipped for --no-confirm or --dry-run (nothing is touched either way).
+# Reads the terminal, not stdin: under xargs stdin is /dev/null.
 confirm() {
-    if [[ "$NOCONFIRM_ARG" != '1' && "$ANON_GIT_DRYRUN" != '1' ]]; then
-        read -p "Continue? (y/N) " -n 1 -r
-        printf '\n'
-        [[ $REPLY =~ ^[Yy]$ ]] || exit 1
+    if [[ "$NOCONFIRM_ARG" == '1' || "$ANON_GIT_DRYRUN" == '1' ]]; then
+        return
     fi
+    if ! : </dev/tty 2>/dev/null; then
+        printf 'Error: no terminal to ask for confirmation; pass --no-confirm.\n' >&2
+        exit 1
+    fi
+    read -p "Continue? (y/N) " -n 1 -r </dev/tty
+    printf '\n'
+    [[ $REPLY =~ ^[Yy]$ ]] || exit 1
 }
 
 # git-filter-repo caches metadata in .git/filter-repo/ to reuse across runs,

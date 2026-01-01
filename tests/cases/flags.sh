@@ -348,7 +348,7 @@ test_flag_no_confirm() {
     local before after exit_status errors=0
 
     before=$(git rev-parse HEAD)
-    echo 'n' | ./"${SCRIPT_NAME}" --no-backup HEAD >/dev/null 2>&1
+    run_with_tty n ./"${SCRIPT_NAME}" --no-backup HEAD >/dev/null 2>&1
     exit_status=$?
     after=$(git rev-parse HEAD)
 
@@ -362,7 +362,7 @@ test_flag_no_confirm() {
     fi
 
     before=$(git rev-parse HEAD)
-    echo 'y' | ./"${SCRIPT_NAME}" --no-backup --current-branch --name 'Alonzo Church' HEAD >/dev/null 2>&1
+    run_with_tty y ./"${SCRIPT_NAME}" --no-backup --current-branch --name 'Alonzo Church' HEAD >/dev/null 2>&1
     exit_status=$?
     after=$(git rev-parse HEAD)
 
@@ -388,7 +388,7 @@ test_noconfirm_executes_first() {
     branch_before=$(git branch --show-current)
     branch_count_before=$(git branch --list | wc -l)
 
-    echo 'n' | ./"${SCRIPT_NAME}" HEAD >/dev/null 2>&1
+    run_with_tty n ./"${SCRIPT_NAME}" HEAD >/dev/null 2>&1
 
     branch_after=$(git branch --show-current)
     branch_count_after=$(git branch --list | wc -l)
@@ -405,6 +405,32 @@ test_noconfirm_executes_first() {
     fi
 
     record_result "$errors" 'declined confirmation creates no branch'
+}
+
+test_confirm_without_tty() {
+    # Under xargs stdin is /dev/null; without a terminal confirm() must fail
+    # with a hint instead of reading stdin.
+    local before after output exit_status errors=0
+
+    before=$(git rev-parse HEAD)
+    output=$(run_without_tty ./"${SCRIPT_NAME}" --no-backup --current-branch HEAD </dev/null 2>&1)
+    exit_status=$?
+    after=$(git rev-parse HEAD)
+
+    if [[ "$exit_status" -eq 0 ]]; then
+        printf 'Error: confirmation without terminal did not fail\n'
+        errors=$((errors + 1))
+    fi
+    if ! grep -q -- '--no-confirm' <<<"$output"; then
+        printf 'Error: expected --no-confirm hint not found (got: %s)\n' "$output"
+        errors=$((errors + 1))
+    fi
+    if [[ "$before" != "$after" ]]; then
+        printf 'Error: repository modified without confirmation\n'
+        errors=$((errors + 1))
+    fi
+
+    record_result "$errors" 'confirmation without terminal fails with --no-confirm hint'
 }
 
 test_flag_keep_user_keep_date_verbose_message() {

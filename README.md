@@ -138,13 +138,13 @@ More examples, using `git`'s own filters to pick a set of matching commits:
 ./anon-git.sh HEAD~{0..9}
 
 # Anonymize commits within a specific date range
-git log --format=%H --after='2023-01-01' --before='2024-01-01' | xargs ./anon-git.sh
+./anon-git.sh $(git log --format=%H --after='2023-01-01' --before='2024-01-01')
 
 # Anonymize commits where the commit author matches a pattern
-git log --format=%H --author='Frederic' | xargs ./anon-git.sh
+./anon-git.sh $(git log --format=%H --author='Frederic')
 
 # Anonymize commits following the Conventional Commits "fix:" prefix
-git log --format=%H --grep='^fix:' | xargs ./anon-git.sh
+./anon-git.sh $(git log --format=%H --grep='^fix:')
 ```
 
 ### Options
