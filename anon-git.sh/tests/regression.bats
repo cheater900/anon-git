@@ -152,6 +152,7 @@ add_main_ancestor() {
     touch "$marker"
     cd subdir
     PAGER='cat' run ../anon-git.sh --dry-run HEAD
+    assert_success
     assert_file_not_exists "$marker"
 }
 
@@ -180,6 +181,19 @@ add_main_ancestor() {
     kill -TERM "$pid" || true
     wait "$pid" || true
     assert_equal "$(file_count "$scratch_tmpdir")" 0
+}
+
+@test "filter-repo failure reports its log" {
+    # A failing git-filter-repo first on $PATH stands in for a real crash.
+    local bin_dir=${BATS_TEST_TMPDIR}/bin
+    mkdir "$bin_dir"
+    printf '#!/bin/sh\necho filter-repo boom >&2\nexit 3\n' >"${bin_dir}/git-filter-repo"
+    chmod +x "${bin_dir}/git-filter-repo"
+    PATH="${bin_dir}:${PATH}" run --separate-stderr ./anon-git.sh --no-confirm --no-backup --current-branch HEAD
+    assert_failure
+    assert_stderr --partial 'Error: git filter-repo failed:'
+    assert_stderr --partial 'filter-repo boom'
+    assert_head_unchanged
 }
 
 @test "annotated tag target rewritten" {
