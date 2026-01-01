@@ -198,6 +198,12 @@ git log --format=%H --grep='^fix:' | xargs ./anon-git.sh
 > equivalents) are not meant to carry untrusted input — don't wire user-controlled
 > values (e.g. from CI variables or another service) into them.
 
+### Exit codes
+
+The script only ever exits `0` (success) or `1` (any failure: bad flags,
+failed preconditions, a declined confirmation prompt, or `git`/`git
+filter-repo` erroring out) — there's no finer-grained code to script against.
+
 ### Repo-local config
 
 A repository can pin its own defaults instead of every invocation needing flags or exported envvars. Repo config outranks `ANON_GIT_*` envvars (it wins over an inherited/exported envvar you didn't set for this specific invocation), but a CLI flag still overrides it:
