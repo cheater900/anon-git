@@ -806,6 +806,46 @@ check_incompatible() {
     fi
 }
 
+# Options that decide the same thing (identity, date) form a group; the
+# highest-priority source setting any member owns the whole group, so e.g.
+# ANON_GIT_DATE doesn't conflict with --keep-date: lower sources' members are
+# cleared before the conflict checks and the merge. Bool '0' doesn't count.
+drop_overridden_sources() {
+    local group suffix source var owner
+    local groups=('NAME EMAIL KEEPUSER' 'DATE KEEPDATE KEEPYEAR KEEPMONTH KEEPDAY RANDOMTIME RANDOMDAY RANDOMMONTH')
+
+    for group in "${groups[@]}"; do
+        owner=''
+        for source in ARG GITCONFIG ANON_GIT; do
+            for suffix in $group; do
+                var=$(source_var "$source" "$suffix")
+                if [[ -n "${!var:-}" && "${!var:-}" != '0' ]]; then
+                    owner="$source"
+                    break 2
+                fi
+            done
+        done
+        for source in ARG GITCONFIG ANON_GIT; do
+            if [[ -z "$owner" || "$source" == "$owner" ]]; then
+                continue
+            fi
+            for suffix in $group; do
+                printf -v "$(source_var "$source" "$suffix")" '%s' ''
+            done
+        done
+    done
+}
+
+# Internal: name of the variable holding option $2 (e.g. DATE) from source
+# $1 (ARG = CLI flag, GITCONFIG = repo config, ANON_GIT = envvar).
+source_var() {
+    if [[ "$1" == 'ARG' ]]; then
+        printf '%s_ARG' "$2"
+        return
+    fi
+    printf '%s_%s' "$1" "$2"
+}
+
 # Rejects mutually-exclusive options regardless of whether each side came
 # from a CLI flag, repo-local config, or its envvar. Must run before
 # merge_args_with_defaults overwrites these envvar names with the
@@ -1495,6 +1535,7 @@ main() {
     safety_checks
     read_git_config
     parse_args "$@"
+    drop_overridden_sources
     reject_incompatible_options
     merge_args_with_defaults
     apply_strip_timezone_alone

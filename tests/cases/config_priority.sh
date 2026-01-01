@@ -84,6 +84,37 @@ test_combo_env_var_flag_priority() {
     record_result "$errors" 'flag --name overrides ANON_GIT_NAME'
 }
 
+test_flag_overrides_env_group() {
+    # A flag overrides envvars of the same group instead of conflicting.
+    local original_author output exit_status errors=0
+
+    original_author=$(git show -s --format='%an' HEAD)
+    output=$(ANON_GIT_NAME='Env Name' ./"${SCRIPT_NAME}" --no-confirm --no-backup --current-branch --keep-user HEAD 2>&1)
+    exit_status=$?
+    if [[ "$exit_status" -ne 0 ]]; then
+        printf 'Error: --keep-user with ANON_GIT_NAME failed: %s\n' "$output"
+        errors=$((errors + 1))
+    fi
+    if [[ "$(git show -s --format='%an' HEAD)" != "$original_author" ]]; then
+        printf 'Error: --keep-user did not override ANON_GIT_NAME\n'
+        errors=$((errors + 1))
+    fi
+
+    output=$(ANON_GIT_KEEPDATE=1 ./"${SCRIPT_NAME}" --no-confirm --no-backup --current-branch \
+        --date '2021-02-03 04:05:06 +0000' HEAD 2>&1)
+    exit_status=$?
+    if [[ "$exit_status" -ne 0 ]]; then
+        printf 'Error: --date with ANON_GIT_KEEPDATE=1 failed: %s\n' "$output"
+        errors=$((errors + 1))
+    fi
+    if [[ "$(git show -s --format='%ai' HEAD)" != '2021-02-03 04:05:06 +0000' ]]; then
+        printf 'Error: --date did not override ANON_GIT_KEEPDATE=1\n'
+        errors=$((errors + 1))
+    fi
+
+    record_result "$errors" 'flag overrides envvar of same group'
+}
+
 test_flag_env_vars() {
     # ANON_GIT_NAME/EMAIL/DATE work as priority-3 config, same as
     # --name/--email/--date.

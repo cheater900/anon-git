@@ -244,7 +244,7 @@ the settings that make sense to pin per-repo. `--entire-history`, `--current-bra
 those would be far more destructive than a wrong name or email (e.g. every
 invocation silently rewriting the entire history instead of one commit).
 
-Incompatible combinations (e.g. `anon-git.keepuser=true` with `anon-git.email` also set) are rejected the same way the equivalent flags/envvars are, regardless of where each side came from.
+Incompatible combinations (e.g. `anon-git.keepuser=true` with `anon-git.email` also set) are rejected when both come from the same source. Across sources, the higher-priority one wins for the whole group (identity: name/email/keep-user; date: date/keep-*/random-*): `ANON_GIT_DATE` plus `--keep-date` keeps the date, ignoring the envvar.
 
 ### Post-commit hook
 

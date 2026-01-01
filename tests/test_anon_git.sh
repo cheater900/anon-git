@@ -81,9 +81,7 @@ main() {
     test_catch_incompatible ANON_GIT_KEEPMONTH=1 ANON_GIT_KEEPDAY=1
     test_catch_incompatible ANON_GIT_RANDOMDAY=1 ANON_GIT_KEEPDAY=1
     test_catch_incompatible ANON_GIT_RANDOMTIME=1 ANON_GIT_RANDOMMONTH=1
-    # Mixed: one side via flag, the other via envvar.
-    test_catch_incompatible --keep-user ANON_GIT_NAME=Nobody
-    test_catch_incompatible ANON_GIT_KEEPUSER=1 --name 'Nobody'
+    test_flag_overrides_env_group
     test_catch_invalid_commit
     test_catch_uncommitted_changes
     test_combo_dry_run_entire_history
