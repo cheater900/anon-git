@@ -45,7 +45,10 @@ dry_run() {
     PAGER=$1 run ./anon-git.sh --dry-run HEAD
     assert_success
     assert_head_unchanged
+    assert_equal "$(branch_count)" 1
     assert_output --partial 'AuthorDate:'
+    assert_output --partial "-> ${DEFAULT_AUTHOR}"
+    assert_output --partial 'Add file file_20.txt'
 }
 
 @test "--dry-run with PAGER='cat' previews" {
@@ -57,36 +60,37 @@ dry_run() {
 }
 
 keep_partial() {
-    # $1: --keep-year | --keep-month | --keep-day
-    local flag=$1 target old_year old_month old_day
+    # $1: --keep-year | --keep-month | --keep-day, $2: strftime format of the
+    # kept fields, $3: what the finer fields become (zeroed, at +0000)
+    local target old
     pick_random_index
     target="HEAD~${PICKED_INDEX}"
-    old_year=$(commit_date "$target" '%Y')
-    old_month=$(commit_date "$target" '%m')
-    old_day=$(commit_date "$target" '%d')
-    run ./anon-git.sh --no-confirm --no-backup --current-branch "$flag" "$target"
+    old=$(commit_date "$target" "$2")
+    run ./anon-git.sh --no-confirm --no-backup --current-branch "$1" "$target"
     assert_success
-    assert_equal "$(commit_date "$target" '%Y')" "$old_year"
-    if [[ "$flag" == '--keep-year' ]]; then
-        return
-    fi
-    assert_equal "$(commit_date "$target" '%m')" "$old_month"
-    if [[ "$flag" == '--keep-month' ]]; then
-        return
-    fi
-    assert_equal "$(commit_date "$target" '%d')" "$old_day"
+    assert_equal "$(git show -s --date=iso --format='%ad' "$target")" "${old}$3"
+    assert_equal "$(git show -s --date=iso --format='%cd' "$target")" "${old}$3"
 }
 
-@test "--keep-year keeps year" {
-    keep_partial --keep-year
+@test "--keep-year keeps year, zeroes rest" {
+    keep_partial --keep-year '%Y' '-01-01 00:00:00 +0000'
 }
 
-@test "--keep-month keeps year, month" {
-    keep_partial --keep-month
+@test "--keep-month keeps year, month, zeroes rest" {
+    keep_partial --keep-month '%Y-%m' '-01 00:00:00 +0000'
 }
 
-@test "--keep-day keeps year, month, day" {
-    keep_partial --keep-day
+@test "--keep-day keeps year, month, day, zeroes rest" {
+    keep_partial --keep-day '%Y-%m-%d' ' 00:00:00 +0000'
+}
+
+@test "--keep-day uses local calendar date" {
+    # 01:00 +0200 is the previous day in UTC; the kept day is the local one.
+    GIT_AUTHOR_DATE='2020-03-01 01:00:00 +0200' GIT_COMMITTER_DATE='2020-03-01 01:00:00 +0200' \
+        git commit -q --allow-empty -m 'late night'
+    run ./anon-git.sh --no-confirm --no-backup --current-branch --keep-day HEAD
+    assert_success
+    assert_equal "$(git show -s --date=iso --format='%ad' HEAD)" '2020-03-01 00:00:00 +0000'
 }
 
 @test "creates new branch by default" {
@@ -97,6 +101,7 @@ keep_partial() {
     run ./anon-git.sh --no-confirm --name 'John von Neumann' HEAD
     assert_success
     assert_regex "$(anonymized_branch)" "^${original_branch}_anonymized_"
+    assert_equal "$(git show -s --format='%an' "$(anonymized_branch)")" 'John von Neumann'
     git switch -q "$original_branch"
     assert_head_unchanged
 }
@@ -106,6 +111,14 @@ keep_partial() {
     assert_success
     assert_not_equal "$(git rev-parse HEAD)" "$HEAD_BEFORE"
     assert_equal "$(branch_count)" 1
+    assert_output --partial 'without backup'
+}
+
+@test "--quiet keeps no-backup warning" {
+    run --separate-stderr ./anon-git.sh --no-confirm --no-backup --current-branch --quiet HEAD
+    assert_success
+    assert_output ''
+    assert_stderr --partial 'WARNING! Overwriting existing branch'
 }
 
 @test "--quiet silences informational output" {
@@ -139,22 +152,21 @@ keep_partial() {
     assert_equal "$(commit_date HEAD '%z')" '+0000'
 }
 
-@test "--strip-timezone --keep-date keeps date digits, forces +0000" {
+@test "--strip-timezone --keep-date relabels each offset +0000" {
     # Not the "used alone" case: --keep-date preserves digits, --strip-timezone
-    # still forces +0000. Author identity is NOT implied kept (only
-    # --keep-date given, not --keep-user), so it falls back to the default.
-    local old_date_no_tz
-    echo 'strip timezone with keep-date' >strip_tz_keepdate_file.txt
-    git add strip_tz_keepdate_file.txt
-    GIT_AUTHOR_DATE='1650000000 -0700' GIT_COMMITTER_DATE='1650000000 -0700' \
-        git commit -q -m 'Strip timezone with keep-date test'
-    assert_equal "$(commit_date HEAD '%z')" '-0700'
-    old_date_no_tz=$(commit_date HEAD '%Y-%m-%d %H:%M:%S')
+    # still forces +0000, per author/committer date (they can differ, e.g.
+    # after a rebase). Author identity is NOT implied kept (only --keep-date
+    # given, not --keep-user), so it falls back to the default.
+    local author_digits committer_digits
+    GIT_AUTHOR_DATE='1650000000 -0700' GIT_COMMITTER_DATE='1650000000 +0900' \
+        git commit -q --allow-empty -m 'Strip timezone with keep-date test'
+    author_digits=$(commit_date HEAD '%Y-%m-%d %H:%M:%S')
+    committer_digits=$(git show -s --date=format:'%Y-%m-%d %H:%M:%S' --format='%cd' HEAD)
     run ./anon-git.sh --no-confirm --no-backup --current-branch --strip-timezone --keep-date HEAD
     assert_success
     assert_equal "$(commit_author HEAD)" "$DEFAULT_AUTHOR"
-    assert_equal "$(commit_date HEAD '%Y-%m-%d %H:%M:%S')" "$old_date_no_tz"
-    assert_equal "$(commit_date HEAD '%z')" '+0000'
+    assert_equal "$(git show -s --date=iso --format='%ad' HEAD)" "${author_digits} +0000"
+    assert_equal "$(git show -s --date=iso --format='%cd' HEAD)" "${committer_digits} +0000"
 }
 
 @test "--strip-timezone --date keeps digits, forces +0000" {
