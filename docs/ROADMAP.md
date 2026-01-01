@@ -26,8 +26,6 @@ test).
 
 Steps, each porting matching bats tests to pytest:
 
-1. Skeleton, early options: `--help`, `--version`, `--_list-flags`,
-   `--print-completion`, help on no target. Port `help.bats`, `completion.bats`.
 2. Options resolution: flags > `git config anon-git.*` > `ANON_GIT_*` >
    defaults, group ownership, incompatibility checks, `--strip-timezone`
    alone, `--verbose` over quiet, bool validation. Pure functions. Port

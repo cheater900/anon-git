@@ -4,6 +4,7 @@ Derived from git history, newest first.
 
 ## 2026-11-02
 
+- feat: add anon-git.py skeleton with early options, completions
 - refactor: move shell implementation into anon-git.sh/
 - fix: keep --random-* dates inside commit's local calendar unit and same-second order
 - fix: draw random commit dates from OS entropy, not Mersenne Twister

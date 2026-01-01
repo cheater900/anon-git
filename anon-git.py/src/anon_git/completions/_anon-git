@@ -1,0 +1,50 @@
+#compdef anon-git
+#
+# Zsh completion for anon-git (Python implementation)
+#
+# Install (pick one):
+#   source <(anon-git --print-completion zsh)                        # current shell only
+#   anon-git --print-completion zsh > "${fpath[1]}/_anon-git"
+#
+# Registers via `compdef` at the end so a plain `source <(...)` works too,
+# not only fpath autoload. Flag descriptions are hand-maintained; run
+# `anon-git --_list-flags` after changing flags to check nothing was missed.
+
+(( $+functions[_arguments] )) || { autoload -Uz compinit; compinit }
+
+_anon_git_commits() {
+    local -a refs
+    refs=(${(f)"$(git for-each-ref --format='%(refname:short)' refs/heads refs/tags 2>/dev/null)"})
+    _describe 'commit-ish' refs
+}
+
+_anon_git() {
+    _arguments -s \
+        '(-h --help)'{-h,--help}'[Show help message and exit]' \
+        '(-v --version)'{-v,--version}'[Show version and exit]' \
+        '--date=[ISO date to use]:date:' \
+        '--name=[Full name to use for author & committer]:name:' \
+        '--email=[Email address to use for author & committer]:email:' \
+        '--keep-user[Do not change user name or author]' \
+        '--keep-date[Do not change date]' \
+        '--keep-year[Do not change commit year]' \
+        '--keep-month[Do not change commit month (and year)]' \
+        '--keep-day[Do not change commit day (and year and month)]' \
+        '--random-time[Keep year/month/day, randomize time (order-preserving)]' \
+        '--random-day[Keep year/month, randomize day and time (order-preserving)]' \
+        '--random-month[Keep year, randomize month/day/time (order-preserving)]' \
+        '--strip-timezone[Force timezone offset to UTC+0000 without changing date/time digits]' \
+        '--no-confirm[Do not prompt for confirmation]' \
+        '--no-backup[Do not create backup branch]' \
+        '--current-branch[Overwrite current branch instead of creating a copy]' \
+        '--entire-history[Rewrite entire history and not a single commit]' \
+        '--dry-run[Show history changes without rewriting it]' \
+        '--quiet[Suppress informational output (errors still print)]' \
+        '--verbose[Force informational output, overriding --quiet/ANON_GIT_QUIET/config]' \
+        '--print-completion=[Print a shell completion script and exit]:shell:(bash zsh fish)' \
+        '--install-hook[Install a post-commit hook that anonymizes each new commit]' \
+        '--uninstall-hook[Remove the post-commit hook installed by --install-hook]' \
+        '*:commit:_anon_git_commits'
+}
+
+compdef _anon_git anon-git

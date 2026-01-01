@@ -1,0 +1,23 @@
+default:
+    @just --list
+
+all:
+    just lint
+    just format
+    just test
+
+# Run the test suite
+test:
+    uv run pytest
+
+# Lint with ruff
+lint:
+    uv run ruff check
+
+# Format in place with ruff
+format:
+    uv run ruff format
+
+# Check formatting without writing (used by CI; `just format` to fix)
+format-check:
+    uv run ruff format --check
