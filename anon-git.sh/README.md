@@ -263,10 +263,12 @@ commit summary. The hook fires on *every* commit, so a per-commit backup branch
 (or message) would otherwise pile up forever; `git reflog`/`git reset` still
 recover the pre-hook state if something goes wrong. Re-running `--install-hook`
 safely refreshes a hook it created, but refuses to overwrite a pre-existing
-hook it didn't write (remove or back that one up first).
+hook it didn't write (remove or back that one up first), or a symlink.
 
 The hook goes wherever git runs hooks from: `core.hooksPath` if set (common
 with husky/pre-commit/lefthook), and the shared hooks dir from a linked worktree.
+A `core.hooksPath` set outside repo-local config is refused: that directory is
+shared, so the hook would rewrite every repo's commits.
 
 During a rebase, cherry-pick or revert the hook skips the rewrite, since
 rewriting `HEAD` mid-sequence would derail it; anonymize those commits
