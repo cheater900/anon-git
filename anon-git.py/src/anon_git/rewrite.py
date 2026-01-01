@@ -8,7 +8,13 @@ import tempfile
 import git_filter_repo as fr
 
 from anon_git.preview import preview_entry
-from anon_git.utils.dates import as_utc_epoch, parse_git_date, parse_target_date, utc_git_date
+from anon_git.utils.dates import (
+    as_utc_epoch,
+    git_date,
+    parse_git_date,
+    parse_target_date,
+    utc_git_date,
+)
 from anon_git.utils.git import git
 
 
@@ -40,10 +46,7 @@ def target_date_bytes(opts, commit, random_dates):
     dt = parse_target_date(opts.date)
     if opts.striptimezone:
         return utc_git_date(as_utc_epoch(dt))
-    offset_seconds = int(dt.utcoffset().total_seconds())
-    sign = "+" if offset_seconds >= 0 else "-"
-    hours, minutes = divmod(abs(offset_seconds) // 60, 60)
-    return b"%d %s%02d%02d" % (int(dt.timestamp()), sign.encode(), hours, minutes)
+    return git_date(dt)
 
 
 # Returns the filter-repo commit callback. Under --dry-run it appends a

@@ -3,6 +3,8 @@
 import re
 from datetime import datetime, timezone
 
+from anon_git.constants import MINUTES_PER_HOUR, SECONDS_PER_HOUR, SECONDS_PER_MINUTE
+
 
 def parse_target_date(date_str):
     # Also accepts ISO 8601 compact form (e.g. '2025-06-15T14:20:00Z'),
@@ -34,7 +36,8 @@ def split_git_date(date_bytes):
 def parse_git_date(date_bytes):
     epoch, sign, hours, minutes, seconds = split_git_date(date_bytes)
     return datetime.fromtimestamp(
-        epoch + sign * (hours * 3600 + minutes * 60 + seconds), tz=timezone.utc
+        epoch + sign * (hours * SECONDS_PER_HOUR + minutes * SECONDS_PER_MINUTE + seconds),
+        tz=timezone.utc,
     )
 
 
@@ -50,6 +53,14 @@ def local_datetime(epoch, offset):
 
 def utc_git_date(epoch):
     return b"%d +0000" % epoch
+
+
+# Aware datetime -> raw git date in its own offset, e.g. b"1700000000 +0530".
+def git_date(dt):
+    offset_seconds = int(dt.utcoffset().total_seconds())
+    sign = "+" if offset_seconds >= 0 else "-"
+    hours, minutes = divmod(abs(offset_seconds) // SECONDS_PER_MINUTE, MINUTES_PER_HOUR)
+    return b"%d %s%02d%02d" % (int(dt.timestamp()), sign.encode(), hours, minutes)
 
 
 # ISO 8601 with the original offset, built by hand so a bogus offset shows
