@@ -684,6 +684,190 @@ test_flag_install_idempotent() {
     record_result "$errors" 'flag --install is idempotent when re-run from the installed copy'
 }
 
+new_hook_test_repo() {
+    # Creates an isolated git repo (separate from the shared $TMP_DIR repo
+    # used by the rest of the suite, so hook side effects can't leak into
+    # other tests) with one commit and a copy of the script inside it.
+    # Prints the repo's absolute path.
+    local repo_dir
+
+    repo_dir=$(mktemp -d "${TMP_DIR}/hook_repo.XXXXXX")
+    (
+        cd "$repo_dir" || exit 1
+        git init >/dev/null
+        git config --local user.name "Jordan Blake"
+        git config --local user.email "jordan.blake@example.com"
+        cp "$SCRIPT" .
+        chmod +x "./${SCRIPT_NAME}"
+        echo "This is file 1" >file_1.txt
+        git add file_1.txt >/dev/null
+        git commit -m "Add file_1.txt" >/dev/null
+    )
+
+    printf '%s\n' "$repo_dir"
+}
+
+test_flag_install_hook_creates_hook() {
+    local repo_dir hook_file output exit_status errors=0
+
+    repo_dir=$(new_hook_test_repo)
+    hook_file="${repo_dir}/.git/hooks/post-commit"
+
+    output=$(cd "$repo_dir" && "./${SCRIPT_NAME}" --install-hook 2>&1)
+    exit_status=$?
+
+    if [[ "$exit_status" -ne 0 ]]; then
+        printf 'Error: --install-hook exited with status %s\n' "$exit_status"
+        errors=$((errors + 1))
+    fi
+    if [[ ! -x "$hook_file" ]]; then
+        printf 'Error: %s was not created or is not executable\n' "$hook_file"
+        errors=$((errors + 1))
+    fi
+    if ! grep -q 'Installed by anon-git' "$hook_file"; then
+        printf 'Error: hook file does not contain the anon-git marker\n'
+        errors=$((errors + 1))
+    fi
+    if ! grep -qF "${repo_dir}/${SCRIPT_NAME}" "$hook_file"; then
+        printf 'Error: hook file does not invoke the script by its absolute path\n'
+        errors=$((errors + 1))
+    fi
+    if ! grep -qi 'installed post-commit hook' <<<"$output"; then
+        printf 'Error: expected confirmation message not found in output\n'
+        errors=$((errors + 1))
+    fi
+
+    rm -rf "$repo_dir"
+
+    record_result "$errors" 'flag --install-hook creates a post-commit hook'
+}
+
+test_flag_install_hook_requires_git_repo() {
+    # Must live outside $TMP_DIR (which is itself a git repo, see init_repo):
+    # `git rev-parse --git-dir` walks up parent directories, so a dir nested
+    # inside $TMP_DIR would be treated as being inside that repo and
+    # --install-hook would (wrongly) succeed there, polluting the shared
+    # suite repo's hooks in the process.
+    local no_repo_dir output exit_status errors=0
+
+    no_repo_dir=$(mktemp -d /tmp/anon_git_test_hook_norepo.XXXXXX)
+    cp "$SCRIPT" "$no_repo_dir/"
+    chmod +x "${no_repo_dir}/${SCRIPT_NAME}"
+
+    output=$(cd "$no_repo_dir" && "./${SCRIPT_NAME}" --install-hook 2>&1)
+    exit_status=$?
+
+    if [[ "$exit_status" -eq 0 ]]; then
+        printf 'Error: --install-hook outside a git repository did not fail\n'
+        errors=$((errors + 1))
+    fi
+    if ! grep -qi 'git repository' <<<"$output"; then
+        printf 'Error: expected "git repository" message not found\n'
+        errors=$((errors + 1))
+    fi
+
+    rm -rf "$no_repo_dir"
+
+    record_result "$errors" 'flag --install-hook requires a git repository'
+}
+
+test_flag_install_hook_preserves_foreign_hook() {
+    local repo_dir hook_file original output exit_status errors=0
+
+    repo_dir=$(new_hook_test_repo)
+    hook_file="${repo_dir}/.git/hooks/post-commit"
+    printf '#!/bin/sh\necho foreign\n' >"$hook_file"
+    chmod +x "$hook_file"
+    original=$(cat "$hook_file")
+
+    output=$(cd "$repo_dir" && "./${SCRIPT_NAME}" --install-hook 2>&1)
+    exit_status=$?
+
+    if [[ "$exit_status" -eq 0 ]]; then
+        printf 'Error: --install-hook did not fail over a pre-existing foreign hook\n'
+        errors=$((errors + 1))
+    fi
+    if [[ "$(cat "$hook_file")" != "$original" ]]; then
+        printf 'Error: pre-existing foreign hook was overwritten\n'
+        errors=$((errors + 1))
+    fi
+    if ! grep -qi 'already exists' <<<"$output"; then
+        printf 'Error: expected an "already exists" message not found\n'
+        errors=$((errors + 1))
+    fi
+
+    rm -rf "$repo_dir"
+
+    record_result "$errors" 'flag --install-hook does not overwrite a pre-existing foreign hook'
+}
+
+test_flag_install_hook_idempotent() {
+    local repo_dir hook_file first_exit second_exit errors=0
+
+    repo_dir=$(new_hook_test_repo)
+    hook_file="${repo_dir}/.git/hooks/post-commit"
+
+    (cd "$repo_dir" && "./${SCRIPT_NAME}" --install-hook >/dev/null 2>&1)
+    first_exit=$?
+    (cd "$repo_dir" && "./${SCRIPT_NAME}" --install-hook >/dev/null 2>&1)
+    second_exit=$?
+
+    if [[ "$first_exit" -ne 0 ]]; then
+        printf 'Error: initial --install-hook exited with status %s\n' "$first_exit"
+        errors=$((errors + 1))
+    fi
+    if [[ "$second_exit" -ne 0 ]]; then
+        printf 'Error: re-running --install-hook over its own hook exited with status %s\n' "$second_exit"
+        errors=$((errors + 1))
+    fi
+    if [[ ! -x "$hook_file" ]]; then
+        printf 'Error: %s missing after re-install\n' "$hook_file"
+        errors=$((errors + 1))
+    fi
+
+    rm -rf "$repo_dir"
+
+    record_result "$errors" 'flag --install-hook is idempotent when re-run over its own hook'
+}
+
+test_flag_install_hook_anonymizes_next_commit() {
+    # The hook must fire after `git commit` and rewrite only the just-made
+    # commit (HEAD); earlier history must be left untouched.
+    local repo_dir prior_hash prior_commit new_commit errors=0
+
+    repo_dir=$(new_hook_test_repo)
+    prior_hash=$(cd "$repo_dir" && git rev-parse HEAD)
+    prior_commit=$(cd "$repo_dir" && git show --pretty=fuller --no-patch --date=iso "$prior_hash")
+
+    (cd "$repo_dir" && "./${SCRIPT_NAME}" --install-hook >/dev/null 2>&1)
+
+    (
+        cd "$repo_dir" || exit 1
+        echo "This is file 2" >file_2.txt
+        git add file_2.txt >/dev/null
+        git commit -m "Add file_2.txt" >/dev/null 2>&1
+    )
+
+    new_commit=$(cd "$repo_dir" && git show --pretty=fuller --no-patch --date=iso HEAD)
+
+    if ! grep -q "^Author:\s\+${DEFAULT_NAME} <${DEFAULT_EMAIL}>" <<<"$new_commit"; then
+        printf 'Error: new commit author was not anonymized by the hook\n'
+        errors=$((errors + 1))
+    fi
+    if ! grep -q "^AuthorDate:\s\+${DEFAULT_DATE}" <<<"$new_commit"; then
+        printf 'Error: new commit date was not anonymized by the hook\n'
+        errors=$((errors + 1))
+    fi
+    if [[ "$(cd "$repo_dir" && git show --pretty=fuller --no-patch --date=iso "$prior_hash" 2>/dev/null)" != "$prior_commit" ]]; then
+        printf 'Error: the hook modified the earlier commit, which should have been left untouched\n'
+        errors=$((errors + 1))
+    fi
+
+    rm -rf "$repo_dir"
+
+    record_result "$errors" 'flag --install-hook anonymizes only the just-made commit'
+}
+
 test_show_help() {
     local output exit_status errors=0
 
@@ -1222,6 +1406,11 @@ main() {
     test_flag_install_path_already_set
     test_flag_install_no_target_dir
     test_flag_install_idempotent
+    test_flag_install_hook_creates_hook
+    test_flag_install_hook_requires_git_repo
+    test_flag_install_hook_preserves_foreign_hook
+    test_flag_install_hook_idempotent
+    test_flag_install_hook_anonymizes_next_commit
     test_show_help
     test_show_help_inside_dirty_repo
     test_flag_keep_partial --keep-year

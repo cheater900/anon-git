@@ -47,6 +47,7 @@ _anon_git() {
         '--print-completion=[Print a shell completion script and exit]:shell:(bash zsh fish)' \
         '--install[Copy this script to ~/.local/bin and/or ~/.bin, whichever exist]' \
         '--install-system[Copy this script system-wide to /usr/bin via sudo]' \
+        '--install-hook[Install a post-commit hook that anonymizes each new commit]' \
         '*:commit:_anon_git_commits'
 }
 

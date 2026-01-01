@@ -39,6 +39,8 @@ Options:
   --install                        Copy this script to ~/.local/bin and/or ~/.bin
                                    (whichever exist) and warn if neither is on \$PATH
   --install-system                 Copy this script system-wide to /usr/bin (via sudo)
+  --install-hook                   Install a post-commit hook in the current git repository
+                                   that anonymizes each new commit (HEAD only) automatically
 
 Arguments:
   commit(s)               Commit(s) to anonymize (can be: hash, HEAD~3, branch, tag, ...)
@@ -93,6 +95,10 @@ Examples:
 
     # Install this script system-wide to /usr/bin (requires sudo)
     ./anon-git.sh --install-system
+
+    # Install a post-commit hook so every new commit in this repo is
+    # auto-anonymized (HEAD only, right after \`git commit\`)
+    ./anon-git.sh --install-hook
 EOF
     exit 0
 }
@@ -120,6 +126,7 @@ list_flags() {
 --print-completion=
 --install
 --install-system
+--install-hook
 EOF
     exit 0
 }
@@ -243,6 +250,49 @@ install_system() {
     exit 0
 }
 
+# Internal: marker embedded in the generated post-commit hook so install_hook
+# can recognize (and safely refresh) a hook it created, without clobbering a
+# hook the user wrote themselves.
+HOOK_MARKER='# Installed by anon-git --install-hook'
+
+# --install-hook: installs a post-commit hook in the current repository's
+# .git/hooks/ that re-anonymizes HEAD (the commit that was just made) after
+# every `git commit`, using --current-branch so it rewrites in place instead
+# of creating a new branch on every commit.
+install_hook() {
+    local git_dir hooks_dir hook_file src
+
+    if ! git_dir=$(git rev-parse --git-dir 2>/dev/null); then
+        printf 'Error: --install-hook must be run inside a git repository.\n' >&2
+        exit 1
+    fi
+    git_dir=$(cd -- "$git_dir" && pwd)
+    hooks_dir="${git_dir}/hooks"
+    hook_file="${hooks_dir}/post-commit"
+
+    if [[ -f "$hook_file" ]] && ! grep -qF "$HOOK_MARKER" "$hook_file"; then
+        printf 'Error: %s already exists and was not installed by anon-git.\n' "$hook_file" >&2
+        printf '  Remove or back it up first, then re-run --install-hook.\n' >&2
+        exit 1
+    fi
+
+    src=$(script_path)
+    mkdir -p "$hooks_dir"
+    cat >"$hook_file" <<EOF
+#!/usr/bin/env bash
+$HOOK_MARKER
+#
+# Anonymizes the just-created commit (HEAD) after every \`git commit\`.
+# Regenerate with: $src --install-hook
+
+set -e
+"$src" --no-confirm --current-branch HEAD
+EOF
+    chmod +x "$hook_file"
+    printf 'Installed post-commit hook: %s\n' "$hook_file"
+    exit 0
+}
+
 [[ $# -eq 0 ]] && show_help
 
 args=("$@")
@@ -253,6 +303,7 @@ for ((i = 0; i < ${#args[@]}; i++)); do
     --print-completion) print_completion "${args[i + 1]:-}" ;;
     --install) install_user ;;
     --install-system) install_system ;;
+    --install-hook) install_hook ;;
     esac
 done
 

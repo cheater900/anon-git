@@ -121,6 +121,8 @@ required — pass `HEAD` explicitly to anonymize the last commit.
   --install                        Copy this script to ~/.local/bin and/or ~/.bin
                                    (whichever exist) and warn if neither is on $PATH
   --install-system                 Copy this script system-wide to /usr/bin (via sudo)
+  --install-hook                   Install a post-commit hook in the current git repository
+                                   that anonymizes each new commit (HEAD only) automatically
 ```
 
 **Priority order** (highest to lowest):
@@ -202,6 +204,14 @@ Instead of running `./anon-git.sh` from a local checkout, you can copy it onto y
 > re-run it. `--install-system` requires `sudo` and is not covered by the test
 > suite (it isn't run as root, and isn't mocked either), so verify it manually.
 
+To automatically anonymize every new commit in the *current* repository, install a post-commit hook instead:
+
+```bash
+./anon-git.sh --install-hook
+```
+
+This writes `.git/hooks/post-commit`, which anonymizes only the commit you just made (`HEAD`), using `--current-branch` so it rewrites in place rather than creating a new branch after every commit. Re-running `--install-hook` safely refreshes a hook it created, but refuses to overwrite a pre-existing hook it didn't write (remove or back that one up first). See [Using anon-git as a post-commit hook](#using-anon-git-as-a-post-commit-hook) below to customize the flags it runs with instead.
+
 ### Shell completion
 
 Tab-completion scripts for bash, zsh, and fish are hand-written and live in `completions/` (they don't need `git filter-repo`, only `anon-git.sh` itself and, for completing commit refs, `git`). The flag list they offer comes from the script's own `--_list-flags` (bash) or is kept in sync with it (zsh/fish; checked by the test suite), so there's one source of truth even though each shell's completion format is hand-maintained separately.
@@ -218,7 +228,9 @@ Print any of them with `--print-completion [bash|zsh|fish]` (the shell is inferr
 source <(./anon-git.sh --print-completion)
 ```
 
-### Using anonymize-git-commit as a post-commit hook
+### Using anon-git as a post-commit hook
+
+`./anon-git.sh --install-hook` (see above) covers this in one step. The manual setup below is only needed if you want to customize the flags/environment variables the hook runs with, or understand what `--install-hook` generates.
 
 You can automatically anonymize **every new commit right after** you run `git commit` by installing the script as a **post-commit** hook. This rewrites only the just-created commit (HEAD) without affecting earlier history.
 
@@ -301,4 +313,4 @@ Spins up a disposable git repository in `/tmp`, runs the script against it throu
 
 `tests/test-manually.sh` instead just creates a disposable repo with sample commits and drops you into it, for manual/interactive poking at the script.
 
-`--install` is covered (with `$HOME` pointed at a disposable directory, so it never touches your real `~/.local/bin` or `~/.bin`). `--install-system` is not: it needs `sudo` and a real `/usr/bin`, and the suite intentionally doesn't run as root or mock it — verify it manually.
+`--install` and `--install-hook` are covered (`--install` with `$HOME` pointed at a disposable directory, so it never touches your real `~/.local/bin` or `~/.bin`; `--install-hook` against disposable repos separate from the suite's own, so an installed hook can't fire during later tests). `--install-system` is not: it needs `sudo` and a real `/usr/bin`, and the suite intentionally doesn't run as root or mock it — verify it manually.
