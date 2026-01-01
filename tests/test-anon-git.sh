@@ -101,6 +101,7 @@ test_script() {
   cmd="./${SCRIPT_NAME} ${args[*]} HEAD~${random_index}"
   printf 'Running %s\n' "$cmd"
   ./${SCRIPT_NAME} "${args[@]}" "HEAD~${random_index}" >/dev/null 2>&1
+  script_exit=$?
 
   # store new logs (except modified commit)
   new_commit_hash=$(git rev-parse "HEAD~${random_index}")
@@ -121,6 +122,12 @@ test_script() {
 
   # check for erros
   errors=0
+
+  # exit status check
+  if [[ "$script_exit" -ne 0 ]]; then
+    printf 'Error: script exited with status %s\n' "$script_exit"
+    errors=$(( errors + 1 ))
+  fi
 
   # author & commiter check
   if [[ "$keep_user" != '1' && "$author_matches" -ne 1 ]]; then
@@ -170,6 +177,212 @@ test_script() {
   git switch "$original_branch"
 }
 
+record_result() {
+  # @param $1  number of errors found by the caller
+  # @param $2  short label describing the test, for the summary line
+  local errors="$1" label="$2"
+  CURRENT_TEST_INDEX=$(( CURRENT_TEST_INDEX + 1 ))
+  if [[ "$errors" -eq 0 ]]; then
+    TESTS_PASSED=$(( TESTS_PASSED + 1 ))
+    printf 'Test %s (%s) passed.\n\n' "$CURRENT_TEST_INDEX" "$label"
+  else
+    TESTS_FAILED=$(( TESTS_FAILED + 1 ))
+    printf 'Test %s (%s) failed with %s errors.\n\n' "$CURRENT_TEST_INDEX" "$label" "$errors"
+  fi
+  TOTAL_ERRORS=$(( TOTAL_ERRORS + errors ))
+}
+
+# ──────────────────────────────────────────────────────────────────────
+# INTEGRATION TESTS
+
+test_multiple_commits() {
+  local h1 h2 exit_status a1 a2 errors=0
+
+  h1=$(git rev-parse HEAD~1)
+  h2=$(git rev-parse HEAD~3)
+
+  ./${SCRIPT_NAME} --no-confirm --no-backup --current-branch --name 'Multi Test' --email 'multi@example.com' "$h1" "$h2" >/dev/null 2>&1
+  exit_status=$?
+
+  a1=$(git show -s --format='%an <%ae>' HEAD~1)
+  a2=$(git show -s --format='%an <%ae>' HEAD~3)
+
+  [[ "$exit_status" -eq 0 ]] || { printf 'Error: multi-commit run exited with status %s\n' "$exit_status"; errors=$(( errors + 1 )); }
+  [[ "$a1" == 'Multi Test <multi@example.com>' ]] || { printf 'Error: first target commit not anonymized\n'; errors=$(( errors + 1 )); }
+  [[ "$a2" == 'Multi Test <multi@example.com>' ]] || { printf 'Error: second target commit not anonymized\n'; errors=$(( errors + 1 )); }
+
+  record_result "$errors" 'multiple commits in one run'
+}
+
+test_entire_history() {
+  local exit_status mismatches errors=0
+
+  ./${SCRIPT_NAME} --no-confirm --no-backup --current-branch --entire-history >/dev/null 2>&1
+  exit_status=$?
+
+  mismatches=$(git log --format='%an <%ae>' | grep --invert-match --count "^${DEFAULT_NAME} <${DEFAULT_EMAIL}>\$")
+
+  [[ "$exit_status" -eq 0 ]] || { printf 'Error: --entire-history exited with status %s\n' "$exit_status"; errors=$(( errors + 1 )); }
+  [[ "$mismatches" -eq 0 ]] || { printf 'Error: --entire-history left %s commit(s) with a non-default author\n' "$mismatches"; errors=$(( errors + 1 )); }
+
+  record_result "$errors" '--entire-history'
+}
+
+# ──────────────────────────────────────────────────────────────────────
+# UNIT TESTS (alphabetical order)
+
+test_catch_incompatible_flags() {
+  local before after exit_status errors=0
+
+  before=$(git rev-parse HEAD)
+  ./${SCRIPT_NAME} --no-confirm --no-backup --date '2020-01-01 00:00:00 +0000' --keep-date >/dev/null 2>&1
+  exit_status=$?
+  after=$(git rev-parse HEAD)
+
+  [[ "$exit_status" -ne 0 ]] || { printf 'Error: --date and --keep-date together did not fail\n'; errors=$(( errors + 1 )); }
+  [[ "$before" == "$after" ]] || { printf 'Error: repository was modified despite incompatible flags\n'; errors=$(( errors + 1 )); }
+
+  record_result "$errors" 'incompatible flags rejected'
+}
+
+test_catch_invalid_commit() {
+  local before after output exit_status errors=0
+
+  before=$(git rev-parse HEAD)
+  output=$(./${SCRIPT_NAME} --no-confirm --no-backup deadbeefdeadbeefdeadbeefdeadbeefdeadbeef 2>&1)
+  exit_status=$?
+  after=$(git rev-parse HEAD)
+
+  [[ "$exit_status" -ne 0 ]] || { printf 'Error: invalid commit ref did not cause failure\n'; errors=$(( errors + 1 )); }
+  [[ "$before" == "$after" ]] || { printf 'Error: repository was modified despite invalid commit ref\n'; errors=$(( errors + 1 )); }
+  grep -qi 'does not exist' <<<"$output" || { printf 'Error: expected "does not exist" message not found\n'; errors=$(( errors + 1 )); }
+
+  record_result "$errors" 'invalid commit ref'
+}
+
+test_catch_uncommitted_changes() {
+  local before after exit_status errors=0
+
+  echo 'dirty' >>file_1.txt
+  before=$(git rev-parse HEAD)
+  ./${SCRIPT_NAME} --no-confirm --no-backup >/dev/null 2>&1
+  exit_status=$?
+  after=$(git rev-parse HEAD)
+  git checkout -- file_1.txt
+
+  [[ "$exit_status" -ne 0 ]] || { printf 'Error: script proceeded despite uncommitted changes\n'; errors=$(( errors + 1 )); }
+  [[ "$before" == "$after" ]] || { printf 'Error: HEAD changed despite uncommitted-changes guard\n'; errors=$(( errors + 1 )); }
+
+  record_result "$errors" 'uncommitted changes guard'
+}
+
+test_flag_current_branch_backup() {
+  local before_head after_head exit_status backup_branch errors=0
+
+  before_head=$(git rev-parse HEAD)
+
+  ./${SCRIPT_NAME} --no-confirm --current-branch --name 'Backup Test' HEAD >/dev/null 2>&1
+  exit_status=$?
+  after_head=$(git rev-parse HEAD)
+
+  [[ "$exit_status" -eq 0 ]] || { printf 'Error: --current-branch run exited with status %s\n' "$exit_status"; errors=$(( errors + 1 )); }
+  [[ "$after_head" != "$before_head" ]] || { printf 'Error: current branch HEAD did not change\n'; errors=$(( errors + 1 )); }
+
+  backup_branch=$(git branch --format='%(refname:short)' | grep '_backup_' | tail -1)
+  if [[ -z "$backup_branch" ]]; then
+    printf 'Error: no backup branch was created\n'
+    errors=$(( errors + 1 ))
+  elif [[ "$(git rev-parse "$backup_branch")" != "$before_head" ]]; then
+    printf 'Error: backup branch does not point at pre-rewrite HEAD\n'
+    errors=$(( errors + 1 ))
+  fi
+
+  record_result "$errors" '--current-branch creates backup'
+}
+
+test_flag_dry_run() {
+  local before after output exit_status errors=0
+
+  before=$(git rev-parse HEAD)
+  output=$(PAGER=cat ./${SCRIPT_NAME} --dry-run 2>&1)
+  exit_status=$?
+  after=$(git rev-parse HEAD)
+
+  [[ "$exit_status" -eq 0 ]] || { printf 'Error: --dry-run exited with status %s\n' "$exit_status"; errors=$(( errors + 1 )); }
+  [[ "$before" == "$after" ]] || { printf 'Error: --dry-run modified HEAD\n'; errors=$(( errors + 1 )); }
+  grep -q 'AuthorDate:' <<<"$output" || { printf 'Error: --dry-run output missing expected preview content\n'; errors=$(( errors + 1 )); }
+
+  record_result "$errors" 'dry-run'
+}
+
+test_flag_help() {
+  local output exit_status errors=0
+
+  output=$(./${SCRIPT_NAME} --help 2>&1)
+  exit_status=$?
+
+  [[ "$exit_status" -eq 0 ]] || { printf 'Error: --help exited with status %s\n' "$exit_status"; errors=$(( errors + 1 )); }
+  grep -q 'Usage:' <<<"$output" || { printf 'Error: --help output missing usage text\n'; errors=$(( errors + 1 )); }
+
+  record_result "$errors" '--help'
+}
+
+test_flag_keep_partial() {
+  # @param $1  flag under test: --keep-year | --keep-month | --keep-day
+  local flag="$1" random_index commit_hash old_year old_month old_day
+  local new_commit_hash new_year new_month new_day exit_status errors=0
+
+  random_index=$(( $(od -An -N2 -tu2 </dev/urandom) % (COMMIT_COUNT - 1) ))
+  commit_hash=$(git rev-parse "HEAD~${random_index}")
+  old_year=$(git show -s --date=format:'%Y' --format='%ad' "$commit_hash")
+  old_month=$(git show -s --date=format:'%m' --format='%ad' "$commit_hash")
+  old_day=$(git show -s --date=format:'%d' --format='%ad' "$commit_hash")
+
+  ./${SCRIPT_NAME} --no-confirm --no-backup --current-branch "$flag" "HEAD~${random_index}" >/dev/null 2>&1
+  exit_status=$?
+
+  new_commit_hash=$(git rev-parse "HEAD~${random_index}")
+  new_year=$(git show -s --date=format:'%Y' --format='%ad' "$new_commit_hash")
+  new_month=$(git show -s --date=format:'%m' --format='%ad' "$new_commit_hash")
+  new_day=$(git show -s --date=format:'%d' --format='%ad' "$new_commit_hash")
+
+  [[ "$exit_status" -eq 0 ]] || { printf 'Error: %s exited with status %s\n' "$flag" "$exit_status"; errors=$(( errors + 1 )); }
+  [[ "$new_year" == "$old_year" ]] || { printf 'Error: %s did not preserve year\n' "$flag"; errors=$(( errors + 1 )); }
+  if [[ "$flag" == '--keep-month' || "$flag" == '--keep-day' ]]; then
+    [[ "$new_month" == "$old_month" ]] || { printf 'Error: %s did not preserve month\n' "$flag"; errors=$(( errors + 1 )); }
+  fi
+  if [[ "$flag" == '--keep-day' ]]; then
+    [[ "$new_day" == "$old_day" ]] || { printf 'Error: %s did not preserve day\n' "$flag"; errors=$(( errors + 1 )); }
+  fi
+
+  record_result "$errors" "$flag"
+}
+
+test_flag_new_branch() {
+  # Exercises the default (no --current-branch) code path: a fresh
+  # "<branch>_anonymized_<timestamp>" branch must be created and the
+  # original branch/HEAD must be left untouched.
+  local original_branch before_head exit_status new_branch_name errors=0
+
+  original_branch=$(git branch --show-current)
+  before_head=$(git rev-parse HEAD)
+
+  ./${SCRIPT_NAME} --no-confirm --name 'New Branch Test' HEAD >/dev/null 2>&1
+  exit_status=$?
+
+  [[ "$exit_status" -eq 0 ]] || { printf 'Error: default run exited with status %s\n' "$exit_status"; errors=$(( errors + 1 )); }
+
+  new_branch_name=$(git branch --format='%(refname:short)' | grep "^${original_branch}_anonymized_" | tail -1)
+  [[ -n "$new_branch_name" ]] || { printf 'Error: expected a new "%s_anonymized_*" branch to be created\n' "$original_branch"; errors=$(( errors + 1 )); }
+
+  git switch "$original_branch" >/dev/null 2>&1
+  [[ "$(git rev-parse HEAD)" == "$before_head" ]] || { printf 'Error: original branch was modified by the default (new-branch) run\n'; errors=$(( errors + 1 )); }
+
+  [[ -n "$new_branch_name" ]] && git branch -D "$new_branch_name" >/dev/null 2>&1
+
+  record_result "$errors" 'default run creates new branch'
+}
+
 cleanup() {
   cd - >/dev/null || exit 0
   rm -rf "$TMP_DIR"
@@ -190,6 +403,18 @@ main() {
   test_script --keep-date --name 'Test 9' --email 'test9@example.com'
   test_script --keep-user
   test_script --keep-user --date '2020-01-01 00:10:10 +0000'
+  test_multiple_commits
+  test_entire_history
+  test_catch_incompatible_flags
+  test_catch_invalid_commit
+  test_catch_uncommitted_changes
+  test_flag_current_branch_backup
+  test_flag_dry_run
+  test_flag_help
+  test_flag_keep_partial --keep-year
+  test_flag_keep_partial --keep-month
+  test_flag_keep_partial --keep-day
+  test_flag_new_branch
   printf 'Summary:\n%s tests passed\n%s tests failed\n%s total errors\n' "$TESTS_PASSED" "$TESTS_FAILED" "$TOTAL_ERRORS"
   cleanup
 }
