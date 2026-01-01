@@ -300,3 +300,26 @@ def test_help_matches_shell_minus_install_flags():
     )
     assert shell_flags - set(anon_git.FLAGS_DROPPED) == set(anon_git.FLAGS)
     assert "Usage:" in shell
+
+
+def test_filter_repo_bare_exit_code_not_printed(repo, monkeypatch, capfd):
+    def exit_with_code(*_args, **_kwargs):
+        raise SystemExit(3)
+
+    monkeypatch.setattr(anon_git.fr.RepoFilter, "run", exit_with_code)
+    with pytest.raises(SystemExit) as exc:
+        anon_git.run([*REWRITE, "HEAD"])
+    assert exc.value.code == 1
+    stderr = capfd.readouterr().err
+    assert stderr.rstrip().endswith("Error: git filter-repo failed:")
+
+
+def test_ctrl_c_reports_interrupt_not_traceback(repo, monkeypatch, capsys):
+    def interrupt(_opts):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(anon_git, "confirm", interrupt)
+    with pytest.raises(SystemExit) as exc:
+        anon_git.main(["HEAD"])
+    assert exc.value.code == 1
+    assert "Interrupted" in capsys.readouterr().err

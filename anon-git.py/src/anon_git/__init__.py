@@ -1125,7 +1125,10 @@ def run_filter_repo(opts, callback):
         log.seek(0)
         print("Error: git filter-repo failed:", file=sys.stderr)
         sys.stderr.write(log.read().decode(errors="replace"))
-        fail(str(error.code))
+        # filter-repo exits with either a message or a bare status code.
+        if isinstance(error.code, str):
+            print(error.code, file=sys.stderr)
+        sys.exit(1)
 
 
 def print_result(opts, preview):
@@ -1174,3 +1177,7 @@ def main(argv=None):
         run(sys.argv[1:] if argv is None else argv)
     except subprocess.CalledProcessError as exc:
         fail(f"Error: {shlex.join(exc.cmd)} failed: {(exc.stderr or '').strip()}")
+    except KeyboardInterrupt:
+        # Ctrl-C mid-run: a backup/new branch may already exist; say so
+        # instead of dumping a traceback.
+        fail("\nInterrupted. Check `git branch` and `git reflog` before re-running.")
