@@ -425,6 +425,13 @@ hook_file_path() {
     printf '%s/post-commit\n' "$hooks_dir"
 }
 
+# Internal: true if $1 is a regular file carrying HOOK_MARKER. A symlink is
+# never ours: writing through it would overwrite its target (e.g. a copy of
+# this script, which contains the marker text).
+hook_is_ours() {
+    [[ ! -L "$1" && -f "$1" ]] && grep -qF "$HOOK_MARKER" "$1"
+}
+
 # --install-hook: installs a post-commit hook that re-anonymizes HEAD in
 # place after every commit, with --no-backup (would accumulate one branch
 # per commit) and --quiet.
@@ -437,7 +444,7 @@ install_hook() {
     fi
     hook_file=$(hook_file_path)
 
-    if [[ -f "$hook_file" ]] && ! grep -qF "$HOOK_MARKER" "$hook_file"; then
+    if [[ -e "$hook_file" || -L "$hook_file" ]] && ! hook_is_ours "$hook_file"; then
         printf 'Error: %s already exists and was not installed by anon-git.\n' "$hook_file" >&2
         printf '  Remove or back it up first, then re-run --install-hook.\n' >&2
         exit 1
@@ -594,12 +601,12 @@ uninstall_hook() {
     fi
     hook_file=$(hook_file_path)
 
-    if [[ ! -f "$hook_file" ]]; then
+    if [[ ! -e "$hook_file" && ! -L "$hook_file" ]]; then
         printf 'No post-commit hook installed at %s\n' "$hook_file"
         exit 0
     fi
 
-    if ! grep -qF "$HOOK_MARKER" "$hook_file"; then
+    if ! hook_is_ours "$hook_file"; then
         printf 'Error: %s was not installed by anon-git; refusing to remove it.\n' "$hook_file" >&2
         printf '  Remove it yourself if you are sure.\n' >&2
         exit 1

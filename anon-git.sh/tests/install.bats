@@ -171,6 +171,35 @@ run_installer() {
     assert_output --partial 'already exists'
 }
 
+hook_flag_refuses_symlink() {
+    # $1: --install-hook | --uninstall-hook. The link target carries the
+    # marker (like a copy of anon-git.sh does); it must still be left alone.
+    local target=${BATS_TEST_TMPDIR}/shared-hook
+    local content=$'#!/bin/sh\n# Installed by anon-git --install-hook'
+    printf '%s\n' "$content" >"$target"
+    ln -s "$target" "$HOOK_FILE"
+    run ./anon-git.sh "$1"
+    assert_failure
+    assert_equal "$(cat "$target")" "$content"
+    assert_link_exists "$HOOK_FILE"
+}
+
+@test "--install-hook refuses symlinked hook" {
+    hook_flag_refuses_symlink --install-hook
+}
+
+@test "--uninstall-hook refuses symlinked hook" {
+    hook_flag_refuses_symlink --uninstall-hook
+}
+
+@test "--install-hook refuses dangling symlink" {
+    local target=${BATS_TEST_TMPDIR}/missing
+    ln -s "$target" "$HOOK_FILE"
+    run ./anon-git.sh --install-hook
+    assert_failure
+    assert_file_not_exists "$target"
+}
+
 @test "--install-hook installs into core.hooksPath" {
     # git runs hooks from core.hooksPath when set, so the hook must land there.
     git config --local core.hooksPath .husky
