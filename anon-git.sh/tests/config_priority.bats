@@ -5,8 +5,8 @@
 
 load test_helper
 
-@test "--dry-run --entire-history previews all, no rewrite" {
-    PAGER='cat' run ./anon-git.sh --dry-run --entire-history
+@test "--dry-run --entire-history without PAGER previews all, no rewrite" {
+    run ./anon-git.sh --dry-run --entire-history
     assert_success
     assert_head_unchanged
     assert_equal "$(grep -c '^Commit:' <<<"$output")" "$COMMIT_COUNT"
@@ -178,4 +178,11 @@ keepuser_bool() {
     ANON_GIT_QUIET=1 run ./anon-git.sh --no-confirm --no-backup --current-branch --verbose --name 'Dennis Ritchie' HEAD
     assert_success
     assert_output --partial 'Anonymizing commit'
+}
+
+@test "rejects invalid ANON_GIT_KEEPUSER value" {
+    ANON_GIT_KEEPUSER=yes run ./anon-git.sh --no-confirm --no-backup --current-branch HEAD
+    assert_failure
+    assert_output --partial 'must resolve to "0" or "1"'
+    assert_head_unchanged
 }

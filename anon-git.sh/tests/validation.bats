@@ -147,6 +147,7 @@ assert_incompatible() {
     run ./anon-git.sh --no-confirm --no-backup --quiet --verbose HEAD
     assert_failure
     assert_head_unchanged
+    assert_output 'Error: --quiet and --verbose cannot be used together'
 }
 
 @test "rejects invalid commit ref" {
@@ -161,6 +162,7 @@ assert_incompatible() {
     run ./anon-git.sh --no-confirm --no-backup
     assert_failure
     assert_head_unchanged
+    assert_output --partial 'uncommitted changes'
 }
 
 missing_value() {
@@ -198,19 +200,17 @@ missing_value() {
     assert_output --partial 'Unknown option'
 }
 
-@test "rejects malformed --date safely" {
-    run ./anon-git.sh --no-confirm --no-backup --current-branch --date 'not-a-real-date' HEAD
-    assert_failure
-    assert_head_unchanged
-    assert_output --regexp '[Ee]rror'
-}
-
 malformed_date_no_branch() {
     # $1: rejected date
     run ./anon-git.sh --no-confirm --date "$1" HEAD
     assert_failure
+    assert_head_unchanged
     assert_equal "$(branch_count)" 1
     assert_output --partial 'invalid date'
+}
+
+@test "rejects malformed --date before branch creation" {
+    malformed_date_no_branch 'not-a-real-date'
 }
 
 @test "rejects out-of-range --date before branch creation" {
@@ -252,5 +252,22 @@ invalid_identity() {
     run ./anon-git.sh --no-confirm --no-backup --current-branch "$side_commit"
     assert_failure
     assert_output --partial 'not reachable from HEAD'
+    assert_head_unchanged
+}
+
+@test "invalid rev among many named in error" {
+    run ./anon-git.sh --no-confirm HEAD HEAD~1 no-such-ref HEAD~2
+    assert_failure
+    assert_output --partial 'Commit "no-such-ref" does not exist'
+    assert_head_unchanged
+}
+
+@test "rejects non-commit objects" {
+    local rev
+    for rev in 'HEAD^{tree}' 'HEAD:file_1.txt'; do
+        run ./anon-git.sh --no-confirm "$rev"
+        assert_failure
+        assert_output --partial 'is not a commit object'
+    done
     assert_head_unchanged
 }
