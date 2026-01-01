@@ -21,7 +21,8 @@ def test_help_omits_dropped_install_flags():
 
 
 def test_zsh_fish_completions_list_all_flags():
-    # Matched whole, so "date" can't hit "keep-date".
+    # Matched whole, so "date" can't hit "keep-date". Never '--flag=[: zsh
+    # would insert "--flag=", which parse_args rejects as an unknown option.
     zsh = completion_file("zsh").read_text()
     fish = completion_file("fish").read_text()
     assert "_list-flags" in completion_file("bash").read_text()
@@ -29,7 +30,7 @@ def test_zsh_fish_completions_list_all_flags():
         name = flag.rstrip("=").lstrip("-")
         if len(name) <= 1:
             continue
-        assert re.search(rf"^ *'--{name}=?\[|[{{,]--{name}[,}}]", zsh, re.MULTILINE), name
+        assert re.search(rf"^ *'--{name}\[|[{{,]--{name}[,}}]", zsh, re.MULTILINE), name
         assert re.search(rf"-l {name}( |$)", fish, re.MULTILINE), name
 
 

@@ -32,9 +32,9 @@ _anon_git() {
     _arguments -s \
         '(-h --help)'{-h,--help}'[Show help message and exit]' \
         '(-v --version)'{-v,--version}'[Show version and exit]' \
-        '--date=[ISO date to use]:date:' \
-        '--name=[Full name to use for author & committer]:name:' \
-        '--email=[Email address to use for author & committer]:email:' \
+        '--date[ISO date to use]:date:' \
+        '--name[Full name to use for author & committer]:name:' \
+        '--email[Email address to use for author & committer]:email:' \
         '--keep-user[Do not change user name or author]' \
         '--keep-date[Do not change date]' \
         '--keep-year[Do not change commit year]' \
@@ -51,7 +51,7 @@ _anon_git() {
         '--dry-run[Show history changes without rewriting it]' \
         '--quiet[Suppress informational output (errors still print)]' \
         '--verbose[Force informational output, overriding --quiet/ANON_GIT_QUIET/config]' \
-        '--print-completion=[Print a shell completion script and exit]:shell:(bash zsh fish)' \
+        '--print-completion[Print a shell completion script and exit]:shell:(bash zsh fish)' \
         '--install[Copy this script to ~/.local/bin and/or ~/.bin, whichever exist]' \
         '--install-system[Copy this script system-wide to /usr/bin via sudo]' \
         '--install-hook[Install a post-commit hook that anonymizes each new commit]' \

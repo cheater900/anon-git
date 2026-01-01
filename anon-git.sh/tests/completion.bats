@@ -9,9 +9,10 @@ load test_helper
 @test "zsh/fish completions list all flags" {
     # Zsh and fish hand-maintain flag names (for per-flag descriptions); this
     # regression-tests that every flag from --_list-flags (the source of
-    # truth) is still declared in both: as `'--flag[`, `'--flag=[` or
-    # `{-f,--flag}` in zsh and `-l flag` in fish, matched whole so "date"
-    # can't hit "keep-date". Bash completion is dynamic (calls --_list-flags
+    # truth) is still declared in both: as `'--flag[` or `{-f,--flag}` in
+    # zsh and `-l flag` in fish, matched whole so "date" can't hit
+    # "keep-date". Never `'--flag=[`: zsh would insert `--flag=`, which
+    # parse_args rejects as an unknown option. Bash completion is dynamic (calls --_list-flags
     # itself), so it's only checked for still being wired up.
     local zsh_completion=${SCRIPT_DIR}/completions/_anon-git.sh
     local fish_completion=${SCRIPT_DIR}/completions/anon-git.sh.fish flag
@@ -20,7 +21,7 @@ load test_helper
         if [[ "${#flag}" -le 1 ]]; then
             continue
         fi
-        assert grep -qE -- "^ *'--${flag}=?\[|[{,]--${flag}[,}]" "$zsh_completion"
+        assert grep -qE -- "^ *'--${flag}\[|[{,]--${flag}[,}]" "$zsh_completion"
         assert grep -qE -- "-l ${flag}( |$)" "$fish_completion"
     done
 }
