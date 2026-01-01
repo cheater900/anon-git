@@ -46,8 +46,9 @@ anon-git --print-completion fish > ~/.config/fish/completions/anon-git.fish
 
 ## Development
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md). Design notes and open questions:
-[`docs/NOTES.md`](docs/NOTES.md).
+- [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md): workflow, code layout, tests
+- [`docs/NOTES.md`](docs/NOTES.md): design notes
+- [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md): known issues left unfixed, with reasons
 
 ## License
 

@@ -4,6 +4,15 @@ Derived from git history, newest first.
 
 ## 2026-11-02
 
+- docs(py): move CONTRIBUTING to docs/DEVELOPMENT, add KNOWN_ISSUES
+- test(py): share append_line, checkout_raw_commit, PAGER_CAT, EMPTY_TREE helpers
+- refactor(py): move verbose flag messages to constants, name short-hash helper
+- refactor(py): move hook script header into templates, name hook file mode
+- refactor(py): move raw git date formatting into utils/dates, name time units
+- fix(py): hook pops only stash it pushed
+- fix(py): handle out-of-range commit timezone offsets
+- fix(py): escape control chars in --dry-run preview
+- fix(py): refuse --install-hook into shared core.hooksPath
 - docs(py): add NOTES with layout decisions and open dry-run question
 - docs(py): document module and test layout
 - refactor(py): split anon_git into modules by concern, tests into unit/integration/e2e

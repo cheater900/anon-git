@@ -5,7 +5,7 @@
 - Split by concern, unlike `anon-git.sh`. The single-file rule applies only to
   the shell implementation. Module names follow the shell script's sections
   and functions, so the two can be compared side by side. See
-  [`CONTRIBUTING.md`](../CONTRIBUTING.md#code-layout) for the module table.
+  [`DEVELOPMENT.md`](DEVELOPMENT.md#code-layout) for the module table.
 - Data types live in `models.py`, not `types.py`, to avoid confusion with the
   stdlib `types` module.
 - `__init__.py` only re-exports `main`. The console script points at
