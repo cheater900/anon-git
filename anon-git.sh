@@ -1288,8 +1288,9 @@ entirehistory = os.environ['ANON_GIT_ENTIREHISTORY'] == '1'
 dryrun = os.environ['ANON_GIT_DRYRUN'] == '1'
 dryrun_file = os.environ.get('ANON_GIT_DRYRUN_FILE', '')
 
-# Loaded once: module-level state persists across every commit-callback
-# invocation within this filter-repo run, so no need to re-read per commit.
+# Loaded once: filter-repo wraps this body in a function, so without
+# \`global\` the dict would be local and the file re-read per commit.
+global RANDOM_DATES
 if 'RANDOM_DATES' not in globals():
     RANDOM_DATES = {}
     random_dates_file = os.environ.get('ANON_GIT_RANDOM_DATES_FILE', '')
