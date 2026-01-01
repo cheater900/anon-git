@@ -398,153 +398,160 @@ export ANON_GIT_NAME ANON_GIT_EMAIL ANON_GIT_DATE ANON_GIT_COMMIT
 export ANON_GIT_KEEPUSER ANON_GIT_KEEPDATE ANON_GIT_KEEPYEAR ANON_GIT_KEEPMONTH ANON_GIT_KEEPDAY
 export ANON_GIT_ENTIREHISTORY ANON_GIT_DRYRUN
 export ANON_GIT_DRYRUN_FILE="${dryrun_file}"
+export TZ=UTC
+
+python_commit_callback="
+import os
+import re
+from datetime import datetime, timedelta, timezone
+
+name  = os.environ['ANON_GIT_NAME']
+email = os.environ['ANON_GIT_EMAIL']
+date  = os.environ['ANON_GIT_DATE']
+target_commits = [c.encode() for c in os.environ.get('ANON_GIT_COMMIT', '').split()]
+
+keepuser = os.environ['ANON_GIT_KEEPUSER'] == '1'
+keepdate = os.environ['ANON_GIT_KEEPDATE'] == '1'
+keepyear = os.environ['ANON_GIT_KEEPYEAR'] == '1'
+keepmonth = os.environ['ANON_GIT_KEEPMONTH'] == '1'
+keepday = os.environ['ANON_GIT_KEEPDAY'] == '1'
+entirehistory = os.environ['ANON_GIT_ENTIREHISTORY'] == '1'
+dryrun = os.environ['ANON_GIT_DRYRUN'] == '1'
+dryrun_file = os.environ.get('ANON_GIT_DRYRUN_FILE', '')
+
+author_name = commit.author_name
+author_email = commit.author_email
+author_date = commit.author_date
+committer_name = commit.committer_name
+committer_email = commit.committer_email
+committer_date = commit.committer_date
+
+if not entirehistory and commit.original_id not in target_commits:
+    return
+
+def parse_git_date(date_bytes):
+    # @param   <bytes>              Git date (timestamp followed by timezone, i.e 1770000000 +0000)
+    # @returns <datetime.datetime>  Date object
+
+    unix_ts, offset = date_bytes.decode().split()
+    sign = 1 if offset.startswith('+') else -1
+    offset = offset.replace('+', '').replace('-', '')
+    if len(offset) == 4:
+        hours   = int(offset[:2])
+        minutes = int(offset[2:])
+        seconds = 0
+    elif len(offset) == 6:
+        hours   = int(offset[:2])
+        minutes = int(offset[2:4])
+        seconds = int(offset[4:])
+    else:
+        raise ValueError('unsupported timezone format')
+    tz_offset = timedelta(hours=hours, minutes=minutes, seconds=seconds)
+    tz = timezone(sign * tz_offset)
+    ts = float(unix_ts)
+    dt = datetime.fromtimestamp(ts, tz=tz)
+    return dt
+
+def parse_target_date(date_str):
+    # Accept both 'YYYY-MM-DD HH:MM:SS +ZZZZ' and ISO 8601 compact form
+    # with a 'T' separator and/or a 'Z'/'+HH:MM' offset with no space
+    # before it (e.g. '2025-06-15T14:20:00Z'), normalizing to the
+    # space-separated, 4-digit-offset form '%z' below expects.
+    normalized = date_str.strip()
+    if 'T' in normalized:
+        normalized = normalized.replace('T', ' ', 1)
+        if normalized.endswith('Z'):
+            normalized = normalized[:-1] + '+0000'
+        match = re.match(r'^(.*\d{2}:\d{2}:\d{2})([+-]\d{2}:?\d{2})$', normalized)
+        if match:
+            normalized = '%s %s' % (match.group(1), match.group(2).replace(':', ''))
+    return datetime.strptime(normalized, '%Y-%m-%d %H:%M:%S %z')
+
+if not keepuser:
+    author_name = name.encode()
+    author_email = email.encode()
+    committer_name = name.encode()
+    committer_email = email.encode()
+
+if not keepdate:
+    if keepyear or keepmonth or keepday:
+        # Strip the timezone (keeping the calendar date as the committer saw
+        # it) and re-anchor to midnight UTC, so only the anonymized fields
+        # (time, tz) leak; TZ=UTC above makes naive dt.timestamp() below UTC.
+        dt = parse_git_date(commit.author_date)
+        dt = dt.replace(tzinfo=None, hour=0, minute=0, second=0, microsecond=0)
+        if keepyear or keepmonth:
+            dt = dt.replace(day=1)
+        if keepyear:
+            dt = dt.replace(month=1)
+        ts = dt.timestamp()
+        offset = '+0000'
+    else:
+        dt = parse_target_date(date)
+        ts = int(dt.timestamp())
+        if dt.utcoffset():
+            offset_seconds = int(dt.utcoffset().total_seconds())
+            offset_sign = '+' if offset_seconds >= 0 else '-'
+            offset_abs = abs(offset_seconds)
+            offset_hours = offset_abs // 3600
+            offset_mins = (offset_abs % 3600) // 60
+            offset = '%s%02d%02d' % (offset_sign, offset_hours, offset_mins)
+        else:
+            offset = '+0000'
+
+    date_encoded = b'%d %s' % (ts, offset.encode())
+    author_date = date_encoded
+    committer_date = date_encoded
+
+# don't rewrite history, just pretend
+if dryrun:
+    f = open(dryrun_file, 'a')
+    f.write('Commit:')
+
+    an = commit.author_name.decode()
+    ae = commit.author_email.decode()
+    ad = parse_git_date(commit.author_date).isoformat()
+    new_an = author_name.decode()
+    new_ae = author_email.decode()
+    new_ad = parse_git_date(author_date).isoformat()
+
+    cn = commit.committer_name.decode()
+    ce = commit.committer_email.decode()
+    cd = parse_git_date(commit.committer_date).isoformat()
+    new_cn = committer_name.decode()
+    new_ce = committer_email.decode()
+    new_cd = parse_git_date(committer_date).isoformat()
+
+    id = commit.original_id.decode()
+    msg = commit.message.decode()
+    sep = '\n' + '-' * 80 + '\n'
+
+    f.write('%s\n' % id)
+    f.write('Author:\t\t%s <%s> -> %s <%s> \n' % (an, ae, new_an, new_ae))
+    f.write('Committer:\t%s <%s> -> %s <%s> \n' % (cn, ce, new_cn, new_ce))
+    f.write('AuthorDate:\t%s -> %s\n' % (ad, new_ad))
+    f.write('CommitterDate:\t%s -> %s\n' % (cd, new_cd))
+    f.write('\n')
+    f.write(msg)
+    f.write(sep)
+    f.close()
+    return
+
+# actually rewrite history
+commit.author_name = author_name
+commit.author_email = author_email
+commit.author_date = author_date
+commit.committer_name = committer_name
+commit.committer_email = committer_email
+commit.committer_date = committer_date
+"
+
+anon_git_main() {
+    git filter-repo --force --commit-callback "$python_commit_callback" --refs HEAD
+}
 
 filter_repo_log=$(mktemp)
-if ! TZ=UTC git filter-repo --force --commit-callback "
-    import os
-    import re
-    from datetime import datetime, timedelta, timezone
-
-    name  = os.environ['ANON_GIT_NAME']
-    email = os.environ['ANON_GIT_EMAIL']
-    date  = os.environ['ANON_GIT_DATE']
-    target_commits = [c.encode() for c in os.environ.get('ANON_GIT_COMMIT', '').split()]
-
-    keepuser = os.environ['ANON_GIT_KEEPUSER'] == '1'
-    keepdate = os.environ['ANON_GIT_KEEPDATE'] == '1'
-    keepyear = os.environ['ANON_GIT_KEEPYEAR'] == '1'
-    keepmonth = os.environ['ANON_GIT_KEEPMONTH'] == '1'
-    keepday = os.environ['ANON_GIT_KEEPDAY'] == '1'
-    entirehistory = os.environ['ANON_GIT_ENTIREHISTORY'] == '1'
-    dryrun = os.environ['ANON_GIT_DRYRUN'] == '1'
-    dryrun_file = os.environ.get('ANON_GIT_DRYRUN_FILE', '')
-
-    author_name = commit.author_name
-    author_email = commit.author_email
-    author_date = commit.author_date
-    committer_name = commit.committer_name
-    committer_email = commit.committer_email
-    committer_date = commit.committer_date
-
-    if not entirehistory and commit.original_id not in target_commits:
-        return
-
-    def parse_git_date(date_bytes):
-        # @param   <bytes>              Git date (timestamp followed by timezone, i.e 1770000000 +0000)
-        # @returns <datetime.datetime>  Date object
-
-        unix_ts, offset = date_bytes.decode().split()
-        sign = 1 if offset.startswith('+') else -1
-        offset = offset.replace('+', '').replace('-', '')
-        if len(offset) == 4:
-            hours   = int(offset[:2])
-            minutes = int(offset[2:])
-            seconds = 0
-        elif len(offset) == 6:
-            hours   = int(offset[:2])
-            minutes = int(offset[2:4])
-            seconds = int(offset[4:])
-        else:
-            raise ValueError('unsupported timezone format')
-        tz_offset = timedelta(hours=hours, minutes=minutes, seconds=seconds)
-        tz = timezone(sign * tz_offset)
-        ts = float(unix_ts)
-        dt = datetime.fromtimestamp(ts, tz=tz)
-        return dt
-
-    def parse_target_date(date_str):
-        # Accept both 'YYYY-MM-DD HH:MM:SS +ZZZZ' and ISO 8601 compact form
-        # with a 'T' separator and/or a 'Z'/'+HH:MM' offset with no space
-        # before it (e.g. '2025-06-15T14:20:00Z'), normalizing to the
-        # space-separated, 4-digit-offset form '%z' below expects.
-        normalized = date_str.strip()
-        if 'T' in normalized:
-            normalized = normalized.replace('T', ' ', 1)
-            if normalized.endswith('Z'):
-                normalized = normalized[:-1] + '+0000'
-            match = re.match(r'^(.*\d{2}:\d{2}:\d{2})([+-]\d{2}:?\d{2})$', normalized)
-            if match:
-                normalized = '%s %s' % (match.group(1), match.group(2).replace(':', ''))
-        return datetime.strptime(normalized, '%Y-%m-%d %H:%M:%S %z')
-
-    if not keepuser:
-        author_name = name.encode()
-        author_email = email.encode()
-        committer_name = name.encode()
-        committer_email = email.encode()
-
-    if not keepdate:
-        if keepyear or keepmonth or keepday:
-            # Strip the timezone (keeping the calendar date as the committer saw
-            # it) and re-anchor to midnight UTC, so only the anonymized fields
-            # (time, tz) leak; TZ=UTC above makes naive dt.timestamp() below UTC.
-            dt = parse_git_date(commit.author_date)
-            dt = dt.replace(tzinfo=None, hour=0, minute=0, second=0, microsecond=0)
-            if keepyear or keepmonth:
-                dt = dt.replace(day=1)
-            if keepyear:
-                dt = dt.replace(month=1)
-            ts = dt.timestamp()
-            offset = '+0000'
-        else:
-            dt = parse_target_date(date)
-            ts = int(dt.timestamp())
-            if dt.utcoffset():
-                offset_seconds = int(dt.utcoffset().total_seconds())
-                offset_sign = '+' if offset_seconds >= 0 else '-'
-                offset_abs = abs(offset_seconds)
-                offset_hours = offset_abs // 3600
-                offset_mins = (offset_abs % 3600) // 60
-                offset = '%s%02d%02d' % (offset_sign, offset_hours, offset_mins)
-            else:
-                offset = '+0000'
-
-        date_encoded = b'%d %s' % (ts, offset.encode())
-        author_date = date_encoded
-        committer_date = date_encoded
-
-    # don't rewrite history, just pretend
-    if dryrun:
-        f = open(dryrun_file, 'a')
-        f.write('Commit:')
-
-        an = commit.author_name.decode()
-        ae = commit.author_email.decode()
-        ad = parse_git_date(commit.author_date).isoformat()
-        new_an = author_name.decode()
-        new_ae = author_email.decode()
-        new_ad = parse_git_date(author_date).isoformat()
-
-        cn = commit.committer_name.decode()
-        ce = commit.committer_email.decode()
-        cd = parse_git_date(commit.committer_date).isoformat()
-        new_cn = committer_name.decode()
-        new_ce = committer_email.decode()
-        new_cd = parse_git_date(committer_date).isoformat()
-
-        id = commit.original_id.decode()
-        msg = commit.message.decode()
-        sep = '\n' + '-' * 80 + '\n'
-
-        f.write('%s\n' % id)
-        f.write('Author:\t\t%s <%s> -> %s <%s> \n' % (an, ae, new_an, new_ae))
-        f.write('Committer:\t%s <%s> -> %s <%s> \n' % (cn, ce, new_cn, new_ce))
-        f.write('AuthorDate:\t%s -> %s\n' % (ad, new_ad))
-        f.write('CommitterDate:\t%s -> %s\n' % (cd, new_cd))
-        f.write('\n')
-        f.write(msg)
-        f.write(sep)
-        f.close()
-        return
-
-    # actually rewrite history
-    commit.author_name = author_name
-    commit.author_email = author_email
-    commit.author_date = author_date
-    commit.committer_name = committer_name
-    commit.committer_email = committer_email
-    commit.committer_date = committer_date
-" --refs HEAD >"$filter_repo_log" 2>&1; then
+if ! anon_git_main >"$filter_repo_log" 2>&1; then
     printf 'Error: git filter-repo failed:\n' >&2
     cat "$filter_repo_log" >&2
     rm -f "$filter_repo_log"

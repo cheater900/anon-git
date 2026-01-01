@@ -239,6 +239,40 @@ test_lint_shellcheck() {
   record_result  "$errors" 'shellcheck'
 }
 
+test_python_callback_syntax() {
+  # anon-git.sh assigns the git-filter-repo commit callback to a shell
+  # variable, python_commit_callback="...". Extract its contents (via a
+  # regex address range, since the value spans many lines) and check that
+  # it's syntactically valid Python. The body uses bare `return` statements,
+  # which are only legal inside a function, so wrap it in a dummy one before
+  # compiling — matching how git-filter-repo itself embeds the callback.
+  local raw_block python_code check_file output exit_status errors=0
+
+  raw_block=$(sed -n '/^python_commit_callback="$/,/^"$/p' "$SCRIPT")
+  python_code=$(sed -e '1d' -e '$d' <<<"$raw_block")
+
+  if [[ -z "$python_code" ]]; then
+    printf 'Error: could not extract python_commit_callback contents from %s\n' "$SCRIPT_NAME"
+    errors=$(( errors + 1 ))
+  fi
+
+  check_file="${TMP_DIR}/python_commit_callback_check.py"
+  {
+    printf 'def _commit_callback(commit, metadata):\n'
+    sed 's/^/    /' <<<"$python_code"
+  } >"$check_file"
+
+  output=$(python3 -m py_compile "$check_file" 2>&1)
+  exit_status=$?
+
+  if [[ "$exit_status" -ne 0 ]]; then
+    printf 'Error: python_commit_callback has a syntax error:\n%s\n' "$output"
+    errors=$(( errors + 1 ))
+  fi
+
+  record_result "$errors" 'python commit callback syntax'
+}
+
 # ──────────────────────────────────────────────────────────────────────
 # INTEGRATION TESTS
 
@@ -970,6 +1004,7 @@ test_match_shell_injection_name() {
 main() {
   test_lint_syntax
   test_lint_shellcheck
+  test_python_callback_syntax
   init_repo
   test_script
   test_script --name 'Grace Hopper'
