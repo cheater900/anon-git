@@ -82,6 +82,9 @@ Options:
   --install-system                 Copy this script system-wide to /usr/bin (via sudo)
   --install-hook                   Install a post-commit hook in the current git repository
                                    that anonymizes each new commit (HEAD only) automatically
+  --uninstall                      Remove this script from ~/.local/bin, ~/.bin, and
+                                   /usr/bin (wherever --install/--install-system put it)
+  --uninstall-hook                 Remove the post-commit hook installed by --install-hook
 
 Arguments:
   commit(s)               Commit(s) to anonymize (can be: hash, HEAD~3, branch, tag, ...)
@@ -166,6 +169,12 @@ Examples:
     # Install a post-commit hook so every new commit in this repo is
     # auto-anonymized (HEAD only, right after \`git commit\`)
     ./anon-git.sh --install-hook
+
+    # Remove this script from wherever --install/--install-system put it
+    ./anon-git.sh --uninstall
+
+    # Remove the post-commit hook installed by --install-hook
+    ./anon-git.sh --uninstall-hook
 EOF
     exit 0
 }
@@ -204,6 +213,8 @@ list_flags() {
 --install
 --install-system
 --install-hook
+--uninstall
+--uninstall-hook
 EOF
     exit 0
 }
@@ -394,6 +405,96 @@ EOF
     exit 0
 }
 
+# Internal: removes $1/anon-git if present, printing what it did. Unlike
+# install_copy, a target that isn't there is not a failure — uninstalling is
+# idempotent, so uninstall_all can call this for every candidate directory
+# regardless of which ones actually have a copy.
+uninstall_copy() {
+    local dir="$1" target="${1}/anon-git"
+
+    if [[ ! -e "$target" ]]; then
+        return 0
+    fi
+
+    if ! rm -f -- "$target"; then
+        printf 'Error: failed to remove %s\n' "$target" >&2
+        return 1
+    fi
+    printf 'Removed: %s\n' "$target"
+    return 0
+}
+
+# --uninstall: removes this script from every location --install/
+# --install-system may have copied it to (~/.local/bin, ~/.bin, and
+# /usr/bin via sudo), skipping whichever don't have a copy. Finding nothing
+# installed anywhere is not an error (the desired end state is already
+# reached); only an actual removal failure is.
+uninstall_all() {
+    local candidates=("${HOME}/.local/bin" "${HOME}/.bin") dir found=0 failures=0
+    local system_target='/usr/bin/anon-git'
+
+    for dir in "${candidates[@]}"; do
+        if [[ -e "${dir}/anon-git" ]]; then
+            found=1
+            uninstall_copy "$dir" || failures=$((failures + 1))
+        fi
+    done
+
+    if [[ -e "$system_target" ]]; then
+        found=1
+        if ! command -v sudo >/dev/null 2>&1; then
+            printf 'Error: sudo not found; cannot remove %s\n' "$system_target" >&2
+            failures=$((failures + 1))
+        elif ! sudo rm -f -- "$system_target"; then
+            printf 'Error: failed to remove %s\n' "$system_target" >&2
+            failures=$((failures + 1))
+        else
+            printf 'Removed: %s\n' "$system_target"
+        fi
+    fi
+
+    if [[ "$found" -eq 0 ]]; then
+        printf 'anon-git is not installed in ~/.local/bin, ~/.bin, or /usr/bin.\n'
+        exit 0
+    fi
+
+    [[ "$failures" -eq 0 ]] && exit 0
+    exit 1
+}
+
+# --uninstall-hook: removes the post-commit hook installed by --install-hook,
+# if any, guarded by the same HOOK_MARKER check install_hook uses so a hook
+# this script didn't create is never touched.
+uninstall_hook() {
+    local git_dir hooks_dir hook_file
+
+    if ! git_dir=$(git rev-parse --git-dir 2>/dev/null); then
+        printf 'Error: --uninstall-hook must be run inside a git repository.\n' >&2
+        exit 1
+    fi
+    git_dir=$(cd -- "$git_dir" && pwd)
+    hooks_dir="${git_dir}/hooks"
+    hook_file="${hooks_dir}/post-commit"
+
+    if [[ ! -f "$hook_file" ]]; then
+        printf 'No post-commit hook installed at %s\n' "$hook_file"
+        exit 0
+    fi
+
+    if ! grep -qF "$HOOK_MARKER" "$hook_file"; then
+        printf 'Error: %s was not installed by anon-git; refusing to remove it.\n' "$hook_file" >&2
+        printf '  Remove it yourself if you are sure.\n' >&2
+        exit 1
+    fi
+
+    if ! rm -f -- "$hook_file"; then
+        printf 'Error: failed to remove %s\n' "$hook_file" >&2
+        exit 1
+    fi
+    printf 'Removed post-commit hook: %s\n' "$hook_file"
+    exit 0
+}
+
 # ──────────────────────────────────────────────
 # EARLY OPTIONS
 #
@@ -413,6 +514,8 @@ handle_early_options() {
         --install) install_user ;;
         --install-system) install_system ;;
         --install-hook) install_hook ;;
+        --uninstall) uninstall_all ;;
+        --uninstall-hook) uninstall_hook ;;
         esac
     done
 }

@@ -71,12 +71,16 @@ git clone https://github.com/radioactively/anon-git && cd anon-git
 
 # System-wide install to /usr/bin via sudo
 ./anon-git.sh --install-system
+
+# Remove it again, from wherever --install/--install-system put it
+./anon-git.sh --uninstall
 ```
 
 > [!NOTE]
 > The `--install` only copies into `~/.local/bin` and/or `~/.bin` if they already exist.
 > The `--install-system` requires `sudo`.
 > The directory `~/.local/bin` or ``~/.bin` must be in your `$PATH`
+> `--uninstall` removes the script from all three locations at once, skipping whichever don't have a copy.
 
 #### Manual installation
 
@@ -175,6 +179,9 @@ git log --format=%H --grep='^fix:' | xargs ./anon-git.sh
   --install-system                 Copy this script system-wide to /usr/bin (via sudo)
   --install-hook                   Install a post-commit hook in the current git repository
                                    that anonymizes each new commit (HEAD only) automatically
+  --uninstall                      Remove this script from ~/.local/bin, ~/.bin, and
+                                   /usr/bin (wherever --install/--install-system put it)
+  --uninstall-hook                 Remove the post-commit hook installed by --install-hook
 ```
 
 **Priority order** (highest to lowest):
@@ -240,6 +247,13 @@ pre-existing hook it didn't write (remove or back that one up first).
 If `core.hooksPath` is set (common with husky/pre-commit/lefthook), git looks
 there instead of `.git/hooks`, so the installed hook won't fire — `--install-hook`
 still writes it, but warns and tells you where git is actually looking.
+
+Remove it again with `--uninstall-hook`, which refuses to touch a `post-commit`
+hook it didn't write (same safety check as above, just in reverse):
+
+```bash
+./anon-git.sh --uninstall-hook
+```
 
 ### Shell completion
 

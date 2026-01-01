@@ -35,4 +35,6 @@ complete -c anon-git.sh -l print-completion -x -a 'bash zsh fish' -d 'Print a sh
 complete -c anon-git.sh -l install -d 'Copy this script to ~/.local/bin and/or ~/.bin, whichever exist'
 complete -c anon-git.sh -l install-system -d 'Copy this script system-wide to /usr/bin via sudo'
 complete -c anon-git.sh -l install-hook -d 'Install a post-commit hook that anonymizes each new commit'
+complete -c anon-git.sh -l uninstall -d 'Remove this script from ~/.local/bin, ~/.bin, and /usr/bin'
+complete -c anon-git.sh -l uninstall-hook -d 'Remove the post-commit hook installed by --install-hook'
 complete -c anon-git.sh -a '(__anon_git_commits)' -d 'commit'

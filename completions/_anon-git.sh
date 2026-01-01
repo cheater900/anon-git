@@ -52,6 +52,8 @@ _anon_git() {
         '--install[Copy this script to ~/.local/bin and/or ~/.bin, whichever exist]' \
         '--install-system[Copy this script system-wide to /usr/bin via sudo]' \
         '--install-hook[Install a post-commit hook that anonymizes each new commit]' \
+        '--uninstall[Remove this script from ~/.local/bin, ~/.bin, and /usr/bin]' \
+        '--uninstall-hook[Remove the post-commit hook installed by --install-hook]' \
         '*:commit:_anon_git_commits'
 }
 

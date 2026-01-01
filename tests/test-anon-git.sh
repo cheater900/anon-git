@@ -89,6 +89,9 @@ main() {
     test_flag_install_path_already_set
     test_flag_install_no_target_dir
     test_flag_install_idempotent
+    test_flag_uninstall_removes_both_dirs
+    test_flag_uninstall_skips_missing_dir
+    test_flag_uninstall_nothing_installed
     test_flag_install_hook_creates_hook
     test_flag_install_hook_requires_git_repo
     test_flag_install_hook_preserves_foreign_hook
@@ -115,6 +118,10 @@ main() {
     test_flag_verbose_overrides_env_quiet
     test_catch_incompatible_quiet_verbose
     test_flag_install_hook_quiet
+    test_flag_uninstall_hook_removes_hook
+    test_flag_uninstall_hook_requires_git_repo
+    test_flag_uninstall_hook_nothing_installed
+    test_flag_uninstall_hook_preserves_foreign_hook
     test_flag_no_confirm
     test_noconfirm_executes_first
     test_flag_unknown
