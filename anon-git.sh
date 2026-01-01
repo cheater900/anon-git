@@ -1,36 +1,17 @@
 #!/usr/bin/env bash
 
-# ──────────────────────────────────────────────
-# SAFETY CHECKS
-
-if ! git rev-parse --git-dir >/dev/null 2>&1; then
-    printf 'AnonGit must be run inside a git repository.\n'
-    exit 1
-fi
-
-if ! git diff-index --quiet HEAD -- || ! git diff-files --quiet; then
-    printf 'Repository has uncommitted changes. Commit or stash first to prevent losing the changes.\n'
-    exit 1
-fi
-
-# ──────────────────────────────────────────────
-# DEFAULTS
-
-DEFAULT_DATE='2008-10-31 00:00:00 +0000'
-DEFAULT_NAME='Anon'
-DEFAULT_EMAIL='anon@localhost'
-DEFAULT_KEEPUSER='0'
-DEFAULT_KEEPDATE='0'
-DEFAULT_KEEPYEAR='0'
-DEFAULT_KEEPMONTH='0'
-DEFAULT_KEEPDAY='0'
-DEFAULT_ENTIREHISTORY='0'
-DEFAULT_CURRENTBRANCH='0'
-DEFAULT_DRYRUN='0'
-DEFAULT_COMMIT=$(git rev-parse HEAD)
+set -euo pipefail
 
 # ──────────────────────────────────────────────────────────────────────
 # HELP
+#
+# Defined and handled first so `--help` works even outside a git repository
+# or with a dirty working tree; the safety checks that follow this block
+# are unchanged, just moved below the help handling.
+
+DEFAULT_NAME='Anon'
+DEFAULT_EMAIL='anon@localhost'
+
 show_help() {
     cat << EOF
 Anonymizes git commit metadata.
@@ -60,8 +41,9 @@ Arguments:
                           If more than one, it should be a commit hash.
 
 Priority (highest to lowest):
-  1. Command-line flags (--date, --name, --email, --keep-user, --keep-date)
-  2. Environment variables (ANON_GIT_DATE, ANON_GIT_NAME, ANON_GIT_EMAIL, ANON_GIT_KEEPUSER, ANON_GIT_KEEPDATE)
+  1. Command-line flags (--date, --name, --email, --keep-user, --keep-date, ...)
+  2. Environment variables (ANON_GIT_DATE, ANON_GIT_NAME, ANON_GIT_EMAIL, ANON_GIT_KEEPUSER,
+     ANON_GIT_KEEPDATE, ANON_GIT_KEEPYEAR, ANON_GIT_KEEPMONTH, ANON_GIT_KEEPDAY)
   3. Hardcoded defaults (${DEFAULT_NAME} <${DEFAULT_EMAIL}>)
 
 Examples:
@@ -80,20 +62,61 @@ Examples:
     # Keep real name/email, only change date
     ./anon-git.sh --keep-user --date "2025-06-15T14:20:00Z"
 
+    # Preview what would change before actually rewriting anything
+    ./anon-git.sh --dry-run HEAD~2
+
     # Anonymize the last 10 commits using shell expansion (works in bash and zsh)
     ./anon-git.sh HEAD~{0..9}
 
     # Anonymize commits within a specific date range
-    git log --format=%H after='2023-01-01' --before='2024-01-01' | xargs ./anon-git
+    git log --format=%H --after='2023-01-01' --before='2024-01-01' | xargs ./anon-git.sh
 
     # Anonymize commits where the commit author matches a pattern
-    git log --format=%H author='Frederic' | xargs ./anon-git
+    git log --format=%H --author='Frederic' | xargs ./anon-git.sh
 
-    # Anonymize commits where the commit message matches a message
-    git log --format=%H grep='Some regex to match the commit message' | xargs ./anon-git
+    # Anonymize commits following the Conventional Commits "fix:" prefix
+    git log --format=%H --grep='^fix:' | xargs ./anon-git.sh
 EOF
     exit 0
 }
+
+for arg in "$@"; do
+    case "$arg" in
+        -h|--help) show_help ;;
+    esac
+done
+
+# ──────────────────────────────────────────────
+# SAFETY CHECKS
+
+if ! git rev-parse --git-dir >/dev/null 2>&1; then
+    printf 'AnonGit must be run inside a git repository.\n'
+    exit 1
+fi
+
+if ! git diff-index --quiet HEAD -- || ! git diff-files --quiet; then
+    printf 'Repository has uncommitted changes. Commit or stash first to prevent losing the changes.\n'
+    exit 1
+fi
+
+if ! command -v git-filter-repo >/dev/null 2>&1 && ! git filter-repo --version >/dev/null 2>&1; then
+    printf 'git-filter-repo is required but was not found. See the Pre-requisites section of the README.\n' >&2
+    exit 1
+fi
+
+# ──────────────────────────────────────────────
+# DEFAULTS
+
+DEFAULT_DATE='2008-10-31 00:00:00 +0000'
+DEFAULT_KEEPUSER='0'
+DEFAULT_KEEPDATE='0'
+DEFAULT_KEEPYEAR='0'
+DEFAULT_KEEPMONTH='0'
+DEFAULT_KEEPDAY='0'
+DEFAULT_ENTIREHISTORY='0'
+DEFAULT_CURRENTBRANCH='0'
+DEFAULT_DRYRUN='0'
+DEFAULT_COMMIT=$(git rev-parse HEAD)
 
 # ──────────────────────────────────────────────────────────────────────
 # PARSE ARGUMENTS
@@ -116,18 +139,18 @@ COMMITS_ARG=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        -h|--help)
-            show_help
-            ;;
         --date)
+            [[ $# -ge 2 ]] || { printf 'Error: %s requires a value\n' "$1" >&2; exit 1; }
             DATE_ARG="$2"
             shift 2
             ;;
         --name)
+            [[ $# -ge 2 ]] || { printf 'Error: %s requires a value\n' "$1" >&2; exit 1; }
             NAME_ARG="$2"
             shift 2
             ;;
         --email)
+            [[ $# -ge 2 ]] || { printf 'Error: %s requires a value\n' "$1" >&2; exit 1; }
             EMAIL_ARG="$2"
             shift 2
             ;;
@@ -166,10 +189,6 @@ while [[ $# -gt 0 ]]; do
         --current-branch)
             CURRENTBRANCH_ARG='1'
             shift
-            ;;
-        --commit)
-            COMMIT_ARG="$2"
-            shift 2
             ;;
         --dry-run)
             DRYRUN_ARG='1'
@@ -219,7 +238,7 @@ check_incompatible --keep-date  "$KEEPDATE_ARG"  --keep-day       "$KEEPDAY_ARG"
 check_incompatible --keep-year  "$KEEPYEAR_ARG"  --keep-month     "$KEEPMONTH_ARG"
 check_incompatible --keep-year  "$KEEPYEAR_ARG"  --keep-day       "$KEEPDAY_ARG"
 check_incompatible --keep-month "$KEEPMONTH_ARG" --keep-day       "$KEEPDAY_ARG"
-check_incompatible --commit     "$COMMIT_ARG"    --entire-history "$ENTIREHISTORY_ARG"
+check_incompatible "commit(s) argument" "$COMMIT_ARG" --entire-history "$ENTIREHISTORY_ARG"
 
 [[ "$flag_errors" -ne 0 ]] && exit 1
 
@@ -238,6 +257,26 @@ ANON_GIT_ENTIREHISTORY="${ENTIREHISTORY_ARG:-${ANON_GIT_ENTIREHISTORY:-${DEFAULT
 ANON_GIT_CURRENTBRANCH="${CURRENTBRANCH_ARG:-${ANON_GIT_CURRENTBRANCH:-${DEFAULT_CURRENTBRANCH}}}"
 ANON_GIT_COMMIT="${COMMIT_ARG:-${DEFAULT_COMMIT}}"
 ANON_GIT_DRYRUN="${DRYRUN_ARG:-${DEFAULT_DRYRUN}}"
+
+# ──────────────────────────────────────────────
+# VALIDATE RESOLVED VALUES
+
+validate_bool() {
+    local name="$1" value="$2"
+    if [[ "$value" != '0' && "$value" != '1' ]]; then
+        printf 'Error: %s must resolve to "0" or "1" (got "%s")\n' "$name" "$value" >&2
+        exit 1
+    fi
+}
+
+validate_bool ANON_GIT_KEEPUSER       "$ANON_GIT_KEEPUSER"
+validate_bool ANON_GIT_KEEPDATE       "$ANON_GIT_KEEPDATE"
+validate_bool ANON_GIT_KEEPYEAR       "$ANON_GIT_KEEPYEAR"
+validate_bool ANON_GIT_KEEPMONTH      "$ANON_GIT_KEEPMONTH"
+validate_bool ANON_GIT_KEEPDAY        "$ANON_GIT_KEEPDAY"
+validate_bool ANON_GIT_ENTIREHISTORY  "$ANON_GIT_ENTIREHISTORY"
+validate_bool ANON_GIT_CURRENTBRANCH  "$ANON_GIT_CURRENTBRANCH"
+validate_bool ANON_GIT_DRYRUN         "$ANON_GIT_DRYRUN"
 
 # ──────────────────────────────────────────────────────────────────────
 # VERBOSE INFO
@@ -270,21 +309,33 @@ printf '\n'
 # BACKUP BRANCH
 
 current_branch=$(git branch --show-current)
-date=$(date +%F_%R:%S:%N)
+if [[ -z "$current_branch" && "$ANON_GIT_CURRENTBRANCH" == '1' ]]; then
+    printf 'Error: HEAD is detached, so there is no current branch to overwrite. Drop --current-branch or check out a branch first.\n' >&2
+    exit 1
+fi
+branch_label="${current_branch:-detached-$(git rev-parse --short HEAD)}"
+# Colon-free timestamp: git ref names may not contain ":" (see git-check-ref-format).
+timestamp=$(date +%Y%m%d_%H%M%S_%N)
 
 if [[ "$ANON_GIT_DRYRUN" != '1' ]]; then
     if [[ "$ANON_GIT_CURRENTBRANCH" != '1' ]]; then
-        new_branch="${current_branch}_anonymized_${date}"
-        git switch --create "$new_branch"
-        printf 'Created new branch %s from %s\n' "$new_branch" "$current_branch"
+        new_branch="${branch_label}_anonymized_${timestamp}"
+        if ! git switch --create "$new_branch"; then
+            printf 'Error: failed to create branch %s\n' "$new_branch" >&2
+            exit 1
+        fi
+        printf 'Created new branch %s from %s\n' "$new_branch" "$branch_label"
         printf 'Using branch %s to rewrite commits.\n' "$new_branch"
     elif [[ "$NOBACKUP_ARG" != "1" ]]; then
-        backup_branch="${current_branch}_backup_${date}"
-        git branch "${backup_branch}"
-        printf 'Created backup branch %s from %s\n' "$backup_branch" "$current_branch"
-        printf 'Using branch %s to rewrite commits\n' "$current_branch"
+        backup_branch="${branch_label}_backup_${timestamp}"
+        if ! git branch "${backup_branch}"; then
+            printf 'Error: failed to create backup branch %s\n' "$backup_branch" >&2
+            exit 1
+        fi
+        printf 'Created backup branch %s from %s\n' "$backup_branch" "$branch_label"
+        printf 'Using branch %s to rewrite commits\n' "$branch_label"
     else
-        printf 'WARNING! Overwriting existing branch %s without backup!\n' "$current_branch"
+        printf 'WARNING! Overwriting existing branch %s without backup!\n' "$branch_label"
     fi
 fi
 
@@ -328,21 +379,34 @@ fi
 # ──────────────────────────────────────────────────────────────────────
 # REWRITE LOGIC
 
-export TZ=UTC
-git filter-repo --force --commit-callback "
+# Values are passed to the Python commit-callback via the environment (not
+# string-interpolated into the generated source) so that a name, email, or
+# date containing a quote or other Python-special character cannot break out
+# of a string literal and inject code into the callback.
+export ANON_GIT_NAME ANON_GIT_EMAIL ANON_GIT_DATE ANON_GIT_COMMIT
+export ANON_GIT_KEEPUSER ANON_GIT_KEEPDATE ANON_GIT_KEEPYEAR ANON_GIT_KEEPMONTH ANON_GIT_KEEPDAY
+export ANON_GIT_ENTIREHISTORY ANON_GIT_DRYRUN
+export ANON_GIT_DRYRUN_FILE="${dryrun_file}"
+
+filter_repo_log=$(mktemp)
+if ! TZ=UTC git filter-repo --force --commit-callback "
+    import os
+    import re
     from datetime import datetime, timedelta, timezone
 
-    name  = '${ANON_GIT_NAME}'
-    email = '${ANON_GIT_EMAIL}'
-    date = '${ANON_GIT_DATE}'
-    target_commits = [c.encode() for c in '${ANON_GIT_COMMIT}'.split()]
+    name  = os.environ['ANON_GIT_NAME']
+    email = os.environ['ANON_GIT_EMAIL']
+    date  = os.environ['ANON_GIT_DATE']
+    target_commits = [c.encode() for c in os.environ.get('ANON_GIT_COMMIT', '').split()]
 
-    keepuser = ${ANON_GIT_KEEPUSER}
-    keepdate = ${ANON_GIT_KEEPDATE}
-    keepyear = ${ANON_GIT_KEEPYEAR}
-    keepmonth = ${ANON_GIT_KEEPMONTH}
-    keepday = ${ANON_GIT_KEEPDAY}
-    dryrun = ${ANON_GIT_DRYRUN}
+    keepuser = os.environ['ANON_GIT_KEEPUSER'] == '1'
+    keepdate = os.environ['ANON_GIT_KEEPDATE'] == '1'
+    keepyear = os.environ['ANON_GIT_KEEPYEAR'] == '1'
+    keepmonth = os.environ['ANON_GIT_KEEPMONTH'] == '1'
+    keepday = os.environ['ANON_GIT_KEEPDAY'] == '1'
+    entirehistory = os.environ['ANON_GIT_ENTIREHISTORY'] == '1'
+    dryrun = os.environ['ANON_GIT_DRYRUN'] == '1'
+    dryrun_file = os.environ.get('ANON_GIT_DRYRUN_FILE', '')
 
     author_name = commit.author_name
     author_email = commit.author_email
@@ -351,7 +415,7 @@ git filter-repo --force --commit-callback "
     committer_email = commit.committer_email
     committer_date = commit.committer_date
 
-    if not ${ANON_GIT_ENTIREHISTORY} and not commit.original_id in target_commits:
+    if not entirehistory and commit.original_id not in target_commits:
         return
 
     def parse_git_date(date_bytes):
@@ -377,17 +441,34 @@ git filter-repo --force --commit-callback "
         dt = datetime.fromtimestamp(ts, tz=tz)
         return dt
 
-    if keepuser != 1:
+    def parse_target_date(date_str):
+        # Accept both 'YYYY-MM-DD HH:MM:SS +ZZZZ' and ISO 8601 compact form
+        # with a 'T' separator and/or a 'Z'/'+HH:MM' offset with no space
+        # before it (e.g. '2025-06-15T14:20:00Z'), normalizing to the
+        # space-separated, 4-digit-offset form '%z' below expects.
+        normalized = date_str.strip()
+        if 'T' in normalized:
+            normalized = normalized.replace('T', ' ', 1)
+            if normalized.endswith('Z'):
+                normalized = normalized[:-1] + '+0000'
+            match = re.match(r'^(.*\d{2}:\d{2}:\d{2})([+-]\d{2}:?\d{2})$', normalized)
+            if match:
+                normalized = '%s %s' % (match.group(1), match.group(2).replace(':', ''))
+        return datetime.strptime(normalized, '%Y-%m-%d %H:%M:%S %z')
+
+    if not keepuser:
         author_name = name.encode()
         author_email = email.encode()
         committer_name = name.encode()
         committer_email = email.encode()
 
-    if keepdate != 1:
+    if not keepdate:
         if keepyear or keepmonth or keepday:
+            # Strip the timezone (keeping the calendar date as the committer saw
+            # it) and re-anchor to midnight UTC, so only the anonymized fields
+            # (time, tz) leak; TZ=UTC above makes naive dt.timestamp() below UTC.
             dt = parse_git_date(commit.author_date)
-            dt = datetime.strptime('%d-%d-%d' % (dt.year, dt.month, dt.day), '%Y-%m-%d')
-            dt =  dt.replace(hour=0, minute=0, second=0)
+            dt = dt.replace(tzinfo=None, hour=0, minute=0, second=0, microsecond=0)
             if keepyear or keepmonth:
                 dt = dt.replace(day=1)
             if keepyear:
@@ -395,13 +476,14 @@ git filter-repo --force --commit-callback "
             ts = dt.timestamp()
             offset = '+0000'
         else:
-            dt = datetime.strptime(date, '%Y-%m-%d %H:%M:%S %z')
+            dt = parse_target_date(date)
             ts = int(dt.timestamp())
             if dt.utcoffset():
                 offset_seconds = int(dt.utcoffset().total_seconds())
-                offset_hours = offset_seconds // 60
-                offset_mins = offset_seconds % 60
                 offset_sign = '+' if offset_seconds >= 0 else '-'
+                offset_abs = abs(offset_seconds)
+                offset_hours = offset_abs // 3600
+                offset_mins = (offset_abs % 3600) // 60
                 offset = '%s%02d%02d' % (offset_sign, offset_hours, offset_mins)
             else:
                 offset = '+0000'
@@ -411,8 +493,8 @@ git filter-repo --force --commit-callback "
         committer_date = date_encoded
 
     # don't rewrite history, just pretend
-    if dryrun == 1:
-        f = open('${dryrun_file}', 'a')
+    if dryrun:
+        f = open(dryrun_file, 'a')
         f.write('Commit:')
 
         an = commit.author_name.decode()
@@ -451,12 +533,20 @@ git filter-repo --force --commit-callback "
     commit.committer_name = committer_name
     commit.committer_email = committer_email
     commit.committer_date = committer_date
-" --refs HEAD 2>/dev/null >&2
+" --refs HEAD >"$filter_repo_log" 2>&1; then
+    printf 'Error: git filter-repo failed:\n' >&2
+    cat "$filter_repo_log" >&2
+    rm -f "$filter_repo_log"
+    [[ -n "$dryrun_file" ]] && rm -f "$dryrun_file"
+    exit 1
+fi
+rm -f "$filter_repo_log"
 
 # Preview output using pager defined by $PAGER. Falls back to cat.
 if [[ "$ANON_GIT_DRYRUN" == '1' && -f "$dryrun_file" ]]; then
     pager=${PAGER:-cat}
     command "$pager" "$dryrun_file"
+    rm -f "$dryrun_file"
 else
     printf 'Done. History has been rewritten.\n'
 fi
