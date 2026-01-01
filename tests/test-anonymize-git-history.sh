@@ -16,7 +16,7 @@ git config --local user.name "Test User"
 git config --local user.email "test@example.com"
 
 # Make dummy commits
-commit_count=5
+commit_count=20
 for i in $(seq 1 "$commit_count"); do
   filename="file_${i}.txt"
   echo "This is file $i" >"$filename"
