@@ -9,7 +9,10 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  shell:
+    defaults:
+      run:
+        working-directory: anon-git.sh
     strategy:
       fail-fast: false
       matrix:
