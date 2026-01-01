@@ -2,15 +2,24 @@
 
 set -euo pipefail
 
+DEFAULT_NAME='Anon'
+DEFAULT_EMAIL='anon@localhost'
+DEFAULT_DATE='2008-10-31 00:00:00 +0000'
+DEFAULT_KEEPUSER='0'
+DEFAULT_KEEPDATE='0'
+DEFAULT_KEEPYEAR='0'
+DEFAULT_KEEPMONTH='0'
+DEFAULT_KEEPDAY='0'
+DEFAULT_ENTIREHISTORY='0'
+DEFAULT_CURRENTBRANCH='0'
+DEFAULT_DRYRUN='0'
+
 # ──────────────────────────────────────────────────────────────────────
 # HELP
 #
 # Defined and handled first so `--help` works even outside a git repository
 # or with a dirty working tree; the safety checks that follow this block
 # are unchanged, just moved below the help handling.
-
-DEFAULT_NAME='Anon'
-DEFAULT_EMAIL='anon@localhost'
 
 show_help() {
     cat <<EOF
@@ -295,159 +304,153 @@ EOF
 }
 
 # ──────────────────────────────────────────────
+# EARLY OPTIONS
+#
+# Handled before any git-repo/safety checks, so --help, --print-completion
+# and the --install* flags work even outside a git repository or with a
+# dirty working tree.
+handle_early_options() {
+    [[ $# -eq 0 ]] && show_help
 
-[[ $# -eq 0 ]] && show_help
+    local args=("$@") i
+    for ((i = 0; i < ${#args[@]}; i++)); do
+        case "${args[i]}" in
+        -h | --help) show_help ;;
+        --_list-flags) list_flags ;;
+        --print-completion) print_completion "${args[i + 1]:-}" ;;
+        --install) install_user ;;
+        --install-system) install_system ;;
+        --install-hook) install_hook ;;
+        esac
+    done
+}
 
-args=("$@")
-for ((i = 0; i < ${#args[@]}; i++)); do
-    case "${args[i]}" in
-    -h | --help) show_help ;;
-    --_list-flags) list_flags ;;
-    --print-completion) print_completion "${args[i + 1]:-}" ;;
-    --install) install_user ;;
-    --install-system) install_system ;;
-    --install-hook) install_hook ;;
-    esac
-done
-
-# ──────────────────────────────────────────────
-# SAFETY CHECKS
-
-if ! git rev-parse --git-dir >/dev/null 2>&1; then
-    printf 'AnonGit must be run inside a git repository.\n'
-    exit 1
-fi
-
-if ! git diff-index --quiet HEAD -- || ! git diff-files --quiet; then
-    printf 'Repository has uncommitted changes. Commit or stash first to prevent losing the changes.\n'
-    exit 1
-fi
-
-if ! command -v git-filter-repo >/dev/null 2>&1 && ! git filter-repo --version >/dev/null 2>&1; then
-    printf 'git-filter-repo is required but was not found. See the Pre-requisites section of the README.\n' >&2
-    exit 1
-fi
-
-# ──────────────────────────────────────────────
-# DEFAULTS
-
-DEFAULT_DATE='2008-10-31 00:00:00 +0000'
-DEFAULT_KEEPUSER='0'
-DEFAULT_KEEPDATE='0'
-DEFAULT_KEEPYEAR='0'
-DEFAULT_KEEPMONTH='0'
-DEFAULT_KEEPDAY='0'
-DEFAULT_ENTIREHISTORY='0'
-DEFAULT_CURRENTBRANCH='0'
-DEFAULT_DRYRUN='0'
-DEFAULT_COMMIT=$(git rev-parse HEAD)
-
-# ──────────────────────────────────────────────────────────────────────
-# PARSE ARGUMENTS
-
-DATE_ARG=""
-NAME_ARG=""
-EMAIL_ARG=""
-KEEPUSER_ARG=""
-KEEPDATE_ARG=""
-KEEPYEAR_ARG=""
-KEEPMONTH_ARG=""
-KEEPDAY_ARG=""
-NOCONFIRM_ARG=""
-NOBACKUP_ARG=""
-DRYRUN_ARG=""
-ENTIREHISTORY_ARG=""
-CURRENTBRANCH_ARG=""
-COMMIT_ARG=""
-COMMITS_ARG=()
-
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-    --date)
-        [[ $# -ge 2 ]] || {
-            printf 'Error: %s requires a value\n' "$1" >&2
-            exit 1
-        }
-        DATE_ARG="$2"
-        shift 2
-        ;;
-    --name)
-        [[ $# -ge 2 ]] || {
-            printf 'Error: %s requires a value\n' "$1" >&2
-            exit 1
-        }
-        NAME_ARG="$2"
-        shift 2
-        ;;
-    --email)
-        [[ $# -ge 2 ]] || {
-            printf 'Error: %s requires a value\n' "$1" >&2
-            exit 1
-        }
-        EMAIL_ARG="$2"
-        shift 2
-        ;;
-    --keep-user)
-        KEEPUSER_ARG='1'
-        shift
-        ;;
-    --keep-date)
-        KEEPDATE_ARG='1'
-        shift
-        ;;
-    --keep-year)
-        KEEPYEAR_ARG='1'
-        shift
-        ;;
-    --keep-month)
-        KEEPMONTH_ARG='1'
-        shift
-        ;;
-    --keep-day)
-        KEEPDAY_ARG='1'
-        shift
-        ;;
-    --no-confirm)
-        NOCONFIRM_ARG='1'
-        shift
-        ;;
-    --no-backup)
-        NOBACKUP_ARG='1'
-        shift
-        ;;
-    --entire-history)
-        ENTIREHISTORY_ARG='1'
-        shift
-        ;;
-    --current-branch)
-        CURRENTBRANCH_ARG='1'
-        shift
-        ;;
-    --dry-run)
-        DRYRUN_ARG='1'
-        shift
-        ;;
-    -*)
-        printf 'Unknown option: %s\n' "$1" >&2
+# Internal: dies with a clear message unless run inside a git repository
+# with a clean working tree and git-filter-repo available. Split out from
+# parse/resolve/rewrite so those can assume a usable repo from this point on.
+safety_checks() {
+    if ! git rev-parse --git-dir >/dev/null 2>&1; then
+        printf 'AnonGit must be run inside a git repository.\n'
         exit 1
-        ;;
-    *)
-        if ! git rev-parse --quiet --verify "${1}^{commit}" >/dev/null 2>&1; then
-            printf 'Error: Commit "%s" does not exist or is not a commit object.\n' "${1}" >&2
+    fi
+
+    if ! git diff-index --quiet HEAD -- || ! git diff-files --quiet; then
+        printf 'Repository has uncommitted changes. Commit or stash first to prevent losing the changes.\n'
+        exit 1
+    fi
+
+    if ! command -v git-filter-repo >/dev/null 2>&1 && ! git filter-repo --version >/dev/null 2>&1; then
+        printf 'git-filter-repo is required but was not found. See the Pre-requisites section of the README.\n' >&2
+        exit 1
+    fi
+}
+
+# Internal: parses "$@" into the *_ARG globals RESOLVE ARGS later merges with
+# ANON_GIT_* envvars and the DEFAULT_* fallbacks. Empty string means "not
+# provided via flag" throughout the rest of the script.
+parse_args() {
+    DATE_ARG=""
+    NAME_ARG=""
+    EMAIL_ARG=""
+    KEEPUSER_ARG=""
+    KEEPDATE_ARG=""
+    KEEPYEAR_ARG=""
+    KEEPMONTH_ARG=""
+    KEEPDAY_ARG=""
+    NOCONFIRM_ARG=""
+    NOBACKUP_ARG=""
+    DRYRUN_ARG=""
+    ENTIREHISTORY_ARG=""
+    CURRENTBRANCH_ARG=""
+    COMMIT_ARG=""
+    COMMITS_ARG=()
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+        --date)
+            [[ $# -ge 2 ]] || {
+                printf 'Error: %s requires a value\n' "$1" >&2
+                exit 1
+            }
+            DATE_ARG="$2"
+            shift 2
+            ;;
+        --name)
+            [[ $# -ge 2 ]] || {
+                printf 'Error: %s requires a value\n' "$1" >&2
+                exit 1
+            }
+            NAME_ARG="$2"
+            shift 2
+            ;;
+        --email)
+            [[ $# -ge 2 ]] || {
+                printf 'Error: %s requires a value\n' "$1" >&2
+                exit 1
+            }
+            EMAIL_ARG="$2"
+            shift 2
+            ;;
+        --keep-user)
+            KEEPUSER_ARG='1'
+            shift
+            ;;
+        --keep-date)
+            KEEPDATE_ARG='1'
+            shift
+            ;;
+        --keep-year)
+            KEEPYEAR_ARG='1'
+            shift
+            ;;
+        --keep-month)
+            KEEPMONTH_ARG='1'
+            shift
+            ;;
+        --keep-day)
+            KEEPDAY_ARG='1'
+            shift
+            ;;
+        --no-confirm)
+            NOCONFIRM_ARG='1'
+            shift
+            ;;
+        --no-backup)
+            NOBACKUP_ARG='1'
+            shift
+            ;;
+        --entire-history)
+            ENTIREHISTORY_ARG='1'
+            shift
+            ;;
+        --current-branch)
+            CURRENTBRANCH_ARG='1'
+            shift
+            ;;
+        --dry-run)
+            DRYRUN_ARG='1'
+            shift
+            ;;
+        -*)
+            printf 'Unknown option: %s\n' "$1" >&2
             exit 1
-        fi
-        ref=$(git rev-parse "$1")
-        COMMITS_ARG=("${COMMITS_ARG[@]}" "$ref")
-        COMMIT_ARG="${COMMITS_ARG[*]}"
-        shift
-        ;;
-    esac
-done
+            ;;
+        *)
+            if ! git rev-parse --quiet --verify "${1}^{commit}" >/dev/null 2>&1; then
+                printf 'Error: Commit "%s" does not exist or is not a commit object.\n' "${1}" >&2
+                exit 1
+            fi
+            ref=$(git rev-parse "$1")
+            COMMITS_ARG=("${COMMITS_ARG[@]}" "$ref")
+            COMMIT_ARG="${COMMITS_ARG[*]}"
+            shift
+            ;;
+        esac
+    done
+}
 
-# ──────────────────────────────────────────────
-# VALIDATE ARGS
-
-flag_errors=0
+# Internal: shared by validate_incompatible below to reject a pair of
+# mutually-exclusive options once both are non-empty.
 check_incompatible() {
     local flag1="$1"
     local flag2="$3"
@@ -459,76 +462,85 @@ check_incompatible() {
     fi
 }
 
-# "Was this option provided" for each documented option, regardless of
-# whether it came from a CLI flag or its ANON_GIT_* environment variable
+# Rejects mutually-exclusive option combinations regardless of whether each
+# side was provided via CLI flag or its ANON_GIT_* environment variable
 # equivalent — so e.g. `ANON_GIT_KEEP_USER=1 ANON_GIT_NAME=X` is rejected the
 # same way `--keep-user --name X` is, instead of silently letting one win.
-# Read here (before RESOLVE ARGS below overwrites these names with the
-# fully-resolved value, default included), so an unset env var reads as
+# Must run before RESOLVE ARGS overwrites these env var names with the
+# fully-resolved value (default included), so an unset env var reads as
 # empty and a hardcoded default never counts as "provided". Booleans only
 # count as provided when explicitly '1' (the "0 or 1" contract validate_bool
 # enforces later); string options count as provided whenever non-empty.
-DATE_SET="${DATE_ARG:-${ANON_GIT_DATE:-}}"
-NAME_SET="${NAME_ARG:-${ANON_GIT_NAME:-}}"
-EMAIL_SET="${EMAIL_ARG:-${ANON_GIT_EMAIL:-}}"
-KEEPUSER_SET="$KEEPUSER_ARG"
-KEEPDATE_SET="$KEEPDATE_ARG"
-KEEPYEAR_SET="$KEEPYEAR_ARG"
-KEEPMONTH_SET="$KEEPMONTH_ARG"
-KEEPDAY_SET="$KEEPDAY_ARG"
-[[ "${ANON_GIT_KEEPUSER:-}" == '1' ]] && KEEPUSER_SET='1'
-[[ "${ANON_GIT_KEEPDATE:-}" == '1' ]] && KEEPDATE_SET='1'
-[[ "${ANON_GIT_KEEPYEAR:-}" == '1' ]] && KEEPYEAR_SET='1'
-[[ "${ANON_GIT_KEEPMONTH:-}" == '1' ]] && KEEPMONTH_SET='1'
-[[ "${ANON_GIT_KEEPDAY:-}" == '1' ]] && KEEPDAY_SET='1'
+reject_incompatible_options() {
+    local date_set name_set email_set
+    local keepuser_set keepdate_set keepyear_set keepmonth_set keepday_set
 
-check_incompatible --keep-user "$KEEPUSER_SET" --name "$NAME_SET"
-check_incompatible --keep-user "$KEEPUSER_SET" --email "$EMAIL_SET"
-check_incompatible --date "$DATE_SET" --keep-date "$KEEPDATE_SET"
-check_incompatible --date "$DATE_SET" --keep-year "$KEEPYEAR_SET"
-check_incompatible --date "$DATE_SET" --keep-month "$KEEPMONTH_SET"
-check_incompatible --date "$DATE_SET" --keep-day "$KEEPDAY_SET"
-check_incompatible --keep-date "$KEEPDATE_SET" --keep-year "$KEEPYEAR_SET"
-check_incompatible --keep-date "$KEEPDATE_SET" --keep-month "$KEEPMONTH_SET"
-check_incompatible --keep-date "$KEEPDATE_SET" --keep-day "$KEEPDAY_SET"
-check_incompatible --keep-year "$KEEPYEAR_SET" --keep-month "$KEEPMONTH_SET"
-check_incompatible --keep-year "$KEEPYEAR_SET" --keep-day "$KEEPDAY_SET"
-check_incompatible --keep-month "$KEEPMONTH_SET" --keep-day "$KEEPDAY_SET"
-# The commit(s) argument is CLI-only (there is no ANON_GIT_COMMIT env var
-# users are meant to set), so this one stays flag-vs-flag.
-check_incompatible "commit(s) argument" "$COMMIT_ARG" --entire-history "$ENTIREHISTORY_ARG"
+    flag_errors=0
 
-[[ "$flag_errors" -ne 0 ]] && exit 1
+    date_set="${DATE_ARG:-${ANON_GIT_DATE:-}}"
+    name_set="${NAME_ARG:-${ANON_GIT_NAME:-}}"
+    email_set="${EMAIL_ARG:-${ANON_GIT_EMAIL:-}}"
+    keepuser_set="$KEEPUSER_ARG"
+    keepdate_set="$KEEPDATE_ARG"
+    keepyear_set="$KEEPYEAR_ARG"
+    keepmonth_set="$KEEPMONTH_ARG"
+    keepday_set="$KEEPDAY_ARG"
+    [[ "${ANON_GIT_KEEPUSER:-}" == '1' ]] && keepuser_set='1'
+    [[ "${ANON_GIT_KEEPDATE:-}" == '1' ]] && keepdate_set='1'
+    [[ "${ANON_GIT_KEEPYEAR:-}" == '1' ]] && keepyear_set='1'
+    [[ "${ANON_GIT_KEEPMONTH:-}" == '1' ]] && keepmonth_set='1'
+    [[ "${ANON_GIT_KEEPDAY:-}" == '1' ]] && keepday_set='1'
 
-# ──────────────────────────────────────────────
-# RESOLVE ARGS
+    check_incompatible --keep-user "$keepuser_set" --name "$name_set"
+    check_incompatible --keep-user "$keepuser_set" --email "$email_set"
+    check_incompatible --date "$date_set" --keep-date "$keepdate_set"
+    check_incompatible --date "$date_set" --keep-year "$keepyear_set"
+    check_incompatible --date "$date_set" --keep-month "$keepmonth_set"
+    check_incompatible --date "$date_set" --keep-day "$keepday_set"
+    check_incompatible --keep-date "$keepdate_set" --keep-year "$keepyear_set"
+    check_incompatible --keep-date "$keepdate_set" --keep-month "$keepmonth_set"
+    check_incompatible --keep-date "$keepdate_set" --keep-day "$keepday_set"
+    check_incompatible --keep-year "$keepyear_set" --keep-month "$keepmonth_set"
+    check_incompatible --keep-year "$keepyear_set" --keep-day "$keepday_set"
+    check_incompatible --keep-month "$keepmonth_set" --keep-day "$keepday_set"
+    # The commit(s) argument is CLI-only (there is no ANON_GIT_COMMIT env var
+    # users are meant to set), so this one stays flag-vs-flag.
+    check_incompatible "commit(s) argument" "$COMMIT_ARG" --entire-history "$ENTIREHISTORY_ARG"
 
-ANON_GIT_DATE="${DATE_ARG:-${ANON_GIT_DATE:-${DEFAULT_DATE}}}"
-ANON_GIT_NAME="${NAME_ARG:-${ANON_GIT_NAME:-${DEFAULT_NAME}}}"
-ANON_GIT_EMAIL="${EMAIL_ARG:-${ANON_GIT_EMAIL:-${DEFAULT_EMAIL}}}"
-ANON_GIT_KEEPUSER="${KEEPUSER_ARG:-${ANON_GIT_KEEPUSER:-${DEFAULT_KEEPUSER}}}"
-ANON_GIT_KEEPDATE="${KEEPDATE_ARG:-${ANON_GIT_KEEPDATE:-${DEFAULT_KEEPDATE}}}"
-ANON_GIT_KEEPYEAR="${KEEPYEAR_ARG:-${ANON_GIT_KEEPYEAR:-${DEFAULT_KEEPYEAR}}}"
-ANON_GIT_KEEPMONTH="${KEEPMONTH_ARG:-${ANON_GIT_KEEPMONTH:-${DEFAULT_KEEPMONTH}}}"
-ANON_GIT_KEEPDAY="${KEEPDAY_ARG:-${ANON_GIT_KEEPDAY:-${DEFAULT_KEEPDAY}}}"
-ANON_GIT_ENTIREHISTORY="${ENTIREHISTORY_ARG:-${ANON_GIT_ENTIREHISTORY:-${DEFAULT_ENTIREHISTORY}}}"
-ANON_GIT_CURRENTBRANCH="${CURRENTBRANCH_ARG:-${ANON_GIT_CURRENTBRANCH:-${DEFAULT_CURRENTBRANCH}}}"
-ANON_GIT_COMMIT="${COMMIT_ARG:-${DEFAULT_COMMIT}}"
-ANON_GIT_DRYRUN="${DRYRUN_ARG:-${ANON_GIT_DRYRUN:-${DEFAULT_DRYRUN}}}"
+    [[ "$flag_errors" -ne 0 ]] && exit 1
+    return 0
+}
 
-# ──────────────────────────────────────────────
-# DEFAULT: SHOW HELP WHEN NO TARGET IS GIVEN
-#
-# Without an explicit commit target or --entire-history there is nothing to
-# anonymize; show the help text instead of silently defaulting to HEAD (that
-# implicit behavior was surprising, so a target is now required).
-if [[ -z "$COMMIT_ARG" && "$ANON_GIT_ENTIREHISTORY" != '1' ]]; then
-    show_help
-fi
+# Internal: merges flags > ANON_GIT_* envvars > DEFAULT_* fallbacks into the
+# final ANON_GIT_* globals used by everything from here on (verbose output,
+# the backup/rewrite logic, and the Python commit-callback's environment).
+merge_args_with_defaults() {
+    DEFAULT_COMMIT=$(git rev-parse HEAD)
+    ANON_GIT_DATE="${DATE_ARG:-${ANON_GIT_DATE:-${DEFAULT_DATE}}}"
+    ANON_GIT_NAME="${NAME_ARG:-${ANON_GIT_NAME:-${DEFAULT_NAME}}}"
+    ANON_GIT_EMAIL="${EMAIL_ARG:-${ANON_GIT_EMAIL:-${DEFAULT_EMAIL}}}"
+    ANON_GIT_KEEPUSER="${KEEPUSER_ARG:-${ANON_GIT_KEEPUSER:-${DEFAULT_KEEPUSER}}}"
+    ANON_GIT_KEEPDATE="${KEEPDATE_ARG:-${ANON_GIT_KEEPDATE:-${DEFAULT_KEEPDATE}}}"
+    ANON_GIT_KEEPYEAR="${KEEPYEAR_ARG:-${ANON_GIT_KEEPYEAR:-${DEFAULT_KEEPYEAR}}}"
+    ANON_GIT_KEEPMONTH="${KEEPMONTH_ARG:-${ANON_GIT_KEEPMONTH:-${DEFAULT_KEEPMONTH}}}"
+    ANON_GIT_KEEPDAY="${KEEPDAY_ARG:-${ANON_GIT_KEEPDAY:-${DEFAULT_KEEPDAY}}}"
+    ANON_GIT_ENTIREHISTORY="${ENTIREHISTORY_ARG:-${ANON_GIT_ENTIREHISTORY:-${DEFAULT_ENTIREHISTORY}}}"
+    ANON_GIT_CURRENTBRANCH="${CURRENTBRANCH_ARG:-${ANON_GIT_CURRENTBRANCH:-${DEFAULT_CURRENTBRANCH}}}"
+    ANON_GIT_COMMIT="${COMMIT_ARG:-${DEFAULT_COMMIT}}"
+    ANON_GIT_DRYRUN="${DRYRUN_ARG:-${ANON_GIT_DRYRUN:-${DEFAULT_DRYRUN}}}"
+}
 
-# ──────────────────────────────────────────────
-# VALIDATE RESOLVED VALUES
+# Internal: without an explicit commit target or --entire-history there is
+# nothing to anonymize; show the help text instead of silently defaulting to
+# HEAD (that implicit behavior was surprising, so a target is now required).
+require_target() {
+    if [[ -z "$COMMIT_ARG" && "$ANON_GIT_ENTIREHISTORY" != '1' ]]; then
+        show_help
+    fi
+}
 
+# Internal: shared by validate_flags below to enforce the "0 or 1" contract
+# every resolved ANON_GIT_* boolean must satisfy, however it was supplied.
 validate_bool() {
     local name="$1" value="$2"
     if [[ "$value" != '0' && "$value" != '1' ]]; then
@@ -537,87 +549,98 @@ validate_bool() {
     fi
 }
 
-validate_bool ANON_GIT_KEEPUSER "$ANON_GIT_KEEPUSER"
-validate_bool ANON_GIT_KEEPDATE "$ANON_GIT_KEEPDATE"
-validate_bool ANON_GIT_KEEPYEAR "$ANON_GIT_KEEPYEAR"
-validate_bool ANON_GIT_KEEPMONTH "$ANON_GIT_KEEPMONTH"
-validate_bool ANON_GIT_KEEPDAY "$ANON_GIT_KEEPDAY"
-validate_bool ANON_GIT_ENTIREHISTORY "$ANON_GIT_ENTIREHISTORY"
-validate_bool ANON_GIT_CURRENTBRANCH "$ANON_GIT_CURRENTBRANCH"
-validate_bool ANON_GIT_DRYRUN "$ANON_GIT_DRYRUN"
+# Sanity-checks the fully-resolved ANON_GIT_* booleans (flag, envvar, or
+# default alike could have produced a bogus value if a stray envvar leaked
+# in) before anything acts on them.
+validate_final_options() {
+    validate_bool ANON_GIT_KEEPUSER "$ANON_GIT_KEEPUSER"
+    validate_bool ANON_GIT_KEEPDATE "$ANON_GIT_KEEPDATE"
+    validate_bool ANON_GIT_KEEPYEAR "$ANON_GIT_KEEPYEAR"
+    validate_bool ANON_GIT_KEEPMONTH "$ANON_GIT_KEEPMONTH"
+    validate_bool ANON_GIT_KEEPDAY "$ANON_GIT_KEEPDAY"
+    validate_bool ANON_GIT_ENTIREHISTORY "$ANON_GIT_ENTIREHISTORY"
+    validate_bool ANON_GIT_CURRENTBRANCH "$ANON_GIT_CURRENTBRANCH"
+    validate_bool ANON_GIT_DRYRUN "$ANON_GIT_DRYRUN"
+}
 
-# ──────────────────────────────────────────────────────────────────────
-# VERBOSE INFO
-
-if [[ -z "$ENTIREHISTORY_ARG" ]]; then
-    short_commit=$(echo "$ANON_GIT_COMMIT" | xargs -n 1 git rev-parse --short | tr '\n' ' ')
-    printf 'Anonymizing commit(s): %s\n' "$short_commit"
-fi
-if [[ -n "$ENTIREHISTORY_ARG" ]]; then
-    printf 'Anonymizing entire history!\n'
-fi
-if [[ -n "$KEEPUSER_ARG" ]]; then
-    printf 'Using identity: %s <%s>\n' "${ANON_GIT_NAME}" "${ANON_GIT_EMAIL}"
-fi
-if [[ -n "$KEEPDATE_ARG" ]]; then
-    printf 'Using date: %s\n' "${ANON_GIT_DATE}"
-fi
-if [[ -n "$KEEPYEAR_ARG" ]]; then
-    printf 'Using commit date year (anonymizing only month, day, time and tz).\n'
-fi
-if [[ -n "$KEEPMONTH_ARG" ]]; then
-    printf 'Using commit date year and month (anonymizing only day, time and tz).\n'
-fi
-if [[ -n "$KEEPDAY_ARG" ]]; then
-    printf 'Using commit date year, month and day (anonymizing only time and tz).\n'
-fi
-printf '\n'
-
-# ──────────────────────────────────────────────────────────────────────
-# BACKUP BRANCH
-
-current_branch=$(git branch --show-current)
-if [[ -z "$current_branch" && "$ANON_GIT_CURRENTBRANCH" == '1' ]]; then
-    printf 'Error: HEAD is detached, so there is no current branch to overwrite. Drop --current-branch or check out a branch first.\n' >&2
-    exit 1
-fi
-branch_label="${current_branch:-detached-$(git rev-parse --short HEAD)}"
-# Colon-free timestamp: git ref names may not contain ":" (see git-check-ref-format).
-timestamp=$(date +%Y%m%d_%H%M%S_%N)
-
-if [[ "$ANON_GIT_DRYRUN" != '1' ]]; then
-    if [[ "$ANON_GIT_CURRENTBRANCH" != '1' ]]; then
-        new_branch="${branch_label}_anonymized_${timestamp}"
-        if ! git switch --create "$new_branch"; then
-            printf 'Error: failed to create branch %s\n' "$new_branch" >&2
-            exit 1
-        fi
-        printf 'Created new branch %s from %s\n' "$new_branch" "$branch_label"
-        printf 'Using branch %s to rewrite commits.\n' "$new_branch"
-    elif [[ "$NOBACKUP_ARG" != "1" ]]; then
-        backup_branch="${branch_label}_backup_${timestamp}"
-        if ! git branch "${backup_branch}"; then
-            printf 'Error: failed to create backup branch %s\n' "$backup_branch" >&2
-            exit 1
-        fi
-        printf 'Created backup branch %s from %s\n' "$backup_branch" "$branch_label"
-        printf 'Using branch %s to rewrite commits\n' "$branch_label"
-    else
-        printf 'WARNING! Overwriting existing branch %s without backup!\n' "$branch_label"
+# Prints a short summary of what's about to happen, gated on which flags
+# were explicitly passed on the CLI (not the resolved envvar/default value),
+# so setting e.g. ANON_GIT_KEEPUSER in your shell profile doesn't spam this
+# on every run.
+verbose_info() {
+    if [[ -z "$ENTIREHISTORY_ARG" ]]; then
+        local short_commit
+        short_commit=$(echo "$ANON_GIT_COMMIT" | xargs -n 1 git rev-parse --short | tr '\n' ' ')
+        printf 'Anonymizing commit(s): %s\n' "$short_commit"
     fi
-fi
-
-# ──────────────────────────────────────────────────────────────────────
-# CONFIRMATION
-
-if [[ "$NOCONFIRM_ARG" != '1' && "$ANON_GIT_DRYRUN" != '1' ]]; then
-    read -p "Continue? (y/N) " -n 1 -r
+    if [[ -n "$ENTIREHISTORY_ARG" ]]; then
+        printf 'Anonymizing entire history!\n'
+    fi
+    if [[ -n "$KEEPUSER_ARG" ]]; then
+        printf 'Using identity: %s <%s>\n' "${ANON_GIT_NAME}" "${ANON_GIT_EMAIL}"
+    fi
+    if [[ -n "$KEEPDATE_ARG" ]]; then
+        printf 'Using date: %s\n' "${ANON_GIT_DATE}"
+    fi
+    if [[ -n "$KEEPYEAR_ARG" ]]; then
+        printf 'Using commit date year (anonymizing only month, day, time and tz).\n'
+    fi
+    if [[ -n "$KEEPMONTH_ARG" ]]; then
+        printf 'Using commit date year and month (anonymizing only day, time and tz).\n'
+    fi
+    if [[ -n "$KEEPDAY_ARG" ]]; then
+        printf 'Using commit date year, month and day (anonymizing only time and tz).\n'
+    fi
     printf '\n'
-    [[ $REPLY =~ ^[Yy]$ ]] || exit 1
-fi
+}
 
-# ──────────────────────────────────────────────────────────────────────
-# CLEAN CACHE
+# Creates a new branch (default) or a backup branch (--current-branch,
+# unless --no-backup) before rewriting, so the pre-rewrite history stays
+# reachable. No-op under --dry-run, since nothing is rewritten.
+backup_branch() {
+    local current_branch branch_label timestamp new_branch backup_branch_name
+
+    current_branch=$(git branch --show-current)
+    if [[ -z "$current_branch" && "$ANON_GIT_CURRENTBRANCH" == '1' ]]; then
+        printf 'Error: HEAD is detached, so there is no current branch to overwrite. Drop --current-branch or check out a branch first.\n' >&2
+        exit 1
+    fi
+    branch_label="${current_branch:-detached-$(git rev-parse --short HEAD)}"
+    # Colon-free timestamp: git ref names may not contain ":" (see git-check-ref-format).
+    timestamp=$(date +%Y%m%d_%H%M%S_%N)
+
+    if [[ "$ANON_GIT_DRYRUN" != '1' ]]; then
+        if [[ "$ANON_GIT_CURRENTBRANCH" != '1' ]]; then
+            new_branch="${branch_label}_anonymized_${timestamp}"
+            if ! git switch --create "$new_branch"; then
+                printf 'Error: failed to create branch %s\n' "$new_branch" >&2
+                exit 1
+            fi
+            printf 'Created new branch %s from %s\n' "$new_branch" "$branch_label"
+            printf 'Using branch %s to rewrite commits.\n' "$new_branch"
+        elif [[ "$NOBACKUP_ARG" != "1" ]]; then
+            backup_branch_name="${branch_label}_backup_${timestamp}"
+            if ! git branch "${backup_branch_name}"; then
+                printf 'Error: failed to create backup branch %s\n' "$backup_branch_name" >&2
+                exit 1
+            fi
+            printf 'Created backup branch %s from %s\n' "$backup_branch_name" "$branch_label"
+            printf 'Using branch %s to rewrite commits\n' "$branch_label"
+        else
+            printf 'WARNING! Overwriting existing branch %s without backup!\n' "$branch_label"
+        fi
+    fi
+}
+
+# Prompts for confirmation unless --no-confirm or --dry-run (a dry run
+# doesn't touch anything, so there's nothing to confirm).
+confirm() {
+    if [[ "$NOCONFIRM_ARG" != '1' && "$ANON_GIT_DRYRUN" != '1' ]]; then
+        read -p "Continue? (y/N) " -n 1 -r
+        printf '\n'
+        [[ $REPLY =~ ^[Yy]$ ]] || exit 1
+    fi
+}
 
 # git-filter-repo stores metadata in .git/filter-repo/ after the first run (to
 # speed up certain operations and support things like incremental/incremental
@@ -632,17 +655,21 @@ fi
 #
 # To avoid this bug, we remove cached metadata, which may cause trouble while
 # anonymizing the git history, for example, when using the script as git hook.
-if [[ -d "$PWD/.git/filter-repo" ]]; then
-    rm -rf "$PWD/.git/filter-repo"
-fi
+clean_cache() {
+    if [[ -d "$PWD/.git/filter-repo" ]]; then
+        rm -rf "$PWD/.git/filter-repo"
+    fi
+}
 
-# ──────────────────────────────────────────────────────────────────────
-# DRYRUN
-
-dryrun_file=''
-if [[ "${ANON_GIT_DRYRUN}" -eq 1 ]]; then
-    dryrun_file=$(mktemp)
-fi
+# Internal: creates the scratch file the Python commit-callback writes its
+# preview to under --dry-run, so run_filter_repo/print_result can share it
+# via the ANON_GIT_DRYRUN_FILE envvar. Left empty (no file) otherwise.
+setup_dryrun() {
+    dryrun_file=''
+    if [[ "${ANON_GIT_DRYRUN}" -eq 1 ]]; then
+        dryrun_file=$(mktemp)
+    fi
+}
 
 # ──────────────────────────────────────────────────────────────────────
 # REWRITE LOGIC
@@ -651,12 +678,17 @@ fi
 # string-interpolated into the generated source) so that a name, email, or
 # date containing a quote or other Python-special character cannot break out
 # of a string literal and inject code into the callback.
-export ANON_GIT_NAME ANON_GIT_EMAIL ANON_GIT_DATE ANON_GIT_COMMIT
-export ANON_GIT_KEEPUSER ANON_GIT_KEEPDATE ANON_GIT_KEEPYEAR ANON_GIT_KEEPMONTH ANON_GIT_KEEPDAY
-export ANON_GIT_ENTIREHISTORY ANON_GIT_DRYRUN
-export ANON_GIT_DRYRUN_FILE="${dryrun_file}"
-export TZ=UTC
+export_rewrite_env() {
+    export ANON_GIT_NAME ANON_GIT_EMAIL ANON_GIT_DATE ANON_GIT_COMMIT
+    export ANON_GIT_KEEPUSER ANON_GIT_KEEPDATE ANON_GIT_KEEPYEAR ANON_GIT_KEEPMONTH ANON_GIT_KEEPDAY
+    export ANON_GIT_ENTIREHISTORY ANON_GIT_DRYRUN
+    export ANON_GIT_DRYRUN_FILE="${dryrun_file}"
+    export TZ=UTC
+}
 
+# Kept as a plain top-level assignment (not nested in a function): the test
+# suite locates this callback by its exact, unindented
+# `python_commit_callback="` ... `"` line anchors to check it's valid Python.
 python_commit_callback="
 import os
 import re
@@ -803,25 +835,52 @@ commit.committer_email = committer_email
 commit.committer_date = committer_date
 "
 
-anon_git_main() {
-    git filter-repo --force --commit-callback "$python_commit_callback" --refs HEAD
+# Runs git-filter-repo with the callback above, tearing down the scratch log
+# (and dry-run file, if any) on failure.
+run_filter_repo() {
+    local filter_repo_log
+    filter_repo_log=$(mktemp)
+    if ! git filter-repo --force --commit-callback "$python_commit_callback" --refs HEAD >"$filter_repo_log" 2>&1; then
+        printf 'Error: git filter-repo failed:\n' >&2
+        cat "$filter_repo_log" >&2
+        rm -f "$filter_repo_log"
+        [[ -n "$dryrun_file" ]] && rm -f "$dryrun_file"
+        exit 1
+    fi
+    rm -f "$filter_repo_log"
 }
 
-filter_repo_log=$(mktemp)
-if ! anon_git_main >"$filter_repo_log" 2>&1; then
-    printf 'Error: git filter-repo failed:\n' >&2
-    cat "$filter_repo_log" >&2
-    rm -f "$filter_repo_log"
-    [[ -n "$dryrun_file" ]] && rm -f "$dryrun_file"
-    exit 1
-fi
-rm -f "$filter_repo_log"
+# Prints the dry-run preview (via $PAGER, falling back to cat) or the final
+# success message, and cleans up the dry-run scratch file.
+print_result() {
+    if [[ "$ANON_GIT_DRYRUN" == '1' && -f "$dryrun_file" ]]; then
+        local pager=${PAGER:-cat}
+        command "$pager" "$dryrun_file"
+        rm -f "$dryrun_file"
+    else
+        printf 'Done. History has been rewritten.\n'
+    fi
+}
 
-# Preview output using pager defined by $PAGER. Falls back to cat.
-if [[ "$ANON_GIT_DRYRUN" == '1' && -f "$dryrun_file" ]]; then
-    pager=${PAGER:-cat}
-    command "$pager" "$dryrun_file"
-    rm -f "$dryrun_file"
-else
-    printf 'Done. History has been rewritten.\n'
-fi
+# ──────────────────────────────────────────────────────────────────────
+# MAIN
+
+main() {
+    handle_early_options "$@"
+    safety_checks
+    parse_args "$@"
+    reject_incompatible_options
+    merge_args_with_defaults
+    validate_final_options
+    require_target
+    verbose_info
+    backup_branch
+    confirm
+    clean_cache
+    setup_dryrun
+    export_rewrite_env
+    run_filter_repo
+    print_result
+}
+
+main "$@"
