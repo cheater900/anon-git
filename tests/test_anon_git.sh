@@ -160,6 +160,7 @@ main() {
     test_match_dry_run_without_target_shows_help
     test_match_malformed_date
     test_match_malformed_date_no_branch
+    test_match_unreachable_commit
     test_match_outside_git_repo
     test_match_annotated_tag
     test_match_dry_run_keeps_signed_commit

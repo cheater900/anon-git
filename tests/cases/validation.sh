@@ -236,3 +236,33 @@ test_match_malformed_date_no_branch() {
 
     record_result "$errors" 'malformed --date rejected before branch creation'
 }
+
+test_match_unreachable_commit() {
+    local original_branch side_branch="unreachable_$$" side_commit before output exit_status errors=0
+
+    original_branch=$(git branch --show-current)
+    git switch --create "$side_branch" >/dev/null 2>&1
+    git commit -q --allow-empty -m 'Side commit'
+    side_commit=$(git rev-parse HEAD)
+    git switch "$original_branch" >/dev/null 2>&1
+
+    before=$(git rev-parse HEAD)
+    output=$(./"${SCRIPT_NAME}" --no-confirm --no-backup --current-branch "$side_commit" 2>&1)
+    exit_status=$?
+
+    if [[ "$exit_status" -eq 0 ]]; then
+        printf 'Error: unreachable commit target did not fail\n'
+        errors=$((errors + 1))
+    fi
+    if ! grep -q 'not reachable from HEAD' <<<"$output"; then
+        printf 'Error: expected "not reachable from HEAD" message not found (got: %s)\n' "$output"
+        errors=$((errors + 1))
+    fi
+    if [[ "$(git rev-parse HEAD)" != "$before" ]]; then
+        printf 'Error: HEAD changed despite unreachable target\n'
+        errors=$((errors + 1))
+    fi
+    git branch -D "$side_branch" >/dev/null
+
+    record_result "$errors" 'commit not reachable from HEAD rejected'
+}

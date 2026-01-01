@@ -949,6 +949,19 @@ validate_final_options() {
     validate_bool ANON_GIT_QUIET "$ANON_GIT_QUIET"
 }
 
+# Only HEAD's history is rewritten (--refs HEAD), so any other target would
+# silently stay untouched.
+require_reachable() {
+    local commit
+    for commit in ${COMMITS_ARG[@]+"${COMMITS_ARG[@]}"}; do
+        if ! git merge-base --is-ancestor "$commit" HEAD; then
+            printf 'Error: commit %s is not reachable from HEAD; check out a branch containing it first.\n' \
+                "$(git rev-parse --short "$commit")" >&2
+            exit 1
+        fi
+    done
+}
+
 validate_date() {
     if ! ANON_GIT_DATE="$ANON_GIT_DATE" python3 -c "${python_parse_target_date}
 import os
@@ -1461,6 +1474,7 @@ main() {
     validate_final_options
     require_target
     validate_date
+    require_reachable
     verbose_info
     confirm
     backup_branch
