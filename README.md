@@ -95,7 +95,8 @@ Rewrite **one commit** (author, committer, dates).
 ./anon-git.sh [OPTIONS] [commits]
 ```
 
-**Default behavior**: anonymizes `HEAD`
+**Default behavior**: shows the help message. A commit target (or `--entire-history`) is
+required — pass `HEAD` explicitly to anonymize the last commit.
 
 ### Options
 
@@ -131,7 +132,7 @@ Rewrite **one commit** (author, committer, dates).
 
 ```bash
 # Anonymize current HEAD with defaults
-./anon-git.sh
+./anon-git.sh HEAD
 
 # Anonymize two commits ago
 ./anon-git.sh HEAD~2
@@ -143,7 +144,7 @@ Rewrite **one commit** (author, committer, dates).
                           8ddf55a
 
 # Keep real name/email, only change date
-./anon-git.sh --keep-user --date "2025-06-15T14:20:00Z"
+./anon-git.sh --keep-user --date "2025-06-15T14:20:00Z" HEAD
 
 # Preview what would change before actually rewriting anything
 ./anon-git.sh --dry-run HEAD~2
@@ -155,7 +156,7 @@ Rewrite **one commit** (author, committer, dates).
 ./anon-git.sh --keep-day HEAD~2
 
 # Use environment variables instead of flags (handy for hooks/CI)
-ANON_GIT_NAME="Anon" ANON_GIT_EMAIL="anon@localhost" ./anon-git.sh --keep-date
+ANON_GIT_NAME="Anon" ANON_GIT_EMAIL="anon@localhost" ./anon-git.sh --keep-date HEAD
 ```
 
 More examples using built-in filters provided by `git` in order to pick a set of

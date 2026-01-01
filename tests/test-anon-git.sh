@@ -345,7 +345,7 @@ test_combo_dry_run_keep_user() {
   local before after output exit_status errors=0
 
   before=$(git rev-parse HEAD)
-  output=$(PAGER=cat ./${SCRIPT_NAME} --dry-run --keep-user 2>&1)
+  output=$(PAGER=cat ./${SCRIPT_NAME} --dry-run --keep-user HEAD 2>&1)
   exit_status=$?
   after=$(git rev-parse HEAD)
 
@@ -470,7 +470,7 @@ test_flag_dry_run() {
   local before after output exit_status errors=0
 
   before=$(git rev-parse HEAD)
-  output=$(PAGER=cat ./${SCRIPT_NAME} --dry-run 2>&1)
+  output=$(PAGER=cat ./${SCRIPT_NAME} --dry-run HEAD 2>&1)
   exit_status=$?
   after=$(git rev-parse HEAD)
 
@@ -654,6 +654,23 @@ test_flag_unknown() {
 # Each test here pins down one specific behavior (usually security- or
 # robustness-relevant) so a future change can't silently reintroduce it.
 
+test_match_default_shows_help() {
+  # Default behavior: without an explicit commit target or --entire-history,
+  # the script shows help instead of silently defaulting to HEAD.
+  local before after output exit_status errors=0
+
+  before=$(git rev-parse HEAD)
+  output=$(./${SCRIPT_NAME} 2>&1)
+  exit_status=$?
+  after=$(git rev-parse HEAD)
+
+  [[ "$exit_status" -eq 0 ]] || { printf 'Error: bare invocation (no target) exited with status %s\n' "$exit_status"; errors=$(( errors + 1 )); }
+  [[ "$before" == "$after" ]] || { printf 'Error: bare invocation (no target) modified HEAD\n'; errors=$(( errors + 1 )); }
+  grep -q 'Usage:' <<<"$output" || { printf 'Error: bare invocation (no target) did not show help\n'; errors=$(( errors + 1 )); }
+
+  record_result "$errors" 'no target shows help by default'
+}
+
 test_match_detached_head_current_branch() {
   local original_branch before_head after_head output exit_status errors=0
 
@@ -673,6 +690,24 @@ test_match_detached_head_current_branch() {
   git checkout "$original_branch" >/dev/null 2>&1
 
   record_result "$errors" 'detached HEAD + --current-branch is rejected'
+}
+
+test_match_dry_run_without_target_shows_help() {
+  # --dry-run alone doesn't count as a target; without an explicit commit or
+  # --entire-history it must still fall through to the help text, not
+  # silently preview HEAD.
+  local before after output exit_status errors=0
+
+  before=$(git rev-parse HEAD)
+  output=$(PAGER=cat ./${SCRIPT_NAME} --dry-run 2>&1)
+  exit_status=$?
+  after=$(git rev-parse HEAD)
+
+  [[ "$exit_status" -eq 0 ]] || { printf 'Error: --dry-run without a target exited with status %s\n' "$exit_status"; errors=$(( errors + 1 )); }
+  [[ "$before" == "$after" ]] || { printf 'Error: --dry-run without a target modified HEAD\n'; errors=$(( errors + 1 )); }
+  grep -q 'Usage:' <<<"$output" || { printf 'Error: --dry-run without a target did not show help\n'; errors=$(( errors + 1 )); }
+
+  record_result "$errors" '--dry-run without a target still shows help'
 }
 
 test_match_malformed_date() {
@@ -840,7 +875,9 @@ main() {
   test_flag_no_backup
   test_flag_no_confirm
   test_flag_unknown
+  test_match_default_shows_help
   test_match_detached_head_current_branch
+  test_match_dry_run_without_target_shows_help
   test_match_malformed_date
   test_match_outside_git_repo
   test_match_rerun_cache

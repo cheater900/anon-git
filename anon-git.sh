@@ -37,7 +37,8 @@ Options:
 
 Arguments:
   commit(s)               Commit(s) to anonymize (can be: hash, HEAD~3, branch, tag, ...)
-                          If omitted, defaults to HEAD
+                          Required, unless --entire-history is given.
+                          If omitted (and --entire-history is not given), this help is shown.
                           If more than one, it should be a commit hash.
 
 Priority (highest to lowest):
@@ -48,7 +49,7 @@ Priority (highest to lowest):
 
 Examples:
     # Anonymize current HEAD with defaults
-    ./anon-git.sh
+    ./anon-git.sh HEAD
 
     # Anonymize two commits ago
     ./anon-git.sh HEAD~2
@@ -257,6 +258,16 @@ ANON_GIT_ENTIREHISTORY="${ENTIREHISTORY_ARG:-${ANON_GIT_ENTIREHISTORY:-${DEFAULT
 ANON_GIT_CURRENTBRANCH="${CURRENTBRANCH_ARG:-${ANON_GIT_CURRENTBRANCH:-${DEFAULT_CURRENTBRANCH}}}"
 ANON_GIT_COMMIT="${COMMIT_ARG:-${DEFAULT_COMMIT}}"
 ANON_GIT_DRYRUN="${DRYRUN_ARG:-${DEFAULT_DRYRUN}}"
+
+# ──────────────────────────────────────────────
+# DEFAULT: SHOW HELP WHEN NO TARGET IS GIVEN
+#
+# Without an explicit commit target or --entire-history there is nothing to
+# anonymize; show the help text instead of silently defaulting to HEAD (that
+# implicit behavior was surprising, so a target is now required).
+if [[ -z "$COMMIT_ARG" && "$ANON_GIT_ENTIREHISTORY" != '1' ]]; then
+    show_help
+fi
 
 # ──────────────────────────────────────────────
 # VALIDATE RESOLVED VALUES
