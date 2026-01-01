@@ -5,7 +5,7 @@ import subprocess
 import sys
 
 import pytest
-from helpers import DEFAULT_AUTHOR, branch_count, commit_author, git, run_cli
+from helpers import DEFAULT_AUTHOR, branch_count, commit_author, git, new_repo, run_cli
 
 from anon_git.constants import DEFAULT_DATE, DEFAULT_NAME, HOOK_MARKER
 from anon_git.hooks import install_hook
@@ -87,6 +87,24 @@ def test_hook_anonymizes_partial_commit_keeps_changes(repo):
     assert commit_author("HEAD") == DEFAULT_AUTHOR
     assert git("diff", "--name-only") == "file_1.txt"
     assert git("diff", "--cached", "--name-only") == "staged.txt"
+
+
+def test_hook_keeps_unrelated_stash_when_push_saves_nothing(repo, tmp_path):
+    sub = new_repo(tmp_path / "sub")
+    git("-C", str(sub), "commit", "-q", "--allow-empty", "-m", "sub")
+    git("-c", "protocol.file.allow=always", "submodule", "add", "-q", str(sub), "sub")
+    git("commit", "-q", "-m", "Add submodule")
+    with open("file_1.txt", "a") as fh:
+        fh.write("stashed\n")
+    git("stash", "push", "-q")
+    run_install_hook()
+    # Dirty submodule content: diff-files reports it, stash push saves nothing.
+    (repo / "sub" / "new.txt").write_text("new\n")
+    git("-C", "sub", "add", "new.txt")
+    git("commit", "-q", "--allow-empty", "-m", "Commit with dirty submodule")
+    assert git("stash", "list").count("\n") == 0
+    assert git("stash", "list") != ""
+    assert git("diff", "--name-only", "--", "file_1.txt") == ""
 
 
 def test_hook_survives_interpreter_path_with_metacharacters(repo, tmp_path, monkeypatch):
